@@ -1,0 +1,1 @@
+-- Required by supabase/config.toml. Add development-only seed data here.

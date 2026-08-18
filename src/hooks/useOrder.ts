@@ -1,0 +1,43 @@
+import { useEffect, useState } from 'react';
+import { getOrder, subscribeToOrder } from '../services/order.service';
+import type { Order } from '../types/order';
+
+export function useOrder(orderId: string | null | undefined, enabled = true) {
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(enabled && orderId));
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled || !orderId) {
+      setOrder(null);
+      setError('');
+      setIsLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setIsLoading(true);
+      const result = await getOrder(orderId);
+      if (!active) return;
+      if (result.error || !result.data) {
+        setError(result.error?.message || 'Unable to load order details.');
+      } else {
+        setOrder(result.data);
+        setError('');
+      }
+      if (!silent) setIsLoading(false);
+    };
+
+    void load();
+    const unsubscribe = subscribeToOrder(orderId, () => { void load({ silent: true }); });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [enabled, orderId]);
+
+  return { order, isLoading, error };
+}
+
+export const useOrderDetails = useOrder;

@@ -1,0 +1,18 @@
+export {
+  completeTableCleaning,
+  createTable,
+  deleteTable,
+  getAllTables,
+  getAvailableTables,
+  getTableById,
+  getTables,
+  moveOrderToTable,
+  releaseTable,
+  reserveTable,
+  restoreRestaurantTable,
+  setTableOutOfService,
+  startTableCleaning,
+  subscribeToTables,
+  transitionTable,
+  updateTable,
+} from '../../services/table.service';

@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-primary: #D4AF37;
+    --color-primary-hover: #B8952B;
+    --color-surface-bg: #F8F9FA;
+    --color-card-bg: #FFFFFF;
+    --color-text-main: #121212;
+    --color-text-sub: #6C757D;
+    --color-success: #2E7D32;
+    --color-warning: #E65100;
+    --color-border: #E9ECEF;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.8);
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-dark {
+  background: rgba(18, 18, 18, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Primary Button Elevation Shadow */
+.btn-gold-shadow {
+  box-shadow: 0px 8px 16px rgba(212, 175, 55, 0.3);
+}
+
+.card-elevation-low {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.modal-elevation-high {
+  box-shadow: 0px 16px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* iPad Device Frame styling */
+.ipad-frame-11 {
+  width: 1194px;
+  height: 834px;
+  border-radius: 36px;
+}
+
+.ipad-frame-129 {
+  width: 1366px;
+  height: 1024px;
+  border-radius: 42px;
+}
+
+/* Print Styles for Thermal Receipt */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
+  }
+}
