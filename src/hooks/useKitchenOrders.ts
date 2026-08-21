@@ -4,6 +4,7 @@ import {
   subscribeToKitchenQueue,
   type KitchenTicket,
 } from '../services/kitchen.service';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 export function useKitchenOrders(enabled = true) {
   const [orders, setOrders] = useState<KitchenTicket[]>([]);
@@ -36,13 +37,16 @@ export function useKitchenOrders(enabled = true) {
 
     const controller = new AbortController();
     let active = true;
+    const trackRealtime = createRealtimeRecoveryTracker();
     void refresh({ signal: controller.signal });
     const unsubscribe = subscribeToKitchenQueue(
       () => { if (active) void refresh({ silent: true }); },
       (status) => {
-        if (active && ['CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+        const realtime = trackRealtime(status);
+        if (active && realtime.failed) {
           setError('Live kitchen updates are temporarily unavailable.');
         }
+        if (active && realtime.shouldRefetch) void refresh({ silent: true });
       },
     );
 

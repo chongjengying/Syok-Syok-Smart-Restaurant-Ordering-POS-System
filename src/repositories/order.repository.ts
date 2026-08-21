@@ -56,6 +56,14 @@ export function fetchOrder(orderId: string, { signal }: RequestOptions = {}) {
   return apiRequest('orders', { path: orderId, signal }) as Promise<ApiResult<OrderRecord>>;
 }
 
+export function fetchOrderBills(orderId: string) {
+  return apiRequest('orders', { path: `${orderId}/bills` }) as Promise<ApiResult<Array<Record<string, unknown>>>>;
+}
+
+export function createOrderBillSplit(orderId: string, input: { mode: 'EQUAL' | 'ITEM'; billCount?: number; assignments?: Array<{ itemIds: string[] }> }) {
+  return apiRequest('orders', { method: 'POST', path: `${orderId}/bills`, body: input }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
 export function fetchOrders({ signal }: RequestOptions = {}) {
   return apiRequest('orders', { signal }) as Promise<ApiResult<OrderRecord[]>>;
 }

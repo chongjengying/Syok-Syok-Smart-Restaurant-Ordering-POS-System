@@ -65,8 +65,11 @@ async function createFulfilledOrder({ diningMode = 'takeaway', tableId = null, k
 }
 
 const capabilities = (await request('/functions/v1/payments', { token: cashierOne })).payload.data.methods;
-for (const method of ['CASH', 'CARD', 'QR', 'EWALLET']) {
-  assert.equal(capabilities.find((entry) => entry.method === method)?.available, true, `${method} is not available`);
+assert.equal(capabilities.find((entry) => entry.method === 'CASH')?.available, true, 'Cash payment is not available');
+for (const method of ['CARD', 'QR', 'EWALLET']) {
+  const capability = capabilities.find((entry) => entry.method === method);
+  assert.equal(capability?.available, false, `${method} must remain disabled until a real provider is configured`);
+  assert.equal(capability?.mode, 'unavailable', `${method} did not disclose its unavailable provider state`);
 }
 
 const dineIn = await createFulfilledOrder({ diningMode: 'dine-in', tableId: table.id, key: `dine-${suffix}` });
@@ -83,6 +86,12 @@ const sharedBody = {
   receivedAmount: 100,
   idempotencyKey: sharedKey,
 };
+const wrongCashAmount = await paymentRequest(cashierOne, {
+  ...sharedBody,
+  finalAmount: Number(dineIn.total) + 1,
+  idempotencyKey: `wrong-cash-${suffix}`,
+}, true);
+assert.equal(wrongCashAmount.status, 409, 'Cash accepted an incorrect authoritative amount');
 const concurrentSameKey = await Promise.all([
   paymentRequest(cashierOne, sharedBody, true),
   paymentRequest(cashierTwo, sharedBody, true),
@@ -109,31 +118,29 @@ assert.equal(differentKeyRetry.status, 409, 'A second payment with another key w
 
 for (const method of ['CARD', 'QR', 'EWALLET']) {
   const fulfilled = await createFulfilledOrder({ key: `${method}-${suffix}` });
-  const wrongAmount = await paymentRequest(cashierOne, {
-    orderId: fulfilled.id, paymentMethod: method, finalAmount: Number(fulfilled.total) + 1, idempotencyKey: `wrong-${method}-${suffix}`,
-  }, true);
-  assert.equal(wrongAmount.status, 409, `${method} accepted an incorrect amount`);
-  const beforeCorrect = (await orderRequest(adminToken, `/${fulfilled.id}`)).payload.data;
-  assert.equal(beforeCorrect.payment_status, 'UNPAID', 'Failed amount validation mutated the order');
-
-  const paid = await paymentRequest(cashierOne, {
+  const blocked = await paymentRequest(cashierOne, {
     orderId: fulfilled.id, paymentMethod: method, finalAmount: Number(fulfilled.total), idempotencyKey: `pay-${method}-${suffix}`,
-  });
-  assert.equal(paid.payload.data.payment.payment_method, method);
-  assert.equal(paid.payload.data.order.status, 'COMPLETED');
+  }, true);
+  assert.equal(blocked.status, 503, `${method} succeeded without a configured payment provider`);
+  assert.equal(blocked.payload.code, 'PAYMENT_PROVIDER_UNAVAILABLE');
+  const afterAttempt = (await orderRequest(adminToken, `/${fulfilled.id}`)).payload.data;
+  assert.equal(afterAttempt.payment_status, 'UNPAID', `Blocked ${method} payment mutated the order`);
+  const paidPaymentRows = (await request(`/rest/v1/payments?order_id=eq.${fulfilled.id}&status=eq.PAID&select=id`, { key: serviceKey })).payload;
+  assert.equal(paidPaymentRows.length, 0, `Blocked ${method} payment created a paid transaction`);
 }
 
 const raceOrder = await createFulfilledOrder({ key: `race-${suffix}` });
 const race = await Promise.all([
-  paymentRequest(cashierOne, { orderId: raceOrder.id, paymentMethod: 'CARD', finalAmount: Number(raceOrder.total), idempotencyKey: `race-a-${suffix}` }, true),
-  paymentRequest(cashierTwo, { orderId: raceOrder.id, paymentMethod: 'QR', finalAmount: Number(raceOrder.total), idempotencyKey: `race-b-${suffix}` }, true),
+  paymentRequest(cashierOne, { orderId: raceOrder.id, paymentMethod: 'CASH', finalAmount: Number(raceOrder.total), receivedAmount: Number(raceOrder.total), idempotencyKey: `race-a-${suffix}` }, true),
+  paymentRequest(cashierTwo, { orderId: raceOrder.id, paymentMethod: 'CASH', finalAmount: Number(raceOrder.total), receivedAmount: Number(raceOrder.total), idempotencyKey: `race-b-${suffix}` }, true),
 ]);
 assert.deepEqual(race.map(({ status: responseStatus }) => responseStatus).sort(), [200, 409], 'Two-cashier race did not accept exactly one payment');
 const racePaidRows = (await request(`/rest/v1/payments?order_id=eq.${raceOrder.id}&status=eq.PAID&select=id`, { key: serviceKey })).payload;
 assert.equal(racePaidRows.length, 1, 'Two-cashier race created duplicate paid rows');
 
 console.log(JSON.stringify({
-  methods: ['CASH', 'CARD', 'QR', 'EWALLET'],
+  availableMethods: ['CASH'],
+  blockedUntilProviderConfigured: ['CARD', 'QR', 'EWALLET'],
   authoritativeAmountValidation: true,
   transactionalCompletion: true,
   dineInTableAwaitingCleaning: true,

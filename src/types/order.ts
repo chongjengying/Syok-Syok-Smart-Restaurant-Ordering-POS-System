@@ -34,6 +34,7 @@ export interface OrderItemRecord {
 export interface OrderItemBatchRecord {
   id: string;
   order_id: string;
+  batch_number?: string;
   batch_no: number;
   status: 'PENDING' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
   created_at: string;
@@ -56,7 +57,12 @@ export interface OrderRecord {
   discount: number | string;
   total: number | string;
   takeaway_packaging?: string[];
-  payments?: Array<{ id: string }>;
+  payments?: Array<{
+    id: string;
+    payment_number?: string;
+    status?: string;
+    created_at?: string;
+  }>;
   restaurant_tables?: {
     id: string;
     table_number: string;
@@ -84,6 +90,7 @@ export interface OrderItem {
   specialRequest: string;
   batchId: string | null;
   batchNo: number | null;
+  batchNumber: string | null;
   sentAt: string | null;
   serviceMode: 'DINE_IN' | 'TAKEAWAY';
   itemStatus: string;
@@ -109,6 +116,7 @@ export interface Order {
   total: number;
   takeawayPackaging: string[];
   paymentId: string | null;
+  paymentNumber: string | null;
   table: {
     id: string;
     tableNumber: string;

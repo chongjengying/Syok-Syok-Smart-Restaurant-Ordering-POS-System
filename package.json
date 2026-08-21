@@ -16,8 +16,11 @@
     "test:kitchen-batches": "node scripts/smoke-kitchen-batches-local.mjs",
     "test:served-flow": "node scripts/smoke-served-flow-local.mjs",
     "test:payment-flow": "node scripts/smoke-payment-flow-local.mjs",
+    "test:split-payment": "node scripts/smoke-split-payment-local.mjs",
+    "test:refund": "node scripts/smoke-refund-local.mjs",
     "test:early-payment": "node scripts/smoke-early-payment-local.mjs",
     "test:takeaway-flow": "node scripts/smoke-takeaway-flow-local.mjs",
+    "test:realtime": "node scripts/smoke-realtime-local.mjs",
     "test:rls": "node scripts/smoke-rls-local.mjs",
     "test:smoke": "node scripts/smoke-local.mjs",
     "preview": "vite preview"

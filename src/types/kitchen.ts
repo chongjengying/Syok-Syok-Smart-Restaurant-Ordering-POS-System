@@ -36,6 +36,7 @@ export interface KitchenTicket {
   orderNumber: string;
   orderStatus: KitchenQueueStatus;
   batchNo: number;
+  batchNumber: string;
   status: KitchenBatchStatus;
   isAddOn: boolean;
   paymentStatus: string;

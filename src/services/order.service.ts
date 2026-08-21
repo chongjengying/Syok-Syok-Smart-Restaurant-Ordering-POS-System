@@ -75,7 +75,10 @@ export function addItemsToOrder(
   }
 }
 
-function mapOrderItem(item: OrderItemRecord, batchNumbers = new Map<string, number>()): Order['items'][number] {
+type BatchIdentity = { batchNo: number; batchNumber: string };
+
+function mapOrderItem(item: OrderItemRecord, batchIdentities = new Map<string, BatchIdentity>()): Order['items'][number] {
+  const batch = item.batch_id ? batchIdentities.get(item.batch_id) : undefined;
   return {
     id: item.id,
     productId: item.product_id,
@@ -85,7 +88,8 @@ function mapOrderItem(item: OrderItemRecord, batchNumbers = new Map<string, numb
     subtotal: Number(item.subtotal || 0),
     specialRequest: item.special_request || '',
     batchId: item.batch_id || null,
-    batchNo: item.batch_id ? batchNumbers.get(item.batch_id) || null : null,
+    batchNo: batch?.batchNo || null,
+    batchNumber: batch?.batchNumber || null,
     sentAt: item.sent_at || null,
     serviceMode: item.service_mode || 'DINE_IN',
     itemStatus: item.item_status || 'SUBMITTED',
@@ -120,9 +124,13 @@ export function saveTakeawayPackaging(orderId: string, packaging: string[]) {
 }
 
 export function mapOrder(order: OrderRecord): Order {
-  const batchNumbers = new Map(
-    (order.order_item_batches || []).map((batch) => [batch.id, batch.batch_no]),
+  const batchIdentities = new Map(
+    (order.order_item_batches || []).map((batch) => [batch.id, {
+      batchNo: batch.batch_no,
+      batchNumber: batch.batch_number || '',
+    }]),
   );
+  const payment = order.payments?.find(({ status }) => status === 'PAID') || order.payments?.[0];
   return {
     id: order.id,
     orderNumber: order.order_number,
@@ -136,14 +144,15 @@ export function mapOrder(order: OrderRecord): Order {
     discount: Number(order.discount || 0),
     total: Number(order.total || 0),
     takeawayPackaging: order.takeaway_packaging || [],
-    paymentId: order.payments?.[0]?.id || null,
+    paymentId: payment?.id || null,
+    paymentNumber: payment?.payment_number || null,
     table: order.restaurant_tables ? {
       id: order.restaurant_tables.id,
       tableNumber: order.restaurant_tables.table_number,
       tableName: order.restaurant_tables.table_name,
       area: order.restaurant_tables.area,
     } : null,
-    items: (order.order_items || []).map((item) => mapOrderItem(item, batchNumbers)),
+    items: (order.order_items || []).map((item) => mapOrderItem(item, batchIdentities)),
     statusHistory: (order.statusHistory || []).map((entry) => ({
       id: entry.id,
       previousStatus: entry.previous_status,

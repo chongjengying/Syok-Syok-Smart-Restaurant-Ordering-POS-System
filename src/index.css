@@ -74,10 +74,10 @@
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
+  #printable-receipt, #printable-receipt *, #printable-report-receipt, #printable-report-receipt * {
     visibility: visible;
   }
-  #printable-receipt {
+  #printable-receipt, #printable-report-receipt {
     position: absolute;
     left: 0;
     top: 0;
@@ -85,5 +85,8 @@
     margin: 0;
     padding: 10px;
     font-family: 'Courier New', Courier, monospace;
+  }
+  .no-print {
+    display: none !important;
   }
 }

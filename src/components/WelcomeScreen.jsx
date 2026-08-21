@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, TrendingUp, UtensilsCrossed, ReceiptText } from 'lucide-react';
-import { translations } from '../utils/i18n';
+import { LANGUAGE_LABELS, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 
 export default function WelcomeScreen({
@@ -21,6 +21,7 @@ export default function WelcomeScreen({
   handleInstallPwa,
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
 
   const handleStart = () => {
     soundFx.playTap();
@@ -44,15 +45,15 @@ export default function WelcomeScreen({
         {/* Top Left PWA Badge */}
         <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-xs">
           <Globe className="w-4 h-4 text-[#D4AF37]" />
-          <span className="text-gray-300 font-medium">Fine Dining POS PWA</span>
+          <span className="text-gray-300 font-medium">{tr('terminalBadge')}</span>
         </div>
 
         {/* Top Right Segmented Language Control (48pt height) */}
         <div className="flex items-center bg-black/60 backdrop-blur-md p-1.5 rounded-2xl border border-white/15 shadow-2xl">
           {[
-            { code: 'en', label: 'English' },
-            { code: 'zh', label: '中文' },
-            { code: 'ms', label: 'Bahasa Melayu' }
+            { code: 'en', label: LANGUAGE_LABELS.en },
+            { code: 'zh', label: LANGUAGE_LABELS.zh },
+            { code: 'ms', label: LANGUAGE_LABELS.ms }
           ].map((item) => (
             <button
               key={item.code}
@@ -106,27 +107,27 @@ export default function WelcomeScreen({
             <div className="flex flex-wrap items-center justify-center gap-3">
               {canAccessUnpaidOrders && (
                 <button onClick={onOpenUnpaidOrders} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <ReceiptText className="w-4 h-4 text-[#D4AF37]" /> Unpaid Orders
+                  <ReceiptText className="w-4 h-4 text-[#D4AF37]" /> {tr('unpaidOrderAction')}
                 </button>
               )}
               {canAccessKitchen && (
                 <button onClick={onOpenKitchen} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <ClipboardList className="w-4 h-4 text-[#D4AF37]" /> Kitchen Queue
+                  <ClipboardList className="w-4 h-4 text-[#D4AF37]" /> {tr('kitchenQueue')}
                 </button>
               )}
               {canAccessReadyToServe && (
                 <button onClick={onOpenReadyToServe} className="h-11 rounded-xl border border-emerald-400/40 bg-emerald-950/60 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-emerald-400">
-                  <BellRing className="w-4 h-4 text-emerald-400" /> Ready to Serve
+                  <BellRing className="w-4 h-4 text-emerald-400" /> {tr('readyServeCollect')}
                 </button>
               )}
               {canAccessReports && (
                 <button onClick={onOpenReports} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <TrendingUp className="w-4 h-4 text-[#D4AF37]" /> Sales Reports
+                  <TrendingUp className="w-4 h-4 text-[#D4AF37]" /> {tr('salesReports')}
                 </button>
               )}
               {canAccessTables && (
                 <button onClick={onOpenTables} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> Table Operations
+                  <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> {tr('tableOperations')}
                 </button>
               )}
             </div>
@@ -147,13 +148,13 @@ export default function WelcomeScreen({
 
       {/* Footer Info */}
       <div className="relative z-10 flex items-center justify-between text-xs text-gray-400 border-t border-white/10 pt-4">
-        <span>Table Service iPad POS v2.4 • Smart Fine Dining</span>
+        <span>{tr('footerVersion')}</span>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            Kitchen Live Connected
+            {tr('footerKitchenConnected')}
           </span>
-          <span>Touch Screen Optimized (48pt+)</span>
+          <span>{tr('footerTouchOptimized')}</span>
         </div>
       </div>
     </div>

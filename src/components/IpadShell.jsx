@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, Battery, Maximize2, User } from 'lucide-react';
+import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
-export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile }) {
+export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile, lang = 'en', setLang }) {
+  const tr = (key) => translate(lang, key);
   const [time, setTime] = useState('');
 
   useEffect(() => {
@@ -17,8 +19,8 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
   return (
     <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-2 sm:p-4 text-white overflow-hidden select-none">
       {/* Top Device Bar Mode Selector Controls */}
-      <div className="mb-3 flex items-center gap-3 bg-[#1A1A1E] px-4 py-2 rounded-full border border-white/10 shadow-lg text-xs z-50">
-        <span className="text-gray-400 font-medium">iPad Canvas Mode:</span>
+      <div className="mb-3 flex flex-wrap items-center gap-3 bg-[#1A1A1E] px-4 py-2 rounded-full border border-white/10 shadow-lg text-xs z-50">
+        <span className="text-gray-400 font-medium">{tr('canvasMode')}</span>
         <button
           onClick={() => setDeviceMode('11inch')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer font-medium ${
@@ -53,8 +55,28 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
           isOnline ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' : 'bg-amber-950 text-amber-400 border border-amber-800/50'
         }`}>
           <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-          {isOnline ? '🟢 Online (PWA)' : '🟠 Offline Mode'}
+          {isOnline ? `🟢 ${tr('onlineStatus')}` : `🟠 ${tr('offlineStatus')}`}
         </div>
+        {setLang && (
+          <>
+            <div className="h-4 w-px bg-white/20 mx-1" />
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 p-1">
+              {SUPPORTED_LANGUAGES.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setLang(code)}
+                  className={`rounded-full px-3 py-1 font-semibold transition-all ${
+                    lang === code ? 'bg-[#D4AF37] text-black' : 'text-gray-300 hover:bg-white/10 hover:text-white'
+                  }`}
+                  title={LANGUAGE_LABELS[code]}
+                >
+                  {code === 'zh' ? '简' : code.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* iPad Outer Bezel & Canvas Frame */}
@@ -71,7 +93,7 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
         <div className="h-8 bg-[#121212] text-white px-6 flex items-center justify-between text-xs font-semibold tracking-wide shrink-0 z-40 select-none">
           <div className="flex items-center gap-2">
             <span>{time}</span>
-            <span className="text-[10px] text-gray-400 font-normal">iPad Landscape @2x</span>
+            <span className="text-[10px] text-gray-400 font-normal">{tr('landscapeMode')}</span>
           </div>
 
           {/* iPad Top Camera Notch Dot */}
@@ -87,10 +109,10 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                     <button
                       onClick={onOpenProfile}
                       className="flex items-center gap-1 text-[10px] text-gray-300 hover:text-white transition-colors cursor-pointer font-semibold bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-full"
-                      title="View Profile"
+                      title={tr('viewProfile')}
                     >
                       <User className="w-3.5 h-3.5" />
-                      <span>Profile</span>
+                      <span>{tr('profile')}</span>
                     </button>
                     <div className="h-3 w-px bg-white/20" />
                   </>
@@ -101,13 +123,13 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                 <button
                   onClick={onLogout}
                   className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-[#FFF0B3] transition-colors cursor-pointer font-semibold bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-full"
-                  title="Lock Terminal"
+                  title={tr('lockTerminal')}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
-                  Lock
+                  {tr('lockTerminal')}
                 </button>
                 <div className="h-3 w-px bg-white/20" />
               </>

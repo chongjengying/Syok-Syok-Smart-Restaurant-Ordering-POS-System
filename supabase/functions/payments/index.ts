@@ -61,15 +61,10 @@ Deno.serve(async (request) => {
       if (dateFrom && dateTo && dateFrom > dateTo) {
         return jsonResponse(400, { error: 'dateFrom must not be after dateTo.' });
       }
-      const reportQuery = supabase
-        .from('daily_sales_report')
-        .select('*')
-        .order('paid_at', { ascending: false });
-
-      if (dateFrom) reportQuery.gte('report_date', dateFrom);
-      if (dateTo) reportQuery.lte('report_date', dateTo);
-
-      const { data, error } = await reportQuery;
+      const { data, error } = await supabase.rpc('get_daily_sales_report', {
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+      });
       if (error) {
         console.error('Unable to load daily sales report', error);
         return jsonResponse(500, { error: 'Unable to load the daily sales report.' });
@@ -95,6 +90,49 @@ Deno.serve(async (request) => {
     body = parsed;
   } catch {
     return jsonResponse(400, { error: 'Request body must be a JSON object.' });
+  }
+
+  if (paymentAction === 'refund') {
+    if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
+      return jsonResponse(403, { error: 'Administrator or manager access is required.', code: 'INSUFFICIENT_PERMISSION' });
+    }
+    const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    if (!orderId || reason.length < 3 || !idempotencyKey) {
+      return jsonResponse(400, { error: 'orderId, reason and idempotencyKey are required.' });
+    }
+    const { data, error } = await supabase.rpc('refund_pos_order', {
+      p_order_id: orderId,
+      p_reason: reason,
+      p_idempotency_key: idempotencyKey,
+    });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'REFUND_FAILED';
+      const statusCode = code === 'ORDER_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409;
+      return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
+  const billId = typeof body.billId === 'string' ? body.billId.trim() : '';
+  if (billId) {
+    const mixedPayments = Array.isArray(body.payments) ? body.payments : [];
+    const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    if (!idempotencyKey || mixedPayments.length === 0) return jsonResponse(400, { error: 'billId, payments and idempotencyKey are required.' });
+    if (mixedPayments.some((payment) => !payment || typeof payment !== 'object' || String((payment as Record<string, unknown>).method || '').toUpperCase() !== 'CASH')) {
+      return jsonResponse(503, { error: 'Only cash payment is currently configured.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' });
+    }
+    const { data, error } = await supabase.rpc('complete_pos_bill_payment', {
+      p_bill_id: billId,
+      p_payments: mixedPayments,
+      p_idempotency_key: idempotencyKey,
+    });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'BILL_PAYMENT_FAILED';
+      return jsonResponse(code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
   }
 
   const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';

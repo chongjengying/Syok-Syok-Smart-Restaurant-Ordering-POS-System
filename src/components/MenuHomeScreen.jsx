@@ -5,14 +5,15 @@ import { useProducts } from '../hooks/useProducts';
 import { ProductEmptyState } from './products/ProductEmptyState';
 import { ProductGridSkeleton } from './products/ProductGridSkeleton';
 import { ProductLoadError } from './products/ProductLoadError';
-import { translations } from '../utils/i18n';
+import { translate, translations } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { calculateCartPreviewTotals, getCartItemCount, getCartItemPreviewTotal } from '../services/cart.service';
+import { formatMoney } from '../services/money.service';
 
-function ProductImage({ src, alt }) {
+function ProductImage({ src, alt, fallbackLabel }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
-    return <div className="flex h-full w-full items-center justify-center bg-[#121212] text-[#D4AF37]" aria-label="Product image unavailable"><ChefHat className="h-10 w-10" /></div>;
+    return <div className="flex h-full w-full items-center justify-center bg-[#121212] text-[#D4AF37]" aria-label={fallbackLabel}><ChefHat className="h-10 w-10" /></div>;
   }
   return <img src={src} alt={alt} onError={() => setFailed(true)} className="h-full w-full object-cover" loading="lazy" />;
 }
@@ -35,6 +36,7 @@ export default function MenuHomeScreen({
   onDashboard,
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
   const {
     categories,
     isLoading: isLoadingCategories,
@@ -57,7 +59,7 @@ export default function MenuHomeScreen({
     }
   }, [categories, isLoadingCategories, selectedCategory, setSelectedCategory]);
 
-  const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name || 'All Products';
+  const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name || tr('allProducts');
 
   const cartPreview = calculateCartPreviewTotals(cart);
   const totalItemCount = getCartItemCount(cart);
@@ -82,7 +84,7 @@ export default function MenuHomeScreen({
               onDashboard();
             }}
             className="flex items-center gap-2.5 rounded-xl px-1 py-0.5 text-left hover:bg-white/10"
-            title="Return to dashboard"
+            title={tr('dashboard')}
           >
             <div className="w-10 h-10 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-bold shadow">
               <LayoutDashboard className="w-5 h-5" />
@@ -118,7 +120,7 @@ export default function MenuHomeScreen({
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span>{diningMode === 'dine-in' ? `${t.dineIn} - ${t.table} ${selectedTable}` : t.takeaway}</span>
-            <span className="text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5 rounded font-bold ml-1">Change</span>
+            <span className="text-[10px] bg-[#D4AF37] text-black px-1.5 py-0.5 rounded font-bold ml-1">{tr('changeTable')}</span>
           </button>
 
           {/* Language Switcher Dropdown / Buttons */}
@@ -154,7 +156,7 @@ export default function MenuHomeScreen({
         {/* 2. LEFT NAVIGATION RAIL ($220pt width) */}
         <div className="w-[220px] bg-white border-r border-[#E9ECEF] flex flex-col py-4 shrink-0 shadow-sm overflow-y-auto">
           <div className="px-4 mb-2">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Categories</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{tr('categories')}</span>
           </div>
 
           <div className="space-y-1.5 px-3">
@@ -171,7 +173,7 @@ export default function MenuHomeScreen({
               </div>
             )}
             {isLoadingCategories && (
-              <div className="px-4 py-3 text-xs font-medium text-gray-400">Loading categories...</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-400">{tr('loadingCategories')}</div>
             )}
             <button
               onClick={() => {
@@ -186,7 +188,7 @@ export default function MenuHomeScreen({
             >
               <div className="flex items-center gap-3">
                 <span className="text-xl">🍽️</span>
-                <span className="truncate">All Products</span>
+                <span className="truncate">{tr('allProducts')}</span>
               </div>
               {!selectedCategory && <ChevronRight className="w-4 h-4 text-[#D4AF37]" />}
             </button>
@@ -209,7 +211,10 @@ export default function MenuHomeScreen({
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-xl">🏷️</span>
-                    <span className="truncate">{catName}</span>
+                    <span className="min-w-0 text-left">
+                      <span className="block truncate">{catName}</span>
+                      {cat.code && <span className="block text-[9px] font-bold opacity-60">{cat.code}</span>}
+                    </span>
                   </div>
                   {isActive && <ChevronRight className="w-4 h-4 text-[#D4AF37]" />}
                 </button>
@@ -228,7 +233,7 @@ export default function MenuHomeScreen({
               </h2>
               <p className="text-xs text-gray-500 font-medium mt-0.5">
                 {isLoadingProducts
-                  ? 'Loading products...'
+                  ? tr('loadingProducts')
                 : `${products.length} products${isBackgroundRefreshing ? ' · Refreshing…' : ''}`}
               </p>
             </div>
@@ -258,8 +263,8 @@ export default function MenuHomeScreen({
             {!isLoadingProducts && hasCachedProducts && products.length === 0 && (
               <ProductEmptyState
                 message={selectedCategory
-                  ? 'No products available in this category'
-                  : 'No products available'}
+                  ? tr('noProductsCategory')
+                  : tr('noProducts')}
                 onRefresh={refetchProducts}
               />
             )}
@@ -270,8 +275,8 @@ export default function MenuHomeScreen({
               >
                 {/* 1:1 Aspect Ratio Food Image with 16pt rounded corners */}
                 <div className="relative w-full h-[160px] rounded-xl overflow-hidden bg-gray-100 mb-3">
-                  <ProductImage src={dish.imageUrl} alt={dish.name} />
-                  {!dish.isAvailable && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/80 px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">Sold Out</span>}
+                  <ProductImage src={dish.imageUrl} alt={dish.name} fallbackLabel={tr('productImageUnavailable')} />
+                  {!dish.isAvailable && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/80 px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">{tr('soldOut')}</span>}
                 </div>
 
                 {/* Middle: Item Name, Price */}
@@ -280,6 +285,7 @@ export default function MenuHomeScreen({
                     <h3 className="font-bold text-base text-[#121212] line-clamp-1 group-hover:text-[#B8952B] transition-colors">
                       {getDishName(dish)}
                     </h3>
+                    {dish.code && <p className="text-[9px] font-bold tracking-wide text-gray-400">{dish.code}</p>}
                     <p className="text-xs text-gray-500 line-clamp-2 mt-1 leading-snug">
                       {dish.description}
                     </p>
@@ -287,11 +293,11 @@ export default function MenuHomeScreen({
 
                   <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
                     <div>
-                      <span className="text-xs text-gray-400 block font-medium">{dish.unit || 'Price'}</span>
+                      <span className="text-xs text-gray-400 block font-medium">{dish.unit || tr('price')}</span>
                       <span className="text-lg font-extrabold text-[#121212]">
-                        ${dish.price.toFixed(2)}
+                        {formatMoney(dish.price)}
                       </span>
-                      {!dish.isAvailable && <span className="rounded-full bg-red-100 px-2 py-1 text-[9px] font-black uppercase text-red-700">Sold Out</span>}
+                      {!dish.isAvailable && <span className="rounded-full bg-red-100 px-2 py-1 text-[9px] font-black uppercase text-red-700">{tr('soldOut')}</span>}
                     </div>
                   </div>
                 </div>
@@ -306,7 +312,7 @@ export default function MenuHomeScreen({
                   className="w-full h-[48px] rounded-xl bg-[#121212] hover:bg-[#252525] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow active:scale-95 mt-3 border border-black/10 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none"
                 >
                   <Plus className="w-4 h-4 text-[#D4AF37]" />
-                  <span>{dish.isAvailable ? t.add : 'Sold Out'}</span>
+                  <span>{dish.isAvailable ? t.add : tr('soldOut')}</span>
                 </button>
               </div>
             ))}
@@ -319,7 +325,7 @@ export default function MenuHomeScreen({
           <div className="p-5 bg-[#121212] text-white flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2.5">
               <ShoppingBag className="w-5 h-5 text-[#D4AF37]" />
-              <h2 className="font-bold text-base tracking-wide">{orderHistory.length > 0 ? 'New Add-On Round' : t.myOrder}</h2>
+              <h2 className="font-bold text-base tracking-wide">{orderHistory.length > 0 ? tr('newAddOnRound') : t.myOrder}</h2>
             </div>
             <span className="bg-[#D4AF37] text-black font-extrabold text-xs px-2.5 py-1 rounded-full">
               {totalItemCount} {t.items}
@@ -330,11 +336,11 @@ export default function MenuHomeScreen({
             <section className="max-h-[42%] shrink-0 overflow-y-auto border-b border-amber-200 bg-amber-50/70 p-4">
               <div className="sticky top-0 z-10 mb-3 flex items-center justify-between bg-amber-50/95 pb-2">
                 <div>
-                  <h3 className="text-[11px] font-black uppercase tracking-wider text-amber-900">Order Rounds</h3>
-                  <p className="text-[9px] text-amber-700">Read-only · will not be sent again</p>
+                  <h3 className="text-[11px] font-black uppercase tracking-wider text-amber-900">{tr('orderRounds')}</h3>
+                  <p className="text-[9px] text-amber-700">{tr('readOnlyRounds')}</p>
                 </div>
                 <span className="rounded-full bg-amber-200 px-2 py-1 text-[9px] font-black text-amber-900">
-                  ${historyTotal.toFixed(2)}
+                  {formatMoney(historyTotal)}
                 </span>
               </div>
               <div className="space-y-2">
@@ -344,13 +350,13 @@ export default function MenuHomeScreen({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-xs font-extrabold text-[#121212]">{item.quantity}× {item.name}</span>
-                          <span className="rounded bg-[#D4AF37]/20 px-1 py-0.5 text-[7px] font-black text-[#80600D]">{item.batchNo > 1 ? `ADD-ON • ROUND ${item.batchNo}` : 'ROUND 1'}</span>
+                          <span className="rounded bg-[#D4AF37]/20 px-1 py-0.5 text-[7px] font-black text-[#80600D]">{item.batchNo > 1 ? tr('addOnRound', { number: item.batchNo }) : tr('round', { number: 1 })}</span>
                           {item.serviceMode === 'TAKEAWAY' && <span className="rounded bg-sky-100 px-1 py-0.5 text-[7px] font-black text-sky-800">🥡 TAKEAWAY</span>}
                         </div>
                         <span className="mt-0.5 block text-[8px] font-bold text-gray-400">{item.itemStatus}</span>
                         {item.specialRequest && <p className="mt-0.5 text-[9px] font-semibold text-amber-700">Note: {item.specialRequest}</p>}
                       </div>
-                      <span className="shrink-0 text-xs font-black text-[#121212]">${item.subtotal.toFixed(2)}</span>
+                      <span className="shrink-0 text-xs font-black text-[#121212]">{formatMoney(item.subtotal)}</span>
                     </div>
                   </div>
                 ))}
@@ -361,7 +367,7 @@ export default function MenuHomeScreen({
           {/* Cart Items List */}
           <div className="flex-1 p-4 overflow-y-auto space-y-3 divide-y divide-gray-100">
             {orderHistory.length > 0 && (
-              <div className="pb-2 text-[10px] font-black uppercase tracking-wider text-gray-400">New items this round</div>
+              <div className="pb-2 text-[10px] font-black uppercase tracking-wider text-gray-400">{tr('newItemsRound')}</div>
             )}
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400">
@@ -385,7 +391,7 @@ export default function MenuHomeScreen({
                       <div className="text-[11px] text-gray-500 mt-0.5 space-y-0.5">
                         {item.portion && <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 mr-1 font-medium">{item.portion.id.toUpperCase()}</span>}
                         {item.selectedAddOns?.map(a => (
-                          <span key={a.id} className="text-gray-500 block">• +{a.name} (${a.price.toFixed(2)})</span>
+                          <span key={a.id} className="text-gray-500 block">• +{a.name} ({formatMoney(a.price)})</span>
                         ))}
                         {item.specialRequest && (
                           <span className="text-amber-700 block italic font-medium">"{item.specialRequest}"</span>
@@ -393,7 +399,7 @@ export default function MenuHomeScreen({
                       </div>
                     </div>
                     <span className="font-bold text-sm text-[#121212]">
-                      ${getCartItemPreviewTotal(item).toFixed(2)}
+                      {formatMoney(getCartItemPreviewTotal(item))}
                     </span>
                   </div>
 
@@ -420,7 +426,7 @@ export default function MenuHomeScreen({
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-600 font-medium">
                 <span>Preview {t.subtotal.toLowerCase()}</span>
-                <span className="font-bold text-[#121212]">${cartPreview.subtotal.toFixed(2)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(cartPreview.subtotal)}</span>
               </div>
               <p className="text-[11px] text-gray-400">
                 Taxes (6% SST) & Service Charge (10%) calculated at checkout.
@@ -442,7 +448,7 @@ export default function MenuHomeScreen({
             >
               <span>{t.checkout}</span>
               <div className="flex items-center gap-2">
-                <span className="text-lg">${cartPreview.subtotal.toFixed(2)}</span>
+                <span className="text-lg">{formatMoney(cartPreview.subtotal)}</span>
                 <ChevronRight className="w-5 h-5" />
               </div>
             </button>

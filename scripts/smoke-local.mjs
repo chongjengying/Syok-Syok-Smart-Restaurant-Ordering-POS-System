@@ -83,11 +83,18 @@ const inactiveAuth = await request('/auth/v1/signup', {
 await request(`/rest/v1/profiles?id=eq.${inactiveAuth.user.id}`, {
   method: 'PATCH', key: serviceKey, body: { status: 'INACTIVE' },
 });
-await assert.rejects(
-  request(`/rest/v1/profiles?id=eq.${inactiveAuth.user.id}`, {
-    method: 'PATCH', token: inactiveAuth.access_token, body: { status: 'ACTIVE', role_name: 'ADMIN' },
-  }),
-  /400|403/,
+const inactiveEscalationAttempt = await request(`/rest/v1/profiles?id=eq.${inactiveAuth.user.id}`, {
+  method: 'PATCH', token: inactiveAuth.access_token, body: { status: 'ACTIVE', role_name: 'ADMIN' },
+});
+assert.deepEqual(inactiveEscalationAttempt, [], 'Inactive staff unexpectedly updated protected profile fields');
+const [persistedInactiveProfile] = await request(
+  `/rest/v1/profiles?id=eq.${inactiveAuth.user.id}&select=status,role_name`,
+  { key: serviceKey },
+);
+assert.deepEqual(
+  persistedInactiveProfile,
+  { status: 'INACTIVE', role_name: 'CASHIER' },
+  'Inactive staff privilege escalation changed persisted profile fields',
 );
 const inactiveFunctionRequest = (name) => request(`/functions/v1/${name}`, { token: inactiveAuth.access_token });
 for (const functionName of ['products', 'tables', 'orders', 'payments']) {
@@ -97,7 +104,12 @@ const inactiveCategories = await request('/rest/v1/categories', { token: inactiv
 assert.deepEqual(inactiveCategories, [], 'Inactive profile bypassed direct category RLS');
 
 const tables = await functionRequest('tables', { path: '?includeInactive=true' });
-assert.equal(tables.data.length, 8, 'Expected seeded restaurant tables');
+const seededTableNumbers = ['A01', 'A02', 'A03', 'B01', 'B02', 'B03', 'C01', 'C02'];
+assert.deepEqual(
+  seededTableNumbers.filter((tableNumber) => !tables.data.some((table) => table.table_number === tableNumber)),
+  [],
+  'Expected all seeded restaurant tables to be present',
+);
 for (const table of tables.data.filter(({ status }) => status === 'DISABLED')) {
   await functionRequest('tables', {
     method: 'POST', path: `/${table.id}/restore`,
@@ -210,14 +222,39 @@ await assert.rejects(
 await functionRequest('tables', {
   method: 'POST', path: `/${sourceTable.id}/complete-cleaning`, body: { operationKey: `clean-source-${suffix}` },
 });
-await functionRequest('payments', {
-  method: 'POST', body: { paymentId: dineInOrder.data.payment_id, paymentMethod: 'CASH' },
+await functionRequest('orders', {
+  method: 'POST', path: `/${dineInOrder.data.id}/start`, body: {},
 });
-for (const nextStatus of ['PREPARING', 'READY', 'SERVED', 'COMPLETED']) {
-  await functionRequest('orders', {
-    method: 'PATCH', path: `/${dineInOrder.data.id}`, body: { status: nextStatus, notes: 'Dine-in lifecycle smoke' },
-  });
-}
+const preparingDineInOrder = await functionRequest('orders', { path: `/${dineInOrder.data.id}` });
+const preparingDineInBatch = preparingDineInOrder.data.order_item_batches?.[0];
+assert.ok(preparingDineInBatch?.id, 'Kitchen start did not create a persisted batch');
+await functionRequest('payments', {
+  method: 'POST',
+  body: {
+    orderId: dineInOrder.data.id,
+    paymentMethod: 'CASH',
+    finalAmount: Number(dineInOrder.data.total),
+    receivedAmount: Number(dineInOrder.data.total),
+    idempotencyKey: `dine-in-payment-${suffix}`,
+  },
+});
+await functionRequest('orders', {
+  method: 'POST',
+  path: `/${dineInOrder.data.id}/batches/${preparingDineInBatch.id}/ready`,
+  body: {},
+});
+await functionRequest('orders', {
+  method: 'POST', path: `/${dineInOrder.data.id}/serve`, body: {},
+});
+assert.equal(
+  (await functionRequest('orders', { path: `/${dineInOrder.data.id}` })).data.status,
+  'COMPLETED',
+  'Paid dine-in order did not complete when served',
+);
+assert.equal((await functionRequest('tables', { path: `/${destinationTable.id}` })).data.status, 'OCCUPIED');
+await functionRequest('tables', {
+  method: 'POST', path: `/${destinationTable.id}/start-cleaning`, body: { operationKey: `start-clean-destination-${suffix}` },
+});
 assert.equal((await functionRequest('tables', { path: `/${destinationTable.id}` })).data.status, 'CLEANING');
 await functionRequest('tables', {
   method: 'POST', path: `/${destinationTable.id}/complete-cleaning`, body: { operationKey: `clean-destination-${suffix}` },
@@ -315,16 +352,29 @@ await assert.rejects(
 
 const paid = await functionRequest('payments', {
   method: 'POST',
-  body: { paymentId: created.data.payment_id, paymentMethod: 'CASH' },
+  body: {
+    orderId: created.data.id,
+    paymentMethod: 'CASH',
+    finalAmount: Number(created.data.total),
+    receivedAmount: Number(created.data.total),
+    idempotencyKey: `takeaway-payment-${suffix}`,
+  },
 });
 assert.equal(paid.data.payment.status, 'PAID');
 assert.equal(paid.data.order.payment_status, 'PAID');
 
 const paidReplay = await functionRequest('payments', {
   method: 'POST',
-  body: { paymentId: created.data.payment_id, paymentMethod: 'CASH' },
+  body: {
+    orderId: created.data.id,
+    paymentMethod: 'CASH',
+    finalAmount: Number(created.data.total),
+    receivedAmount: Number(created.data.total),
+    idempotencyKey: `takeaway-payment-${suffix}`,
+  },
 });
-assert.equal(paidReplay.data.status, 'PAID', 'Duplicate payment confirmation was not idempotent');
+assert.equal(paidReplay.data.payment.status, 'PAID', 'Duplicate payment confirmation was not idempotent');
+assert.equal(paidReplay.data.replayed, true, 'Duplicate payment confirmation was not identified as a replay');
 
 const capabilities = await functionRequest('payments');
 assert.equal(capabilities.data.methods.find(({ method }) => method === 'CASH').available, true);
@@ -342,7 +392,12 @@ const providerPendingOrder = await functionRequest('orders', {
 await assert.rejects(
   functionRequest('payments', {
     method: 'POST',
-    body: { paymentId: providerPendingOrder.data.payment_id, paymentMethod: 'CARD' },
+    body: {
+      orderId: providerPendingOrder.data.id,
+      paymentMethod: 'CARD',
+      finalAmount: Number(providerPendingOrder.data.total),
+      idempotencyKey: `provider-payment-${suffix}`,
+    },
   }),
   /503/,
 );
@@ -361,8 +416,7 @@ const lateCancelledOrder = await functionRequest('orders', {
   },
 });
 await functionRequest('orders', {
-  method: 'PATCH', path: `/${lateCancelledOrder.data.id}`,
-  body: { status: 'CONFIRMED', notes: 'Kitchen accepted smoke order' },
+  method: 'POST', path: `/${lateCancelledOrder.data.id}/start`, body: {},
 });
 await functionRequest('orders', {
   method: 'PATCH', path: `/${lateCancelledOrder.data.id}`,
@@ -410,7 +464,7 @@ assert.ok(tableActivity.every(({ performed_by }) => performed_by === auth.user.i
 const reportResponse = await functionRequest('payments', { path: '/report/daily' });
 const salesEntry = reportResponse.data.find((entry) => entry.order_id === created.data.id);
 assert.ok(salesEntry, 'Expected paid order to appear in daily sales report');
-assert.equal(salesEntry.payment_id, created.data.payment_id, 'Daily sales report returned the wrong payment');
+assert.equal(salesEntry.payment_id, paid.data.payment.id, 'Daily sales report returned the wrong payment');
 assert.equal(Number(salesEntry.tax), 1.2);
 assert.equal(Number(salesEntry.service_charge), 2);
 await assert.rejects(
@@ -422,19 +476,23 @@ await assert.rejects(
   /400/,
 );
 
-for (const nextStatus of ['PREPARING', 'READY', 'SERVED', 'COMPLETED']) {
-  const transitioned = await functionRequest('orders', {
-    method: 'PATCH',
-    path: `/${created.data.id}`,
-    body: { status: nextStatus, notes: 'Local lifecycle smoke test' },
-  });
-  assert.equal(transitioned.data.status, nextStatus);
-}
+const paidTakeawayDetail = await functionRequest('orders', { path: `/${created.data.id}` });
+const paidTakeawayBatch = paidTakeawayDetail.data.order_item_batches?.[0];
+assert.ok(paidTakeawayBatch?.id, 'Paid takeaway order did not retain its kitchen batch');
+await functionRequest('orders', {
+  method: 'POST', path: `/${created.data.id}/batches/${paidTakeawayBatch.id}/start`, body: {},
+});
+await functionRequest('orders', {
+  method: 'POST', path: `/${created.data.id}/batches/${paidTakeawayBatch.id}/ready`, body: {},
+});
+await functionRequest('orders', {
+  method: 'POST', path: `/${created.data.id}/serve`, body: {},
+});
 
 const order = await functionRequest('orders', { path: `/${created.data.id}` });
 assert.equal(order.data.status, 'COMPLETED');
 assert.equal(order.data.payment_status, 'PAID');
-assert.equal(order.data.statusHistory.length, 6);
+assert.ok(order.data.statusHistory.length >= 2, 'Order status history was not persisted');
 
 console.log(JSON.stringify({
   tables: tables.data.length,

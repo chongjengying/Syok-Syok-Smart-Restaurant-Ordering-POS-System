@@ -6,14 +6,14 @@ export class CategoryRepository {
   findAll() {
     return this.client
       .from('categories')
-      .select('id, name, description, status')
+      .select('id, category_code, name, description, status')
       .order('name');
   }
 
   findWithActiveProducts() {
     return this.client
       .from('categories')
-      .select('id, name, description, status')
+      .select('id, category_code, name, description, status')
       .eq('status', true)
       .order('name');
   }
@@ -21,7 +21,7 @@ export class CategoryRepository {
   findById(categoryId: string) {
     return this.client
       .from('categories')
-      .select('id, name, description')
+      .select('id, category_code, name, description')
       .eq('id', categoryId)
       .maybeSingle();
   }

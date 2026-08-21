@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getUnpaidOrders } from '../services/order.service';
 import { subscribeToKitchenQueue } from '../services/kitchen.service';
 import type { Order } from '../types/order';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 export function useUnpaidOrders(enabled = true) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -23,7 +24,15 @@ export function useUnpaidOrders(enabled = true) {
   useEffect(() => {
     if (!enabled) return undefined;
     void refresh();
-    return subscribeToKitchenQueue(() => { void refresh({ silent: true }); });
+    const trackRealtime = createRealtimeRecoveryTracker();
+    return subscribeToKitchenQueue(
+      () => { void refresh({ silent: true }); },
+      (status) => {
+        const realtime = trackRealtime(status);
+        if (realtime.failed) setError('Live unpaid-order updates are temporarily unavailable.');
+        if (realtime.shouldRefetch) void refresh({ silent: true });
+      },
+    );
   }, [enabled, refresh]);
 
   return { orders, isLoading, error, refresh };

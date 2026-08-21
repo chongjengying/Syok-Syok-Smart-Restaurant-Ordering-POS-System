@@ -15,6 +15,7 @@ export function mapProductRecord(product: ProductRecord): Product | null {
   const status = normalizedProductStatus(product);
   return {
     ...product,
+    code: typeof product.code === 'string' ? product.code : '',
     price,
     description: product.description || '',
     optionGroups: Array.isArray(product.optionGroups) ? product.optionGroups : [],

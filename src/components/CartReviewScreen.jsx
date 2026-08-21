@@ -1,9 +1,10 @@
 import React from 'react';
 import { ArrowLeft, Trash2, Edit3, Plus, Minus, ChevronRight } from 'lucide-react';
-import { translations } from '../utils/i18n';
+import { translate, translations } from '../utils/i18n';
 
 import { soundFx } from '../utils/audio';
 import { calculateCartPreviewTotals, getCartItemCount, getCartItemPreviewTotal } from '../services/cart.service';
+import { formatMoney } from '../services/money.service';
 
 export default function CartReviewScreen({
   cart,
@@ -22,6 +23,7 @@ export default function CartReviewScreen({
   lang
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
 
   const previewTotals = calculateCartPreviewTotals(cart);
 
@@ -91,11 +93,11 @@ export default function CartReviewScreen({
               <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
                 <div className="mb-3 flex items-center justify-between border-b border-amber-200 pb-3">
                   <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-amber-900">Order Rounds</h3>
-                    <p className="mt-0.5 text-[10px] text-amber-700">Already submitted items are read-only and will not be sent again.</p>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-amber-900">{tr('orderRounds')}</h3>
+                    <p className="mt-0.5 text-[10px] text-amber-700">{tr('submittedReadOnly')}</p>
                   </div>
                   <span className="rounded-full bg-amber-200 px-2.5 py-1 text-[9px] font-black text-amber-900">
-                    {orderHistory.reduce((sum, item) => sum + item.quantity, 0)} ITEMS
+                    {tr('itemsUpper', { count: orderHistory.reduce((sum, item) => sum + item.quantity, 0) })}
                   </span>
                 </div>
                 <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
@@ -105,16 +107,16 @@ export default function CartReviewScreen({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-extrabold text-[#121212]">{item.quantity}× {item.name}</span>
                           <span className="rounded bg-[#D4AF37]/20 px-1.5 py-0.5 text-[8px] font-black text-[#80600D]">{item.batchNo > 1 ? `ADD-ON • ROUND ${item.batchNo}` : 'ROUND 1'}</span>
-                          {item.serviceMode === 'TAKEAWAY' && <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[8px] font-black text-sky-800">🥡 TAKEAWAY</span>}
+                          {item.serviceMode === 'TAKEAWAY' && <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[8px] font-black text-sky-800">{tr('takeawayBadge')}</span>}
                           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[8px] font-bold text-gray-600">{item.itemStatus}</span>
                         </div>
                         {item.options.map((option) => (
                           <p key={option.id} className="mt-0.5 text-[10px] text-gray-500">{option.groupName}: {option.name}</p>
                         ))}
-                        {item.specialRequest && <p className="mt-0.5 text-[10px] font-semibold text-amber-700">Note: {item.specialRequest}</p>}
-                        {item.sentAt && <p className="mt-0.5 text-[9px] text-gray-400">Sent {new Date(item.sentAt).toLocaleString()}</p>}
+                        {item.specialRequest && <p className="mt-0.5 text-[10px] font-semibold text-amber-700">{tr('notePrefix', { note: item.specialRequest })}</p>}
+                        {item.sentAt && <p className="mt-0.5 text-[9px] text-gray-400">{tr('sentAt', { date: new Date(item.sentAt).toLocaleString() })}</p>}
                       </div>
-                      <span className="shrink-0 font-extrabold text-[#121212]">${item.subtotal.toFixed(2)}</span>
+                      <span className="shrink-0 font-extrabold text-[#121212]">{formatMoney(item.subtotal)}</span>
                     </div>
                   ))}
                 </div>
@@ -122,7 +124,7 @@ export default function CartReviewScreen({
             )}
 
             {orderHistory.length > 0 && (
-              <h3 className="pt-1 text-xs font-black uppercase tracking-wider text-gray-500">New items this round</h3>
+              <h3 className="pt-1 text-xs font-black uppercase tracking-wider text-gray-500">{tr('newItemsRound')}</h3>
             )}
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-400">
@@ -165,24 +167,24 @@ export default function CartReviewScreen({
                     </h3>
                     {item.serviceMode === 'TAKEAWAY' && <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🥡 TAKEAWAY</span>}
                     <p className="text-sm font-bold text-[#B8952B] mt-0.5">
-                      ${item.finalPrice.toFixed(2)} / unit
+                      {formatMoney(item.finalPrice)} / unit
                     </p>
 
                     {/* Modifiers Detail Breakdown */}
                     <div className="text-xs text-gray-500 mt-1 space-y-0.5">
                       {item.portion && (
                         <span className="inline-block bg-gray-200 text-gray-800 px-2 py-0.5 rounded font-medium text-[11px] mr-1">
-                          Portion: {item.portion.id.toUpperCase()}
+                          {tr('portion')}: {item.portion.id.toUpperCase()}
                         </span>
                       )}
                       {item.selectedAddOns?.map((a) => (
                         <span key={a.id} className="text-gray-600 block">
-                          - Add: {a.name} (+${a.price.toFixed(2)})
+                          - {a.name} (+{formatMoney(a.price)})
                         </span>
                       ))}
                       {item.specialRequest && (
                         <span className="text-amber-800 font-medium block italic">
-                          - Request: "{item.specialRequest}"
+                          - {tr('specialRequest')}: "{item.specialRequest}"
                         </span>
                       )}
                     </div>
@@ -191,7 +193,7 @@ export default function CartReviewScreen({
                   {/* Right Action Stepper, Edit & Delete */}
                   <div className="flex flex-col items-end gap-3 shrink-0">
                     <span className="font-extrabold text-lg text-[#121212]">
-                      ${getCartItemPreviewTotal(item).toFixed(2)}
+                      {formatMoney(getCartItemPreviewTotal(item))}
                     </span>
 
                     <div className="flex items-center gap-3">
@@ -246,22 +248,22 @@ export default function CartReviewScreen({
         <div className="w-[360px] md:w-[380px] bg-white rounded-2xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col justify-between shrink-0">
           <div>
             <h2 className="font-extrabold text-base tracking-wide text-[#121212] uppercase pb-4 border-b border-gray-100 mb-6">
-              Preview {t.orderSummary}
+              {tr('previewOnly')} {t.orderSummary}
             </h2>
 
             {/* Calculations Breakdown */}
             <div className="space-y-4 text-sm font-medium text-gray-600">
               <div className="flex justify-between items-center">
                 <span>{t.subtotal}</span>
-                <span className="font-bold text-[#121212]">${previewTotals.subtotal.toFixed(2)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.subtotal)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>{t.sst}</span>
-                <span className="font-bold text-[#121212]">${previewTotals.tax.toFixed(2)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.tax)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>{t.serviceCharge}</span>
-                <span className="font-bold text-[#121212]">${previewTotals.serviceCharge.toFixed(2)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.serviceCharge)}</span>
               </div>
 
               <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
@@ -269,22 +271,22 @@ export default function CartReviewScreen({
                   {t.total}
                 </span>
                 <span className="text-2xl font-black text-[#B8952B]">
-                  ${previewTotals.total.toFixed(2)}
+                  {formatMoney(previewTotals.total)}
                 </span>
               </div>
             </div>
 
             {/* Fine Dining Note Box */}
             <div className="mt-6 p-4 rounded-xl bg-[#F8F9FA] border border-gray-200 text-xs text-gray-500 leading-relaxed">
-              <span className="font-bold text-gray-700 block mb-1">Preview only</span>
+              <span className="font-bold text-gray-700 block mb-1">{tr('previewOnly')}</span>
               {diningMode === 'dine-in'
                 ? `This ${isAddOn ? 'add-on' : 'order'} will be sent to Table ${selectedTable}. Final pricing is validated by the backend.`
                 : 'This takeaway order will be sent to the kitchen. Final pricing is validated by the backend.'}
             </div>
             {authoritativeBillTotal !== null && authoritativeBillTotal !== undefined && (
               <div className="mt-3 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs">
-                <span className="font-bold text-amber-900">Current database bill</span>
-                <span className="text-base font-black text-amber-900">${Number(authoritativeBillTotal).toFixed(2)}</span>
+                <span className="font-bold text-amber-900">{tr('currentDatabaseBill')}</span>
+                <span className="text-base font-black text-amber-900">{formatMoney(authoritativeBillTotal)}</span>
               </div>
             )}
           </div>
@@ -307,7 +309,7 @@ export default function CartReviewScreen({
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            <span>{isAddOn ? 'Review Add-on Items' : 'Review Order'}</span>
+            <span>{isAddOn ? tr('reviewAddOn') : tr('reviewOrder')}</span>
             <ChevronRight className="w-6 h-6 stroke-[3]" />
           </button>
         </div>

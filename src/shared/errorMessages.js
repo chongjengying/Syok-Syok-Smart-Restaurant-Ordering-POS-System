@@ -1,3 +1,5 @@
+import { getCurrentLanguage } from '../utils/i18n.js';
+
 const ERROR_MESSAGES = {
   AUTH_REQUIRED: 'Your session has expired. Sign in again to continue.',
   AUTHENTICATION_REQUIRED: 'Your session has expired. Sign in again to continue.',
@@ -35,12 +37,24 @@ const ERROR_MESSAGES = {
   SERVER_ERROR: 'The POS server could not complete the request. Try again or contact support if it continues.',
 };
 
+const FALLBACK_KEYS = {
+  defaultOperationFailed: { en: 'The operation could not be completed. Please try again.', zh: '操作无法完成，请重试。', ms: 'Operasi tidak dapat diselesaikan. Sila cuba lagi.' },
+  defaultRequestFailed: { en: 'The request could not be completed. Please try again.', zh: '请求无法完成，请重试。', ms: 'Permintaan tidak dapat diselesaikan. Sila cuba lagi.' },
+  priceChanged: { en: 'A product price changed. The database total is RM {persisted} instead of the RM {preview} preview.', zh: '商品价格已变更。数据库总额为 RM {persisted}，而不是预览中的 RM {preview}。', ms: 'Harga produk telah berubah. Jumlah pangkalan data ialah RM {persisted}, bukan pratonton RM {preview}.' },
+};
+
+function getLocalizedFallback(key, variables = {}) {
+  const language = getCurrentLanguage();
+  const template = FALLBACK_KEYS[key]?.[language] ?? FALLBACK_KEYS[key]?.en ?? '';
+  return String(template).replace(/\{(\w+)\}/g, (_, name) => String(variables[name] ?? `{${name}}`));
+}
+
 export function getErrorCode(error) {
   if (error && typeof error === 'object' && typeof error.code === 'string') return error.code.toUpperCase();
   return '';
 }
 
-export function getUserErrorMessage(error, fallback = 'The operation could not be completed. Please try again.') {
+export function getUserErrorMessage(error, fallback = getLocalizedFallback('defaultOperationFailed')) {
   const code = getErrorCode(error);
   if (ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
   if (error && typeof error === 'object' && Number(error.status) === 401) return ERROR_MESSAGES.SESSION_EXPIRED;
@@ -53,14 +67,17 @@ export function getApiErrorMessage({ code, status, serverMessage }) {
   if (ERROR_MESSAGES[normalizedCode]) return ERROR_MESSAGES[normalizedCode];
   if (Number(status) === 401) return ERROR_MESSAGES.SESSION_EXPIRED;
   if (Number(status) >= 500) return ERROR_MESSAGES.SERVER_ERROR;
-  return String(serverMessage || '').trim() || 'The request could not be completed. Please try again.';
+  return String(serverMessage || '').trim() || getLocalizedFallback('defaultRequestFailed');
 }
 
 export function getPriceChangeMessage(previewTotal, persistedTotal) {
   const preview = Number(previewTotal);
   const persisted = Number(persistedTotal);
   if (!Number.isFinite(preview) || !Number.isFinite(persisted) || Math.abs(preview - persisted) < 0.01) return '';
-  return `A product price changed. The database total is RM ${persisted.toFixed(2)} instead of the RM ${preview.toFixed(2)} preview.`;
+  return getLocalizedFallback('priceChanged', {
+    persisted: persisted.toFixed(2),
+    preview: preview.toFixed(2),
+  });
 }
 
 export { ERROR_MESSAGES };

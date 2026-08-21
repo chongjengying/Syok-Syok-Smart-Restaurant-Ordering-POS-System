@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, CreditCard, Loader2, Plus, Printer, RotateCcw, X, Receipt } from 'lucide-react';
-import { translations } from '../utils/i18n';
+import { translate, translations, translateStatus } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { useOrder } from '../hooks/useOrder';
 import { deriveOrderKitchenProgress, groupOrderRounds } from '../services/order-rounds.service';
+import { formatMoney } from '../services/money.service';
 
 export default function OrderStatusScreen({
   orderData,
@@ -18,6 +19,7 @@ export default function OrderStatusScreen({
   lang
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
   const [showThermalReceipt, setShowThermalReceipt] = useState(false);
   const { order, isLoading, error } = useOrder(orderData.id, Boolean(orderData.id));
   const receiptItems = useMemo(() => order?.items || [], [order?.items]);
@@ -72,10 +74,10 @@ export default function OrderStatusScreen({
           </h1>
           <p className="text-gray-400 text-xs sm:text-sm mt-1">
             {isLoading
-              ? 'Loading the persisted order from the backend...'
+              ? tr('loadingBackendOrder')
               : error
-                ? 'The order was placed, but the latest backend details could not be refreshed.'
-                : `Persisted order synced from the backend${resolvedTableLabel ? ` • Table ${resolvedTableLabel}` : ''}`}
+                ? tr('backendRefreshFailed')
+                : `${tr('backendOrderSynced')}${resolvedTableLabel ? ` • ${tr('table')} ${resolvedTableLabel}` : ''}`}
           </p>
         </div>
 
@@ -93,13 +95,13 @@ export default function OrderStatusScreen({
         <div className="w-full py-4 px-6 bg-black/40 rounded-2xl border border-white/10">
           <div className="mb-4 text-center">
             <p className={`text-sm font-black tracking-widest ${kitchenProgress.label === 'READY' ? 'text-emerald-400' : 'text-[#D4AF37]'}`}>
-              {kitchenProgress.label}
+              {kitchenProgress.label === 'ORDER IN PROGRESS' ? tr('orderInProgress') : translateStatus(lang, kitchenProgress.label)}
             </p>
             <div className="mt-2 flex flex-wrap justify-center gap-2 text-[10px] font-bold text-gray-300">
-              {kitchenProgress.waiting > 0 && <span>{kitchenProgress.waiting} Waiting</span>}
-              {kitchenProgress.preparing > 0 && <span>{kitchenProgress.preparing} Preparing</span>}
-              {kitchenProgress.ready > 0 && <span>{kitchenProgress.ready} Ready</span>}
-              {kitchenProgress.served > 0 && <span>{kitchenProgress.served} Served</span>}
+              {kitchenProgress.waiting > 0 && <span>{kitchenProgress.waiting} {translateStatus(lang, 'PENDING')}</span>}
+              {kitchenProgress.preparing > 0 && <span>{kitchenProgress.preparing} {translateStatus(lang, 'PREPARING')}</span>}
+              {kitchenProgress.ready > 0 && <span>{kitchenProgress.ready} {translateStatus(lang, 'READY')}</span>}
+              {kitchenProgress.served > 0 && <span>{kitchenProgress.served} {translateStatus(lang, 'SERVED')}</span>}
             </div>
           </div>
           <div className="flex items-center justify-between relative">
@@ -150,7 +152,7 @@ export default function OrderStatusScreen({
         <div className="flex items-center justify-center gap-6 text-sm text-gray-300 font-medium">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[#D4AF37]" />
-            <span>Bill: <strong className="text-white">{orderStatus}</strong></span>
+            <span>{tr('order')}: <strong className="text-white">{translateStatus(lang, orderStatus)}</strong></span>
           </div>
           <span>•</span>
           <div>
@@ -165,7 +167,7 @@ export default function OrderStatusScreen({
         {isLoading && (
           <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300 flex items-center justify-center gap-3">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Loading order details from Supabase...</span>
+            <span>{tr('loadingOrderDetails')}</span>
           </div>
         )}
 
@@ -187,11 +189,11 @@ export default function OrderStatusScreen({
           <div className="w-full rounded-2xl border border-white/10 bg-black/30 p-4 text-left">
             <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h2 className="text-sm font-black uppercase tracking-wider text-white">Order Rounds</h2>
-                <p className="mt-0.5 text-[11px] text-gray-400">Every round belongs to this single bill. Submitted items are never resent.</p>
+                <h2 className="text-sm font-black uppercase tracking-wider text-white">{tr('orderRounds')}</h2>
+                <p className="mt-0.5 text-[11px] text-gray-400">{tr('roundsHelp')}</p>
               </div>
               <span className="rounded-full bg-amber-400/15 px-3 py-1 text-[10px] font-black text-amber-300">
-                {order?.paymentStatus || orderData.paymentStatus}
+                {translateStatus(lang, order?.paymentStatus || orderData.paymentStatus)}
               </span>
             </div>
             <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
@@ -199,9 +201,9 @@ export default function OrderStatusScreen({
                 <section key={round.roundNo} className="rounded-xl bg-white/5 px-3 py-2">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[10px] font-black text-[#E8C85A]">
-                      {round.isAddOn ? `ADD-ON • ROUND ${round.roundNo}` : `ROUND ${round.roundNo}`}
+                      {round.isAddOn ? tr('addOnRound', { number: round.roundNo }) : tr('round', { number: round.roundNo })}
                     </span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-gray-300">{round.status}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-gray-300">{translateStatus(lang, round.status)}</span>
                   </div>
                   <div className="space-y-2">
                     {round.items.map((item) => (
@@ -209,13 +211,13 @@ export default function OrderStatusScreen({
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-bold text-white">{item.quantity}× {item.name}</span>
-                            {item.serviceMode === 'TAKEAWAY' && <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[9px] font-black text-sky-300">🥡 TAKEAWAY</span>}
+                            {item.serviceMode === 'TAKEAWAY' && <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[9px] font-black text-sky-300">{tr('takeawayBadge')}</span>}
                           </div>
                           {item.options.map((option) => <p key={option.id} className="mt-0.5 text-[10px] text-gray-400">{option.groupName}: {option.name}</p>)}
-                          {item.specialRequest && <p className="mt-0.5 text-[10px] font-semibold text-amber-300">Note: {item.specialRequest}</p>}
-                          {item.sentAt && <p className="mt-0.5 text-[9px] text-gray-500">Sent {new Date(item.sentAt).toLocaleString()}</p>}
+                          {item.specialRequest && <p className="mt-0.5 text-[10px] font-semibold text-amber-300">{tr('notePrefix', { note: item.specialRequest })}</p>}
+                          {item.sentAt && <p className="mt-0.5 text-[9px] text-gray-500">{tr('sentAt', { date: new Date(item.sentAt).toLocaleString() })}</p>}
                         </div>
-                        <p className="shrink-0 font-bold text-white">${item.subtotal.toFixed(2)}</p>
+                        <p className="shrink-0 font-bold text-white">{formatMoney(item.subtotal)}</p>
                       </div>
                     ))}
                   </div>
@@ -223,8 +225,8 @@ export default function OrderStatusScreen({
               ))}
             </div>
             <div className="mt-3 flex justify-between border-t border-white/10 pt-3 text-sm">
-              <span className="font-bold text-gray-300">Current unpaid total</span>
-              <span className="font-black text-[#D4AF37]">${grandTotal.toFixed(2)}</span>
+              <span className="font-bold text-gray-300">{tr('currentUnpaidTotal')}</span>
+              <span className="font-black text-[#D4AF37]">{formatMoney(grandTotal)}</span>
             </div>
           </div>
         )}
@@ -252,7 +254,7 @@ export default function OrderStatusScreen({
               className="flex-1 h-[56px] rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm border border-white/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
             >
               <Plus className="w-5 h-5 text-[#D4AF37]" />
-              <span>+ Add Items</span>
+              <span>+ {tr('addItems')}</span>
             </button>
           )}
 
@@ -265,7 +267,7 @@ export default function OrderStatusScreen({
               className="flex-1 h-[64px] rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
             >
               <CreditCard className="w-5 h-5" />
-              <span>View Bill / Pay</span>
+              <span>{tr('viewBillPay')}</span>
             </button>
           )}
 
@@ -315,11 +317,11 @@ export default function OrderStatusScreen({
                   <div key={item.id}>
                     <div className="flex justify-between font-bold">
                       <span>{item.quantity}x {item.name}</span>
-                      <span>${item.subtotal.toFixed(2)}</span>
+                      <span>{formatMoney(item.subtotal)}</span>
                     </div>
                     {item.options.map((option) => (
                       <div key={option.id} className="text-[10px] text-gray-600 ml-3">
-                        • {option.groupName}: {option.name}{option.priceAdjustment > 0 ? ` (+$${option.priceAdjustment.toFixed(2)})` : ''}
+                        • {option.groupName}: {option.name}{option.priceAdjustment > 0 ? ` (+${formatMoney(option.priceAdjustment)})` : ''}
                       </div>
                     ))}
                     {item.specialRequest && (
@@ -328,40 +330,40 @@ export default function OrderStatusScreen({
                   </div>
                 ))}
                 {!receiptItems.length && !isLoading && (
-                  <div className="text-[10px] text-gray-500">No persisted order items were returned.</div>
+                  <div className="text-[10px] text-gray-500">{tr('noPersistedItems')}</div>
                 )}
               </div>
 
               {/* Total Calculations */}
               <div className="space-y-1 text-right font-medium text-[11px]">
                 <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>{tr('subtotal')}:</span>
+                  <span>{formatMoney(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>SST (6%):</span>
-                  <span>${tax.toFixed(2)}</span>
+                  <span>{formatMoney(tax)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Service charge (10%):</span>
-                  <span>${serviceCharge.toFixed(2)}</span>
+                  <span>{tr('serviceCharge')} (10%):</span>
+                  <span>{formatMoney(serviceCharge)}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between">
-                    <span>Discount:</span>
-                    <span>-${discount.toFixed(2)}</span>
+                    <span>{tr('discount')}:</span>
+                    <span>-{formatMoney(discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-extrabold text-sm pt-1 border-t border-gray-400 text-black">
-                  <span>GRAND TOTAL:</span>
-                  <span>${grandTotal.toFixed(2)}</span>
+                  <span>{tr('grandTotal')}:</span>
+                  <span>{formatMoney(grandTotal)}</span>
                 </div>
               </div>
 
               {/* Footer */}
               <div className="pt-4 text-center border-t border-dashed border-gray-400 space-y-1">
-                <p className="text-[10px] text-gray-600 pt-1">Thank you for dining with us!</p>
-                <p className="text-[10px] text-gray-600">Payment status: {order?.paymentStatus || orderData.paymentStatus || 'UNPAID'}</p>
+                <p className="text-[10px] text-gray-600 pt-1">{tr('thankYou')}</p>
+                <p className="text-[10px] text-gray-600">{tr('paymentStatus', { status: translateStatus(lang, order?.paymentStatus || orderData.paymentStatus || 'UNPAID') })}</p>
               </div>
             </div>
 
@@ -371,7 +373,7 @@ export default function OrderStatusScreen({
               className="w-full mt-4 py-3 bg-[#121212] text-[#D4AF37] font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Thermal Receipt</span>
+              <span>{tr('printThermal')}</span>
             </button>
           </div>
         </div>

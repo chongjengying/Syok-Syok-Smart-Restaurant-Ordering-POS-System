@@ -2,6 +2,7 @@ import { CategoryRepository } from '../repositories/categoryRepository.ts';
 
 type CategoryRow = {
   id: string;
+  category_code: string;
   name: string;
   description: string | null;
   status?: boolean;
@@ -17,8 +18,9 @@ export class CategoryService {
     if (result.error) return { data: null, error: result.error };
 
     return {
-      data: (result.data as CategoryRow[]).map(({ id, name, description }) => ({
+      data: (result.data as CategoryRow[]).map(({ id, category_code, name, description }) => ({
         id,
+        code: category_code,
         name,
         description: description || '',
       })),

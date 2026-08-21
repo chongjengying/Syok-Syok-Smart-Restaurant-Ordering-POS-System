@@ -2,6 +2,7 @@ import { ProductRepository, type ProductFilters } from '../repositories/productR
 
 type ProductRow = {
   id: string;
+  product_code: string;
   category_id: string;
   product_name: string;
   description: string | null;
@@ -100,6 +101,7 @@ export class ProductService {
     return {
       data: products.map((product) => ({
         id: product.id,
+        code: product.product_code,
         categoryId: product.category_id,
         categoryName: categoryName(product),
         name: product.product_name,

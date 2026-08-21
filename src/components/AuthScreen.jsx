@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { signUp, signIn } from '../features/auth/authService';
 import { soundFx } from '../utils/audio';
+import { translate } from '../utils/i18n';
 
-export default function AuthScreen() {
+export default function AuthScreen({ lang = 'en', setLang }) {
+  const tr = (key) => translate(lang, key);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,19 +20,19 @@ export default function AuthScreen() {
     setError('');
 
     if (!email.trim() || !password.trim()) {
-      setError('Please enter both email and password.');
+      setError(tr('loginRequired'));
       soundFx.playRemove();
       return;
     }
 
     if (isSignUp && !fullName.trim()) {
-      setError('Please enter your name.');
+      setError(tr('nameRequired'));
       soundFx.playRemove();
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+      setError(tr('passwordLength'));
       soundFx.playRemove();
       return;
     }
@@ -52,7 +54,7 @@ export default function AuthScreen() {
         } else {
           soundFx.playSuccess();
           if (!data?.session) {
-            setError('Account created! Please check your email to confirm registration.');
+            setError(tr('accountCreated'));
           }
         }
       } else {
@@ -67,7 +69,7 @@ export default function AuthScreen() {
       }
     } catch (err) {
       console.error('Authentication error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError(tr('unexpectedRetry'));
       soundFx.playRemove();
     } finally {
       setIsLoading(false);
@@ -134,6 +136,14 @@ export default function AuthScreen() {
             }}
           />
 
+          <div className="absolute right-5 top-4 flex rounded-lg border border-white/10 bg-black/20 p-0.5">
+            {['en', 'zh', 'ms'].map((code) => (
+              <button key={code} type="button" onClick={() => setLang?.(code)} className={`rounded-md px-2 py-1 text-[9px] font-black uppercase ${lang === code ? 'bg-[#D4AF37] text-black' : 'text-gray-400'}`}>
+                {code}
+              </button>
+            ))}
+          </div>
+
           {/* Header: Logo & Branding */}
           <div className="flex flex-col items-center mb-6">
             {/* Animated Logo Ring */}
@@ -159,10 +169,10 @@ export default function AuthScreen() {
             </div>
 
             <h1 className="text-[20px] font-bold text-white tracking-tight">
-              {isSignUp ? 'Create Terminal Account' : 'Welcome Back'}
+              {isSignUp ? tr('signupTitle') : tr('loginTitle')}
             </h1>
             <p className="text-gray-500 text-xs mt-1.5 font-medium">
-              {isSignUp ? 'Register a new terminal operator account' : 'Sign in to access your terminal'}
+              {isSignUp ? tr('signupSubtitle') : tr('loginSubtitle')}
             </p>
           </div>
 
@@ -179,7 +189,7 @@ export default function AuthScreen() {
                 !isSignUp ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'
               }`}
             >
-              SIGN IN
+              {tr('signIn')}
               {!isSignUp && (
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#D4AF37]" />
               )}
@@ -195,7 +205,7 @@ export default function AuthScreen() {
                 isSignUp ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'
               }`}
             >
-              REGISTER
+              {tr('registerTab')}
               {isSignUp && (
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#D4AF37]" />
               )}
@@ -227,7 +237,7 @@ export default function AuthScreen() {
                     onChange={(e) => { setFullName(e.target.value); setError(''); }}
                     onFocus={() => setFocusedField('fullName')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="Full Name"
+                    placeholder={tr('fullName')}
                     autoComplete="name"
                     required={isSignUp}
                     className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
@@ -258,7 +268,7 @@ export default function AuthScreen() {
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  placeholder="Email Address"
+                  placeholder={tr('email')}
                   autoComplete="username"
                   required
                   className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
@@ -288,7 +298,7 @@ export default function AuthScreen() {
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
-                  placeholder="Password"
+                  placeholder={tr('password')}
                   autoComplete={isSignUp ? "new-password" : "current-password"}
                   required
                   className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
@@ -311,11 +321,11 @@ export default function AuthScreen() {
             {error && (
               <div
                 className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-[13px] leading-relaxed font-medium ${
-                  error.includes('Account created')
+                  error === tr('accountCreated')
                     ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400'
                     : 'border-red-500/20 bg-red-500/[0.06] text-red-400'
                 }`}
-                style={{ animation: error.includes('Account created') ? 'none' : 'shakeError 0.4s ease-in-out' }}
+                style={{ animation: error === tr('accountCreated') ? 'none' : 'shakeError 0.4s ease-in-out' }}
               >
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>{error}</span>
@@ -335,12 +345,12 @@ export default function AuthScreen() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
+                  <span>{isSignUp ? tr('creatingAccount') : tr('signingIn')}</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-5 h-5" />
-                  <span>{isSignUp ? 'REGISTER ACCOUNT' : 'SIGN IN'}</span>
+                  <span>{isSignUp ? tr('register') : tr('signIn')}</span>
                 </>
               )}
             </button>
@@ -349,13 +359,13 @@ export default function AuthScreen() {
           {/* Footer Secured Badge */}
           <div className="flex items-center justify-center gap-2 mt-6 text-gray-600 text-[10px] font-medium">
             <Lock className="w-3 h-3" />
-            <span>Secured with Supabase Authentication</span>
+            <span>{tr('securedAuth')}</span>
           </div>
         </div>
 
         {/* Bottom Version Tag */}
         <p className="text-center mt-5 text-gray-700 text-[11px] font-medium tracking-wide">
-          Fine Dining POS Terminal v2.4
+          {tr('fineDiningTerminal')}
         </p>
       </div>
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getTables, subscribeToTables } from '../services/table.service';
 import type { RestaurantTable } from '../types/table';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 interface TableHookOptions {
   includeInactive?: boolean;
@@ -11,9 +12,9 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const refresh = useCallback(async ({ signal }: { signal?: AbortSignal } = {}) => {
+  const refresh = useCallback(async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
     if (!enabled) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     const result = await getTables({ signal, includeInactive });
     if (signal?.aborted) return;
     if (result.error || !result.data) {
@@ -22,7 +23,7 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
       setTables(result.data);
       setError('');
     }
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   }, [enabled, includeInactive]);
 
   useEffect(() => {
@@ -35,16 +36,17 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
 
     let active = true;
     const controller = new AbortController();
-    const load = () => active && refresh({ signal: controller.signal });
+    const trackRealtime = createRealtimeRecoveryTracker();
+    const load = (silent = false) => active && refresh({ signal: controller.signal, silent });
     void load();
     const unsubscribe = subscribeToTables(
-      () => { void load(); },
+      () => { void load(true); },
       (status) => {
-        if (active && ['CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+        const realtime = trackRealtime(status);
+        if (active && realtime.failed) {
           setError('Live table updates are temporarily unavailable.');
-        } else if (active && status === 'SUBSCRIBED') {
-          void load();
         }
+        if (active && realtime.shouldRefetch) void load(true);
       },
     );
 
@@ -59,4 +61,3 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
 }
 
 export const useRestaurantTables = useTables;
-

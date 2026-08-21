@@ -23,3 +23,15 @@ export function submitPayment(
     body: { orderId, paymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway },
   }) as Promise<ApiResult<unknown>>;
 }
+
+export function submitBillPayment(billId: string, payments: Array<{ method: string; amount: number; receivedAmount?: number }>, idempotencyKey: string) {
+  return apiRequest('payments', { method: 'POST', body: { billId, payments, idempotencyKey } }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function submitRefund(orderId: string, reason: string, idempotencyKey: string) {
+  return apiRequest('payments', {
+    path: 'refund',
+    method: 'POST',
+    body: { orderId, reason, idempotencyKey },
+  }) as Promise<ApiResult<Record<string, unknown>>>;
+}

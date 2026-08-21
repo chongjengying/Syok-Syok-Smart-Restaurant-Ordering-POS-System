@@ -1,1 +1,3 @@
--- Required by supabase/config.toml. Add development-only seed data here.
+-- Intentionally left blank.
+-- Automatic Supabase seeding is disabled in supabase/config.toml to keep
+-- local resets free of mock/demo data unless you add it explicitly.

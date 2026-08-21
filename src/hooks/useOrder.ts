@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getOrder, subscribeToOrder } from '../services/order.service';
 import type { Order } from '../types/order';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 export function useOrder(orderId: string | null | undefined, enabled = true) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -30,7 +31,16 @@ export function useOrder(orderId: string | null | undefined, enabled = true) {
     };
 
     void load();
-    const unsubscribe = subscribeToOrder(orderId, () => { void load({ silent: true }); });
+    const trackRealtime = createRealtimeRecoveryTracker();
+    const unsubscribe = subscribeToOrder(
+      orderId,
+      () => { void load({ silent: true }); },
+      (status) => {
+        const realtime = trackRealtime(status);
+        if (active && realtime.failed) setError('Live order updates are temporarily unavailable.');
+        if (active && realtime.shouldRefetch) void load({ silent: true });
+      },
+    );
     return () => {
       active = false;
       unsubscribe();

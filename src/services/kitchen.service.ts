@@ -78,6 +78,7 @@ export function mapKitchenTickets(order: OrderRecord): KitchenTicket[] {
       orderNumber: order.order_number,
       orderStatus: order.status as KitchenQueueStatus,
       batchNo: batch.batch_no,
+      batchNumber: batch.batch_number || '',
       status: batch.status as KitchenTicket['status'],
       isAddOn: batch.batch_no > 1,
       paymentStatus: order.payment_status,

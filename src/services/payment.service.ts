@@ -3,6 +3,8 @@ import {
   fetchDailySalesReport,
   fetchPaymentCapabilities,
   submitPayment,
+  submitBillPayment,
+  submitRefund,
 } from '../repositories/payment.repository';
 import type { RequestOptions } from '../types/api';
 import type { DailySalesFilters, PaymentMethod } from '../types/payment';
@@ -40,4 +42,16 @@ export function processPayment(
     return Promise.resolve({ data: null, error: new Error('The received amount is insufficient.') });
   }
   return submitPayment(orderId, method as PaymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway);
+}
+
+export function processBillPayment(billId: string, payments: Array<{ method: string; amount: number; receivedAmount?: number }>, idempotencyKey: string) {
+  if (!billId || !payments.length || !idempotencyKey) return Promise.resolve({ data: null, error: new Error('Bill payment details are incomplete.') });
+  return submitBillPayment(billId, payments, idempotencyKey);
+}
+
+export function refundOrder(orderId: string, reason: string, idempotencyKey: string) {
+  if (!orderId || reason.trim().length < 3 || !idempotencyKey) {
+    return Promise.resolve({ data: null, error: new Error('Refund details are incomplete.') });
+  }
+  return submitRefund(orderId, reason.trim(), idempotencyKey);
 }

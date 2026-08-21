@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Check, MessageSquare } from 'lucide-react';
-import { translations } from '../utils/i18n';
+import { translate, translations } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { CART_NOTE_MAX_LENGTH, CART_QUANTITY_MAX, normalizeCartNote } from '../services/cart.service';
+import { formatMoney } from '../services/money.service';
 
 export default function CustomizationModal({
   dish,
@@ -14,6 +15,7 @@ export default function CustomizationModal({
   lang
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
 
   const [selections, setSelections] = useState(() => {
     const initial = {};
@@ -103,7 +105,7 @@ export default function CustomizationModal({
         <div className="h-16 px-6 bg-[#121212] text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-xs bg-[#D4AF37] text-black font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
-              Customization
+              {tr('customization')}
             </span>
             <h2 className="font-extrabold text-lg text-white truncate max-w-md">
               {getDishName(dish)}
@@ -142,7 +144,7 @@ export default function CustomizationModal({
                 {getDishName(dish)}
               </h3>
               <p className="text-sm font-bold text-[#B8952B] mt-1">
-                Base Price: ${dish.price.toFixed(2)}
+                {tr('basePrice')}: {formatMoney(dish.price)}
               </p>
               <p className="text-xs text-gray-500 mt-3 leading-relaxed">
                 {dish.description}
@@ -150,8 +152,8 @@ export default function CustomizationModal({
             </div>
 
             <div className="bg-white p-3 rounded-xl border border-gray-200 text-xs text-gray-600">
-              <span className="font-bold text-gray-800 block mb-0.5">Chef's Note</span>
-              All meals are prepared fresh to order using finest organic ingredients.
+              <span className="font-bold text-gray-800 block mb-0.5">{tr('chefNote')}</span>
+              {tr('chefNoteText')}
             </div>
           </div>
 
@@ -159,12 +161,12 @@ export default function CustomizationModal({
           <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-white">
             {diningMode === 'dine-in' && (
               <div>
-                <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-3">Item service</label>
+                <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-3">{tr('itemService')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   {['DINE_IN', 'TAKEAWAY'].map((mode) => (
                     <button key={mode} type="button" onClick={() => setServiceMode(mode)}
                       className={`h-12 rounded-xl border-2 text-sm font-bold ${serviceMode === mode ? 'bg-[#121212] text-white border-[#D4AF37]' : 'bg-gray-100 border-transparent'}`}>
-                      {mode === 'TAKEAWAY' ? '🥡 Pack as Takeaway' : 'Serve Dine-In'}
+                      {mode === 'TAKEAWAY' ? tr('packTakeaway') : tr('serveDineIn')}
                     </button>
                   ))}
                 </div>
@@ -173,8 +175,8 @@ export default function CustomizationModal({
             {(dish.optionGroups || []).map((group) => (
               <div key={group.id}>
                 <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-3">
-                  {group.name} {group.isRequired ? '• Required' : ''}
-                  {group.selectionType === 'MULTIPLE' ? ` • Choose ${group.minSelection}-${group.maxSelection}` : ''}
+                  {group.name} {group.isRequired ? `• ${tr('required')}` : ''}
+                  {group.selectionType === 'MULTIPLE' ? ` • ${tr('chooseRange', { min: group.minSelection, max: group.maxSelection })}` : ''}
                 </label>
                 <div className={group.selectionType === 'SINGLE' ? 'grid grid-cols-2 gap-3' : 'space-y-2'}>
                   {group.options.map((option) => {
@@ -199,7 +201,7 @@ export default function CustomizationModal({
                           <span>{option.name}</span>
                         </div>
                         <span className={isSelected ? 'text-[#D4AF37] font-bold' : 'text-gray-600'}>
-                          {option.priceAdjustment > 0 ? `+$${option.priceAdjustment.toFixed(2)}` : 'Included'}
+                          {option.priceAdjustment > 0 ? `+${formatMoney(option.priceAdjustment)}` : tr('included')}
                         </span>
                       </button>
                     );
@@ -207,7 +209,7 @@ export default function CustomizationModal({
                 </div>
                 {(selections[group.id] || []).length < Math.max(group.minSelection || 0, group.isRequired ? 1 : 0) && (
                   <p className="mt-2 text-xs font-semibold text-red-600">
-                    Select at least {Math.max(group.minSelection || 0, group.isRequired ? 1 : 0)} option before adding this item.
+                    {tr('selectMinimum', { count: Math.max(group.minSelection || 0, group.isRequired ? 1 : 0) })}
                   </p>
                 )}
               </div>
@@ -287,7 +289,7 @@ export default function CustomizationModal({
           >
             <span>{existingCartItem ? t.editItemBtn : t.addToCartBtn}</span>
             <span className="bg-black/20 px-3 py-1 rounded-lg text-white font-extrabold text-xl">
-              ${totalPrice.toFixed(2)}
+              {formatMoney(totalPrice)}
             </span>
           </button>
         </div>

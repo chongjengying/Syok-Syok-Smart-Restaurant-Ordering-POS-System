@@ -17,6 +17,7 @@ export interface ProductOptionGroup {
 
 export interface ProductRecord {
   id: string;
+  code?: string;
   name: string;
   price: number | string;
   description?: string | null;
@@ -35,6 +36,7 @@ export interface ProductRecord {
 }
 
 export interface Product extends Omit<ProductRecord, 'price' | 'description' | 'optionGroups'> {
+  code: string;
   price: number;
   description: string;
   optionGroups: ProductOptionGroup[];

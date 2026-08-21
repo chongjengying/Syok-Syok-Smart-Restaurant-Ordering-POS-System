@@ -1,7 +1,8 @@
 import React from 'react';
 import { ArrowLeft, UtensilsCrossed, ShoppingBag, CheckCircle2, User, ChevronRight, Clock3, ReceiptText } from 'lucide-react';
-import { translations } from '../utils/i18n';
+import { translate, translations, translateStatus } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
+import { formatMoney } from '../services/money.service';
 
 export default function TableSelectionScreen({
   diningMode,
@@ -23,6 +24,7 @@ export default function TableSelectionScreen({
   lang
 }) {
   const t = translations[lang] || translations.en;
+  const tr = (key, variables) => translate(lang, key, variables);
   const selectedTableRecord = tables.find((table) => table.id === selectedTable) || null;
   const selectedProgressOrders = selectedTableRecord?.orders || (selectedTableRecord?.activeOrder
     ? [selectedTableRecord.activeOrder]
@@ -50,16 +52,16 @@ export default function TableSelectionScreen({
           className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37] transition-all cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Dashboard</span>
+          <span>{tr('dashboard')}</span>
         </button>
 
         <h1 className="font-extrabold text-lg tracking-wider text-white uppercase">
-          Select Order Type & Table
+          {tr('selectOrderTable')}
         </h1>
 
         <div className="text-right text-xs">
           <span className="text-gray-400 block">{t.total}</span>
-          <span className="font-bold text-[#D4AF37] text-base">${grandTotal.toFixed(2)}</span>
+          <span className="font-bold text-[#D4AF37] text-base">{formatMoney(grandTotal)}</span>
         </div>
       </div>
 
@@ -89,7 +91,7 @@ export default function TableSelectionScreen({
                 <div className="text-left">
                   <h3 className="font-extrabold text-xl">{t.dineIn}</h3>
                   <p className={`text-xs mt-1 ${diningMode === 'dine-in' ? 'text-gray-300' : 'text-gray-500'}`}>
-                    Enjoy food prepared & served directly at your designated table
+                    {tr('diningInHelp')}
                   </p>
                 </div>
               </div>
@@ -117,7 +119,7 @@ export default function TableSelectionScreen({
                 <div className="text-left">
                   <h3 className="font-extrabold text-xl">{t.takeaway}</h3>
                   <p className={`text-xs mt-1 ${diningMode === 'takeaway' ? 'text-gray-300' : 'text-gray-500'}`}>
-                    Packed carefully in eco-friendly fine dining thermal packaging
+                    {tr('takeawayHelp')}
                   </p>
                 </div>
               </div>
@@ -154,17 +156,17 @@ export default function TableSelectionScreen({
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 pt-2">
                 {tablesLoading && (
                   <div className="col-span-full py-8 text-center text-sm text-gray-500">
-                    Loading restaurant tables...
+                    {tr('loadingTablesExtended')}
                   </div>
                 )}
                 {!tablesLoading && tablesError && (
                   <div className="col-span-full rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                    Unable to load tables: {tablesError}
+                    {tr('unableToLoadTables', { error: tablesError })}
                   </div>
                 )}
                 {!tablesLoading && !tablesError && tables.length === 0 && (
                   <div className="col-span-full py-8 text-center text-sm text-gray-500">
-                    No active restaurant tables are configured.
+                    {tr('noRestaurantTables')}
                   </div>
                 )}
                 {tables.map((table) => {
@@ -214,7 +216,7 @@ export default function TableSelectionScreen({
                           <p className={`text-[10px] font-extrabold ${
                             isSelected ? 'text-white' : isPaidActiveOrder ? 'text-sky-900' : 'text-amber-900'
                           }`}>
-                            ${table.activeOrder.total.toFixed(2)} {isPaidActiveOrder ? `paid · ${table.activeOrder.status.toLowerCase()}` : 'unpaid'}
+                            {formatMoney(table.activeOrder.total)} {isPaidActiveOrder ? tr('paidStatusLine', { status: translateStatus(lang, table.activeOrder.status).toLowerCase() }) : tr('unpaid').toLowerCase()}
                           </p>
                         </div>
                       ) : (
@@ -227,7 +229,7 @@ export default function TableSelectionScreen({
                                 ? 'bg-sky-100 text-sky-800'
                                 : 'bg-gray-200 text-gray-600'
                         }`}>
-                          {isSelected ? t.selected : isAvailable ? t.vacant : table.status === 'OCCUPIED' ? 'PAID · NEW BILL AVAILABLE' : table.status}
+                          {isSelected ? t.selected : isAvailable ? t.vacant : table.status === 'OCCUPIED' ? tr('paidNewBill') : translateStatus(lang, table.status)}
                         </span>
                       )}
                     </button>
@@ -242,9 +244,9 @@ export default function TableSelectionScreen({
                   <ShoppingBag className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="font-extrabold text-[#121212]">Start a New Takeaway Order</p>
+                  <p className="font-extrabold text-[#121212]">{tr('startTakeaway')}</p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Use the button below to create a separate temporary pickup order.
+                    {tr('takeawayStartHelp')}
                   </p>
                 </div>
               </div>
@@ -256,24 +258,24 @@ export default function TableSelectionScreen({
                       <ReceiptText className="h-5 w-5" />
                     </div>
                     <div>
-                      <h2 className="text-sm font-black uppercase tracking-wider text-sky-950">Temporary Takeaway Tables</h2>
-                      <p className="text-[10px] text-sky-700">Open an existing takeaway order here. It disappears after payment.</p>
+                      <h2 className="text-sm font-black uppercase tracking-wider text-sky-950">{tr('temporaryTakeaway')}</h2>
+                      <p className="text-[10px] text-sky-700">{tr('temporaryTakeawayHelp')}</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-sky-100 px-3 py-1 text-[10px] font-black text-sky-800">
-                    {takeawayOrders.length} OPEN
+                    {tr('openCount', { count: takeawayOrders.length })}
                   </span>
                 </div>
 
                 {takeawayOrdersLoading ? (
-                  <p className="py-6 text-center text-xs text-sky-700">Loading takeaway orders…</p>
+                  <p className="py-6 text-center text-xs text-sky-700">{tr('loadingTakeaway')}</p>
                 ) : takeawayOrdersError ? (
                   <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{takeawayOrdersError}</p>
                 ) : takeawayOrders.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-sky-200 bg-white/70 px-4 py-6 text-center">
                     <ShoppingBag className="mx-auto mb-2 h-6 w-6 text-sky-300" />
-                    <p className="text-xs font-bold text-sky-900">No active unpaid takeaway orders</p>
-                    <p className="mt-1 text-[10px] text-sky-600">New takeaway orders will appear here after being sent.</p>
+                    <p className="text-xs font-bold text-sky-900">{tr('noTakeaway')}</p>
+                    <p className="mt-1 text-[10px] text-sky-600">{tr('noTakeawayHelp')}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -286,18 +288,18 @@ export default function TableSelectionScreen({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-sky-600">Takeaway Table</span>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-sky-600">{tr('takeawayTable')}</span>
                             <p className="mt-0.5 truncate text-sm font-black text-[#121212]">{order.orderNumber}</p>
                           </div>
                           <ReceiptText className="h-5 w-5 shrink-0 text-sky-600" />
                         </div>
                         <div className="mt-3 flex items-center justify-between text-[10px] text-gray-500">
-                          <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {order.status}</span>
-                          <span>{order.items.reduce((sum, item) => sum + item.quantity, 0)} items</span>
+                          <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {translateStatus(lang, order.status)}</span>
+                          <span>{tr('itemCount', { count: order.items.reduce((sum, item) => sum + item.quantity, 0) })}</span>
                         </div>
                         <div className="mt-2 flex items-center justify-between border-t border-sky-100 pt-2">
-                          <span className="text-[9px] font-black text-amber-700">UNPAID</span>
-                          <span className="text-sm font-black text-sky-900">${order.total.toFixed(2)}</span>
+                          <span className="text-[9px] font-black text-amber-700">{tr('unpaid')}</span>
+                          <span className="text-sm font-black text-sky-900">{formatMoney(order.total)}</span>
                         </div>
                       </button>
                     ))}
@@ -330,8 +332,8 @@ export default function TableSelectionScreen({
                   <Clock3 className="h-5 w-5" />
                 </span>
                 <span>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#D4AF37]">Order in Progress · {progressOrder.paymentStatus}</span>
-                  <span className="block text-sm font-bold">Check {progressOrder.orderNumber} food status</span>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#D4AF37]">{tr('orderInProgress')} · {translateStatus(lang, progressOrder.paymentStatus)}</span>
+                  <span className="block text-sm font-bold">{tr('checkFoodStatus', { number: progressOrder.orderNumber })}</span>
                 </span>
               </span>
               <ChevronRight className="h-5 w-5 text-[#D4AF37]" />
@@ -347,14 +349,14 @@ export default function TableSelectionScreen({
           >
             <span>
               {diningMode === 'takeaway'
-                ? 'Start Takeaway Order'
+                ? tr('startTakeawayOrder')
                 : selectedTableRecord?.activeOrder
                   ? selectedTableRecord.activeOrder.paymentStatus === 'PAID'
-                    ? 'Start New Table Bill'
-                    : 'Open Table Order'
+                    ? tr('startNewBill')
+                    : tr('openTableOrder')
                   : selectedTableRecord?.status === 'OCCUPIED'
-                    ? 'Start New Table Bill'
-                    : 'Start Table Order'}
+                    ? tr('startNewBill')
+                    : tr('startTableOrder')}
             </span>
             <ChevronRight className="w-6 h-6 stroke-[3]" />
           </button>

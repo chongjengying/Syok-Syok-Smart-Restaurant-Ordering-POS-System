@@ -3,6 +3,7 @@ import { ArrowLeft, ChefHat, Clock, Loader2, RefreshCw, Utensils } from 'lucide-
 import { getKitchenAction, updateKitchenBatch } from '../services/kitchen.service';
 import { useKitchenOrders } from '../hooks/useKitchenOrders';
 import { getUserErrorMessage } from '../shared/errorMessages';
+import { translate, translatePackaging, translateStatus } from '../utils/i18n';
 
 const allowedTargetsByRole = {
   ADMIN: new Set(['PREPARING', 'READY']),
@@ -19,7 +20,8 @@ function formatElapsed(startedAt, now) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export default function KitchenScreen({ role, onBack }) {
+export default function KitchenScreen({ role, onBack, lang = 'en' }) {
+  const tr = (key, variables) => translate(lang, key, variables);
   const { orders, isLoading, error, refresh } = useKitchenOrders(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState('');
@@ -53,13 +55,13 @@ export default function KitchenScreen({ role, onBack }) {
     <div className="w-full h-full bg-[#F5F6F8] text-[#121212] flex flex-col overflow-hidden">
       <header className="h-16 shrink-0 bg-[#121212] text-white px-6 flex items-center justify-between">
         <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
-          <ArrowLeft className="w-5 h-5" /> Dashboard
+          <ArrowLeft className="w-5 h-5" /> {tr('dashboard')}
         </button>
         <div className="flex items-center gap-2 font-black tracking-wider uppercase">
-          <ChefHat className="w-5 h-5 text-[#D4AF37]" /> Kitchen Queue
+          <ChefHat className="w-5 h-5 text-[#D4AF37]" /> {tr('kitchenQueue')}
         </div>
         <button onClick={() => refresh()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
-          <RefreshCw className="w-4 h-4" /> Refresh
+          <RefreshCw className="w-4 h-4" /> {tr('refresh')}
         </button>
       </header>
 
@@ -71,12 +73,12 @@ export default function KitchenScreen({ role, onBack }) {
         )}
         {isLoading ? (
           <div className="h-full flex items-center justify-center gap-3 text-gray-500">
-            <Loader2 className="w-6 h-6 animate-spin" /> Loading persisted kitchen orders...
+            <Loader2 className="w-6 h-6 animate-spin" /> {tr('loadingKitchen')}
           </div>
         ) : sortedOrders.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-400">
             <Utensils className="w-12 h-12 mb-3" />
-            <p className="font-bold text-gray-600">No active kitchen orders</p>
+            <p className="font-bold text-gray-600">{tr('noKitchenOrders')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -89,11 +91,12 @@ export default function KitchenScreen({ role, onBack }) {
                 }`}>
                   <div className="flex justify-between gap-3 border-b border-gray-100 pb-3">
                     <div>
-                      <p className="font-black text-lg">Order #{ticket.orderNumber}</p>
-                      <p className="text-xs font-bold uppercase text-gray-600">{ticket.diningMode === 'dine-in' ? `Table ${ticket.tableNumber}` : 'Takeaway'}</p>
+                      <p className="font-black text-lg">{tr('orderNumber', { number: ticket.orderNumber })}</p>
+                      {ticket.batchNumber && <p className="text-[10px] font-bold tracking-wide text-gray-400">{ticket.batchNumber}</p>}
+                      <p className="text-xs font-bold uppercase text-gray-600">{ticket.diningMode === 'dine-in' ? tr('tableNumber', { number: ticket.tableNumber }) : tr('takeaway')}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${ticket.isAddOn ? 'bg-[#D4AF37] text-black' : 'bg-gray-900 text-white'}`}>
-                          {ticket.isAddOn ? `ADD-ON • ROUND ${ticket.batchNo}` : `ROUND ${ticket.batchNo}`}
+                          {ticket.isAddOn ? tr('addOnRound', { number: ticket.batchNo }) : tr('round', { number: ticket.batchNo })}
                         </span>
                         <span className="text-xs text-gray-400">{new Date(ticket.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
@@ -105,7 +108,7 @@ export default function KitchenScreen({ role, onBack }) {
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-amber-100 text-amber-800'
                     }`}>
-                      {ticket.status === 'PENDING' ? 'KITCHEN PENDING' : ticket.status}
+                      {ticket.status === 'PENDING' ? tr('kitchenPending') : translateStatus(lang, ticket.status)}
                       {ticket.status === 'PREPARING' && ` • ${formatElapsed(ticket.startedAt, now)}`}
                     </span>
                   </div>
@@ -115,20 +118,20 @@ export default function KitchenScreen({ role, onBack }) {
                         <p className="font-bold flex items-center gap-2">
                           <span>{item.quantity}× {item.name}</span>
                           {item.serviceMode === 'TAKEAWAY' && (
-                            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-800">🥡 TAKEAWAY</span>
+                            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-800">{tr('takeawayBadge')}</span>
                           )}
                           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black text-gray-600">
-                            {item.itemStatus}
+                            {translateStatus(lang, item.itemStatus)}
                           </span>
                         </p>
                         {item.options.map((option) => <p key={option.id} className="ml-4 text-xs text-gray-500">• {option.groupName}: {option.name}</p>)}
-                        {item.specialRequest && <p className="ml-4 text-xs font-semibold text-amber-700">Request: {item.specialRequest}</p>}
+                        {item.specialRequest && <p className="ml-4 text-xs font-semibold text-amber-700">{tr('request', { request: item.specialRequest })}</p>}
                       </div>
                     ))}
                     {ticket.diningMode === 'takeaway' && ticket.takeawayPackaging.length > 0 && (
                       <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
-                        <p className="text-[9px] font-black uppercase text-sky-700">Packaging</p>
-                        <p className="mt-1 text-xs font-bold text-sky-950">{ticket.takeawayPackaging.map((entry) => entry.replaceAll('_', ' ')).join(' · ')}</p>
+                        <p className="text-[9px] font-black uppercase text-sky-700">{tr('packaging')}</p>
+                        <p className="mt-1 text-xs font-bold text-sky-950">{ticket.takeawayPackaging.map((entry) => translatePackaging(lang, entry)).join(' · ')}</p>
                       </div>
                     )}
                   </div>
@@ -136,10 +139,10 @@ export default function KitchenScreen({ role, onBack }) {
                     <span className="flex items-center gap-1 text-xs text-gray-500">
                       <Clock className="w-3.5 h-3.5" />
                       {ticket.status === 'PREPARING'
-                        ? `Preparing ${formatElapsed(ticket.startedAt, now)}`
+                        ? tr('preparingElapsed', { time: formatElapsed(ticket.startedAt, now) })
                         : ticket.status === 'READY'
-                          ? 'Ready for front-of-house'
-                          : 'Waiting to start'}
+                          ? tr('readyFront')
+                          : tr('waitingStart')}
                     </span>
                     {canAdvance && (
                       <button
@@ -153,7 +156,7 @@ export default function KitchenScreen({ role, onBack }) {
                               : 'bg-[#D4AF37] text-[#121212]'
                         }`}
                       >
-                        {updatingId === ticket.id ? 'UPDATING…' : action.label}
+                        {updatingId === ticket.id ? tr('updating') : tr(action.label === 'START' ? 'start' : 'ready')}
                       </button>
                     )}
                   </div>

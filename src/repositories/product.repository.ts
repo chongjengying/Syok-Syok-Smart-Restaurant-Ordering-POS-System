@@ -1,4 +1,5 @@
 import { apiRequest } from '../infrastructure/supabase/functionsClient';
+import { supabase } from '../infrastructure/supabase/client';
 import type { ApiResult, RequestOptions } from '../types/api';
 import type { ProductFilters, ProductPage, ProductRecord } from '../types/product';
 
@@ -33,4 +34,17 @@ export function fetchAvailableProducts(
   options: RequestOptions = {},
 ) {
   return fetchProducts({ ...filters, availableOnly: true }, options);
+}
+
+export function subscribeToCatalogChanges(
+  onChange: (payload: unknown) => void,
+  onStatus?: (status: string) => void,
+) {
+  const channel = supabase
+    .channel(`catalog-${crypto.randomUUID()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onChange)
+    .subscribe((status) => onStatus?.(status));
+
+  return () => { void supabase.removeChannel(channel); };
 }

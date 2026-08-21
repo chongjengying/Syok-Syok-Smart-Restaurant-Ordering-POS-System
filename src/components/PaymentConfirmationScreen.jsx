@@ -1,9 +1,11 @@
 import React from 'react';
 import { CheckCircle2, Printer, ReceiptText } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
 const money = (value) => `RM ${Number(value || 0).toFixed(2)}`;
 
-export default function PaymentConfirmationScreen({ confirmation, onDone }) {
+export default function PaymentConfirmationScreen({ confirmation, onDone, lang = 'en' }) {
+  const tr = (key, variables) => translate(lang, key, variables);
   const { order, paymentMethod, receivedAmount, changeAmount } = confirmation;
   const fulfillmentContinues = order.items.some((item) =>
     ['SUBMITTED', 'PREPARING', 'READY'].includes(item.itemStatus),
@@ -14,17 +16,17 @@ export default function PaymentConfirmationScreen({ confirmation, onDone }) {
       <div className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-white text-[#121212] shadow-2xl">
         <div className="bg-emerald-500 p-7 text-center">
           <CheckCircle2 className="mx-auto h-16 w-16" />
-          <h1 className="mt-3 text-2xl font-black uppercase">Payment Confirmed</h1>
+          <h1 className="mt-3 text-2xl font-black uppercase">{tr('paymentConfirmed')}</h1>
           <p className="mt-1 text-sm font-semibold">
             {fulfillmentContinues
-              ? 'Payment is persisted. Kitchen preparation and serving will continue.'
-              : 'The payment and completed order are persisted in Supabase.'}
+              ? tr('fulfillmentContinues')
+              : tr('paymentPersisted')}
           </p>
         </div>
 
         <div className="p-6">
           <div className="flex justify-between border-b border-dashed border-gray-300 pb-4 font-bold">
-            <span>{order.diningMode === 'dine-in' ? `Table ${order.table?.tableNumber || '-'}` : 'Takeaway'}</span>
+            <span>{order.diningMode === 'dine-in' ? tr('tableNumber', { number: order.table?.tableNumber || '-' }) : tr('takeaway')}</span>
             <span>{order.orderNumber}</span>
           </div>
           <div className="max-h-52 space-y-2 overflow-y-auto py-4">
@@ -36,26 +38,27 @@ export default function PaymentConfirmationScreen({ confirmation, onDone }) {
             ))}
           </div>
           <div className="space-y-2 border-t border-dashed border-gray-300 pt-4 text-sm">
-            <div className="flex justify-between"><span>Payment method</span><strong>{paymentMethod}</strong></div>
-            <div className="flex justify-between text-lg"><span>Total paid</span><strong>{money(order.total)}</strong></div>
+            {order.paymentNumber && <div className="flex justify-between"><span>{tr('paymentNumber')}</span><strong>{order.paymentNumber}</strong></div>}
+            <div className="flex justify-between"><span>{tr('paymentMethod')}</span><strong>{paymentMethod}</strong></div>
+            <div className="flex justify-between text-lg"><span>{tr('totalPaid')}</span><strong>{money(order.total)}</strong></div>
             {paymentMethod === 'CASH' && (
               <>
-                <div className="flex justify-between"><span>Received</span><strong>{money(receivedAmount)}</strong></div>
-                <div className="flex justify-between text-emerald-700"><span>Change</span><strong>{money(changeAmount)}</strong></div>
+                <div className="flex justify-between"><span>{tr('received')}</span><strong>{money(receivedAmount)}</strong></div>
+                <div className="flex justify-between text-emerald-700"><span>{tr('change')}</span><strong>{money(changeAmount)}</strong></div>
               </>
             )}
           </div>
           {fulfillmentContinues && (
             <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold text-sky-800">
-              The bill is completed, but its active kitchen rounds remain visible until served. The dine-in table stays occupied and can start a separate new bill; paid items cannot be edited or reused.
+              {tr('paidKitchenNotice')}
             </div>
           )}
           <div className="mt-6 grid grid-cols-2 gap-3">
             <button onClick={() => window.print()} className="flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold">
-              <Printer className="h-4 w-4" /> Print Receipt
+              <Printer className="h-4 w-4" /> {tr('printReceipt')}
             </button>
             <button onClick={onDone} className="flex items-center justify-center gap-2 rounded-xl bg-[#121212] px-4 py-3 text-sm font-bold text-[#D4AF37]">
-              <ReceiptText className="h-4 w-4" /> Done
+              <ReceiptText className="h-4 w-4" /> {tr('done')}
             </button>
           </div>
         </div>

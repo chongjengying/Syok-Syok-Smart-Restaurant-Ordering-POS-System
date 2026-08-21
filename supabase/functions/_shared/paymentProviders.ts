@@ -33,18 +33,6 @@ export class CashPaymentProvider implements PaymentProvider {
   }
 }
 
-export class PosTerminalPaymentProvider implements PaymentProvider {
-  constructor(private readonly method: PaymentRequest['method']) {}
-
-  async process(request: PaymentRequest): Promise<PaymentProviderResult> {
-    return {
-      confirmed: true,
-      provider: `POS_${this.method}_TERMINAL`,
-      transactionReference: `${this.method}-${request.idempotencyKey}`,
-    };
-  }
-}
-
 export class UnavailablePaymentProvider implements PaymentProvider {
   constructor(private readonly method: string) {}
 
@@ -61,13 +49,13 @@ export class UnavailablePaymentProvider implements PaymentProvider {
 export function getPaymentCapabilities(): PaymentCapability[] {
   return [
     { method: 'CASH', available: true, mode: 'manual' },
-    { method: 'CARD', available: true, mode: 'manual' },
-    { method: 'QR', available: true, mode: 'manual' },
-    { method: 'EWALLET', available: true, mode: 'manual' },
+    { method: 'CARD', available: false, mode: 'unavailable' },
+    { method: 'QR', available: false, mode: 'unavailable' },
+    { method: 'EWALLET', available: false, mode: 'unavailable' },
   ];
 }
 
 export function createPaymentProvider(method: PaymentRequest['method']): PaymentProvider {
   if (method === 'CASH') return new CashPaymentProvider();
-  return new PosTerminalPaymentProvider(method);
+  return new UnavailablePaymentProvider(method);
 }

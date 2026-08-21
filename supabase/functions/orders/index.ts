@@ -176,6 +176,11 @@ Deno.serve(async (request) => {
   const orderResourceAction = functionIndex >= 0 ? pathParts[functionIndex + 4] || null : null;
 
   if (request.method === 'GET') {
+    if (orderId && orderAction === 'bills') {
+      const { data, error } = await supabase.from('order_bills').select('*, order_bill_items(order_item_id)').eq('order_id', orderId).order('bill_number');
+      if (error) return jsonResponse(500, { error: 'Unable to load order bills.' });
+      return jsonResponse(200, { data });
+    }
     if (orderAction) return jsonResponse(404, { error: 'Order resource was not found.' });
     if (!orderId) {
       const scope = new URL(request.url).searchParams.get('scope');
@@ -186,7 +191,7 @@ Deno.serve(async (request) => {
         const { data, error } = await supabase
           .from('orders')
           .select('*, restaurant_tables(id, table_number, table_name, area), order_item_batches(*), order_items(*, order_item_options(*)), payments(*)')
-          .eq('payment_status', 'UNPAID')
+          .in('payment_status', ['UNPAID', 'PARTIALLY_PAID'])
           .in('status', ['DRAFT', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED'])
           .order('created_at', { ascending: false });
         if (error) return jsonResponse(500, { error: 'Unable to load unpaid orders.' });
@@ -272,6 +277,18 @@ Deno.serve(async (request) => {
           : 409;
       return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
     }
+    return jsonResponse(200, { data });
+  }
+
+  if (request.method === 'POST' && orderId && orderAction === 'bills') {
+    const candidate = body as Record<string, unknown>;
+    const { data, error } = await supabase.rpc('create_pos_bill_split', {
+      p_order_id: orderId,
+      p_mode: typeof candidate.mode === 'string' ? candidate.mode : '',
+      p_bill_count: Number.isInteger(candidate.billCount) ? candidate.billCount : null,
+      p_assignments: Array.isArray(candidate.assignments) ? candidate.assignments : null,
+    });
+    if (error) return jsonResponse(409, { error: error.message, code: error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'BILL_SPLIT_FAILED' });
     return jsonResponse(200, { data });
   }
 

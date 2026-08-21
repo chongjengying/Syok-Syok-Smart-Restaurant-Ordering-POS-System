@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { subscribeToKitchenQueue } from '../services/kitchen.service';
 import { getReadyToServeOrders } from '../services/serving.service';
 import type { KitchenOrder } from '../types/kitchen';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 export function useReadyToServeOrders(enabled = true) {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
@@ -23,7 +24,15 @@ export function useReadyToServeOrders(enabled = true) {
   useEffect(() => {
     if (!enabled) return undefined;
     void refresh();
-    return subscribeToKitchenQueue(() => { void refresh({ silent: true }); });
+    const trackRealtime = createRealtimeRecoveryTracker();
+    return subscribeToKitchenQueue(
+      () => { void refresh({ silent: true }); },
+      (status) => {
+        const realtime = trackRealtime(status);
+        if (realtime.failed) setError('Live ready-order updates are temporarily unavailable.');
+        if (realtime.shouldRefetch) void refresh({ silent: true });
+      },
+    );
   }, [enabled, refresh]);
 
   return { orders, isLoading, error, refresh };

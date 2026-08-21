@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { X, User, Phone, Shield, LogOut, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getProfile, updateProfile } from '../features/auth/authService';
 import { soundFx } from '../utils/audio';
+import { translate } from '../utils/i18n';
 
-export default function ProfileModal({ isOpen, onClose, onLogout }) {
+export default function ProfileModal({ isOpen, onClose, onLogout, lang = 'en' }) {
+  const tr = (key) => translate(lang, key);
   const [profile, setProfile] = useState(null);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -14,23 +16,14 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [focusedField, setFocusedField] = useState(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadProfileData();
-    } else {
-      setSuccessMsg('');
-      setErrorMsg('');
-    }
-  }, [isOpen]);
-
-  const loadProfileData = async () => {
+  const loadProfileData = useCallback(async () => {
     setIsFetching(true);
     setErrorMsg('');
     try {
       const { data, error } = await getProfile();
       if (error) {
         console.error('Error fetching profile:', error);
-        setErrorMsg('Failed to load profile details.');
+        setErrorMsg(translate(lang, 'profileLoadFailed'));
         soundFx.playRemove();
       } else if (data) {
         setProfile(data);
@@ -40,12 +33,21 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
       }
     } catch (err) {
       console.error('Unexpected error loading profile:', err);
-      setErrorMsg('An unexpected error occurred while loading profile.');
+      setErrorMsg(translate(lang, 'profileLoadUnexpected'));
       soundFx.playRemove();
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [lang]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadProfileData();
+    } else {
+      setSuccessMsg('');
+      setErrorMsg('');
+    }
+  }, [isOpen, loadProfileData]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -53,13 +55,13 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
     setSuccessMsg('');
 
     if (!name.trim()) {
-      setErrorMsg('Full Name is required.');
+      setErrorMsg(tr('fullNameRequired'));
       soundFx.playRemove();
       return;
     }
 
     if (!username.trim()) {
-      setErrorMsg('Username is required.');
+      setErrorMsg(tr('usernameRequired'));
       soundFx.playRemove();
       return;
     }
@@ -78,7 +80,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
         setErrorMsg(error.message);
         soundFx.playRemove();
       } else {
-        setSuccessMsg('Profile updated successfully!');
+        setSuccessMsg(tr('profileUpdated'));
         soundFx.playSuccess();
         if (data) {
           setProfile(prev => ({ ...prev, ...data }));
@@ -86,7 +88,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
       }
     } catch (err) {
       console.error('Unexpected error saving profile:', err);
-      setErrorMsg('An unexpected error occurred while updating profile.');
+      setErrorMsg(tr('profileSaveUnexpected'));
       soundFx.playRemove();
     } finally {
       setIsSaving(false);
@@ -214,7 +216,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
                     onChange={(e) => { setName(e.target.value); setSuccessMsg(''); setErrorMsg(''); }}
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="Full Name"
+                    placeholder={tr('fullName')}
                     required
                     className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
                   />
@@ -237,7 +239,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
                     onChange={(e) => { setUsername(e.target.value); setSuccessMsg(''); setErrorMsg(''); }}
                     onFocus={() => setFocusedField('username')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="username"
+                    placeholder={tr('username')}
                     required
                     className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
                   />
@@ -260,7 +262,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
                     onChange={(e) => { setPhone(e.target.value); setSuccessMsg(''); setErrorMsg(''); }}
                     onFocus={() => setFocusedField('phone')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="Phone Number"
+                    placeholder={tr('phoneNumber')}
                     className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
                   />
                 </div>
@@ -278,7 +280,7 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
                   className="flex items-center justify-center gap-2 border border-red-500/20 bg-red-500/[0.04] hover:bg-red-500/[0.1] text-red-400 font-bold text-[13px] tracking-wide rounded-2xl px-4 h-[50px] transition-colors cursor-pointer shrink-0"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>LOG OUT</span>
+                  <span>{tr('logout')}</span>
                 </button>
 
                 {/* Save Changes */}
@@ -294,10 +296,10 @@ export default function ProfileModal({ isOpen, onClose, onLogout }) {
                   {isSaving ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving...</span>
+                      <span>{tr('saving')}</span>
                     </>
                   ) : (
-                    <span>SAVE CHANGES</span>
+                    <span>{tr('saveChanges')}</span>
                   )}
                 </button>
               </div>

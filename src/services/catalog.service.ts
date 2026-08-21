@@ -4,6 +4,7 @@ import {
   fetchProductById,
   fetchProducts,
   fetchProductsByCategory,
+  subscribeToCatalogChanges,
 } from '../repositories/product.repository';
 import type { ApiResult, RequestOptions } from '../types/api';
 import type { Category, CategoryRecord } from '../types/category';
@@ -13,6 +14,7 @@ import { isOrderableProduct, mapProductRecord } from './product-mapper';
 function mapCategory(category: CategoryRecord): Category {
   return {
     id: category.id,
+    code: category.code || '',
     name: category.name,
     description: category.description || '',
     isActive: category.status !== false,
@@ -137,3 +139,4 @@ export async function getProductById(
 // Compatibility names used by the current UI.
 export const getMenuCategories = getCategories;
 export const getMenuProducts = getProducts;
+export const subscribeToCatalog = subscribeToCatalogChanges;

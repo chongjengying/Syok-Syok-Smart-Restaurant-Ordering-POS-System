@@ -8,6 +8,7 @@ import ReviewOrderScreen from '../components/ReviewOrderScreen';
 import TableSelectionScreen from '../components/TableSelectionScreen';
 import PaymentScreen from '../components/PaymentScreen';
 import PaymentConfirmationScreen from '../components/PaymentConfirmationScreen';
+import SplitBillScreen from '../components/SplitBillScreen';
 import OrderDetailScreen from '../components/OrderDetailScreen';
 import OrderStatusScreen from '../components/OrderStatusScreen';
 import AuthScreen from '../components/AuthScreen';
@@ -21,6 +22,7 @@ import { useUnpaidOrders } from '../hooks/useUnpaidOrders';
 import { clearProductCache } from '../services/product-cache.service';
 import { changeCartItemQuantity, removeCartItem as removeCartEntry } from '../services/cart.service';
 import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessages';
+import { getStoredLanguage, LANGUAGE_STORAGE_KEY, translate } from '../utils/i18n';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -28,8 +30,8 @@ const ReportsScreen = lazy(() => import('../components/ReportsScreen'));
 const TableManagementScreen = lazy(() => import('../components/TableManagementScreen'));
 const UnpaidOrdersScreen = lazy(() => import('../components/UnpaidOrdersScreen'));
 
-function OperationalScreenLoader() {
-  return <div className="w-full h-full flex items-center justify-center bg-[#121212] text-[#D4AF37] font-bold">Loading operational module…</div>;
+function OperationalScreenLoader({ lang }) {
+  return <div className="w-full h-full flex items-center justify-center bg-[#121212] text-[#D4AF37] font-bold">{translate(lang, 'loading')}</div>;
 }
 
 export default function App() {
@@ -47,9 +49,11 @@ export default function App() {
   const [orderDetailBackScreen, setOrderDetailBackScreen] = useState('unpaidOrders');
   const [paymentReturnScreen, setPaymentReturnScreen] = useState('orderDetail');
   const [paymentConfirmation, setPaymentConfirmation] = useState(null);
+  const [splitBillOrderId, setSplitBillOrderId] = useState(null);
   const [stayOnDashboard, setStayOnDashboard] = useState(false);
   const [deviceMode, setDeviceMode] = useState('11inch'); // '11inch' | '129inch' | 'fullscreen'
-  const [lang, setLang] = useState('en'); // 'en' | 'zh' | 'ms'
+  const [lang, setLang] = useState(() => getStoredLanguage()); // 'en' | 'zh' | 'ms'
+  const tr = (key, variables) => translate(lang, key, variables);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -146,6 +150,12 @@ export default function App() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
     };
   }, []);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(LANGUAGE_STORAGE_KEY, lang);
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+    document.documentElement.dataset.language = lang;
+  }, [lang]);
 
   const handleInstallPwa = () => {
     if (installPrompt) {
@@ -249,7 +259,7 @@ export default function App() {
     const result = await prepareTakeawayPayment(takeawayPackaging);
     setIsSendingOrder(false);
     if (result.error) {
-      setOrderSubmitError(getUserErrorMessage(result.error, 'Unable to prepare the takeaway order for payment.'));
+      setOrderSubmitError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return result;
     }
     beginCheckout();
@@ -263,7 +273,7 @@ export default function App() {
     if (activeOrder?.status === 'DRAFT' || activeOrder?.isLocalDraft) {
       const result = await discardDraft();
       if (result.error) {
-        setOrderSubmitError(getUserErrorMessage(result.error, 'Unable to release the current draft table.'));
+        setOrderSubmitError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
         return;
       }
       startNewOrderContext();
@@ -282,7 +292,7 @@ export default function App() {
     const result = await sendOrder();
     setIsSendingOrder(false);
     if (result.error) {
-      setOrderSubmitError(getUserErrorMessage(result.error, 'Unable to send the order.'));
+      setOrderSubmitError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return result;
     }
     const persistedTotal = Number(result.data?.total || 0);
@@ -295,7 +305,7 @@ export default function App() {
   const handleOpenOrderContext = async () => {
     setOrderContextError('');
     if (activeOrder && !['DRAFT', 'LOCAL_DRAFT'].includes(activeOrder.status) && activeOrder.tableId !== selectedTable) {
-      setOrderContextError('The current submitted order must remain on its existing table. Reopen that table to add items.');
+      setOrderContextError(tr('currentSubmittedOrderLocked'));
       return;
     }
     if (diningMode === 'takeaway') {
@@ -304,7 +314,7 @@ export default function App() {
       clearCart();
       const result = await createDraftContext('takeaway', null);
       if (result.error) {
-        setOrderContextError(getUserErrorMessage(result.error, 'Unable to create takeaway order.'));
+        setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
         return;
       }
       setCurrentScreen('menu');
@@ -312,7 +322,7 @@ export default function App() {
     }
     const table = tables.find(({ id }) => id === selectedTable);
     if (!table) {
-      setOrderContextError('Select a table before continuing.');
+      setOrderContextError(tr('selectTableBeforeContinuing'));
       return;
     }
     let reopenedExistingOrder = false;
@@ -321,13 +331,13 @@ export default function App() {
         startNewOrderContext();
         const result = await createDraftContext('dine-in', table.id, table.tableNumber);
         if (result.error) {
-          setOrderContextError(getUserErrorMessage(result.error, 'Unable to start a new bill for this table.'));
+          setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
           return;
         }
       } else {
         const result = await openExistingOrder(table.activeOrder.id, table.tableNumber);
         if (result.error) {
-          setOrderContextError(getUserErrorMessage(result.error, 'Unable to open this table order.'));
+          setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
           return;
         }
         reopenedExistingOrder = true;
@@ -336,18 +346,18 @@ export default function App() {
       startNewOrderContext();
       const result = await createDraftContext('dine-in', table.id, table.tableNumber);
       if (result.error) {
-        setOrderContextError(getUserErrorMessage(result.error, 'Unable to start a new bill for this occupied table.'));
+        setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
         return;
       }
     } else if (table.status === 'AVAILABLE') {
       startNewOrderContext();
       const result = await createDraftContext('dine-in', table.id, table.tableNumber);
       if (result.error) {
-        setOrderContextError(getUserErrorMessage(result.error, 'Unable to reserve this table for the order.'));
+        setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
         return;
       }
     } else {
-      setOrderContextError('This table is not available for ordering.');
+      setOrderContextError(tr('tableUnavailableForOrdering'));
       return;
     }
     clearCart();
@@ -357,13 +367,18 @@ export default function App() {
 
   const handleProceedToPayment = () => {
     if (!canAccessPayments) {
-      setOrderSubmitError('A cashier, manager or administrator must complete payment.');
+      setOrderSubmitError(tr('paymentRoleRequired'));
       return;
     }
     beginCheckout();
     setPaymentConfirmation(null);
     setPaymentReturnScreen(currentScreen === 'orderDetail' ? 'orderDetail' : 'orderStatus');
     setCurrentScreen('payment');
+  };
+
+  const handleOpenSplitBill = () => {
+    setSplitBillOrderId(activeOrder?.id || pendingOrder?.id || null);
+    setCurrentScreen('splitBill');
   };
 
   const handleBackFromPayment = async () => {
@@ -398,7 +413,7 @@ export default function App() {
   const handleResetOrder = async () => {
     const result = await discardDraft();
     if (result.error) {
-      setOrderSubmitError(getUserErrorMessage(result.error, 'Unable to close the draft order.'));
+      setOrderSubmitError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return;
     }
     clearCart();
@@ -417,7 +432,7 @@ export default function App() {
     setOrderContextError('');
     const result = await openExistingOrder(order.id, order.table?.tableNumber || '');
     if (result.error) {
-      setOrderContextError(getUserErrorMessage(result.error, 'Unable to open this unpaid order.'));
+      setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return result;
     }
     setDiningMode(order.diningMode);
@@ -431,12 +446,12 @@ export default function App() {
   const handleCheckTableOrderStatus = async (table, progressOrder = table?.activeOrder) => {
     setOrderContextError('');
     if (!table?.id || !progressOrder?.id || !['UNPAID', 'PARTIALLY_PAID', 'PAID'].includes(progressOrder.paymentStatus)) {
-      setOrderContextError('This table does not have an active order in progress to check.');
+      setOrderContextError(tr('noActiveProgressOrder'));
       return;
     }
     const result = await openExistingOrder(progressOrder.id, table.tableNumber);
     if (result.error) {
-      setOrderContextError(getUserErrorMessage(result.error, 'Unable to load this table order status.'));
+      setOrderContextError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return;
     }
     setDiningMode('dine-in');
@@ -476,7 +491,7 @@ export default function App() {
             className="w-12 h-12 rounded-full border-[3px] border-[#D4AF37]/20 border-t-[#D4AF37]"
             style={{ animation: 'spin 0.8s linear infinite' }}
           />
-          <span className="text-gray-500 text-sm font-medium tracking-wide">Loading Terminal...</span>
+          <span className="text-gray-500 text-sm font-medium tracking-wide">{tr('loadingTerminal')}</span>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
@@ -491,8 +506,9 @@ export default function App() {
         setDeviceMode={setDeviceMode}
         isOnline={isOnline}
         lang={lang}
+        setLang={setLang}
       >
-        <AuthScreen />
+        <AuthScreen lang={lang} setLang={setLang} />
       </IpadShell>
     );
   }
@@ -504,16 +520,17 @@ export default function App() {
         setDeviceMode={setDeviceMode}
         isOnline={isOnline}
         lang={lang}
+        setLang={setLang}
       >
         <div className="w-full h-full bg-[#121212] text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
-          <h1 className="text-2xl font-black text-[#D4AF37]">Terminal access unavailable</h1>
+          <h1 className="text-2xl font-black text-[#D4AF37]">{tr('terminalUnavailable')}</h1>
           <p className="max-w-md text-sm text-gray-400">
             {profile?.status && profile.status !== 'ACTIVE'
               ? `This staff account is ${profile.status.toLowerCase()}. Ask an administrator to restore access.`
               : profileError || 'A valid staff profile could not be loaded.'}
           </p>
           <button onClick={handleLogout} className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-black text-[#121212]">
-            Sign out
+            {tr('signOut')}
           </button>
         </div>
       </IpadShell>
@@ -527,6 +544,7 @@ export default function App() {
       setDeviceMode={setDeviceMode}
       isOnline={isOnline}
       lang={lang}
+      setLang={setLang}
       onLogout={handleLogout}
       userEmail={session?.user?.email}
       onOpenProfile={() => setIsProfileOpen(true)}
@@ -605,6 +623,7 @@ export default function App() {
           submitError={orderSubmitError}
           onEdit={() => setCurrentScreen('cartReview')}
           onConfirm={handleReviewConfirmation}
+          lang={lang}
         />
       )}
 
@@ -637,43 +656,49 @@ export default function App() {
           orderId={pendingOrder?.id || activeOrder?.id}
           onBack={handleBackFromPayment}
           onPaymentSubmit={handlePayment}
+          lang={lang}
         />
+      )}
+
+      {currentScreen === 'splitBill' && canAccessPayments && splitBillOrderId && (
+        <SplitBillScreen orderId={splitBillOrderId} onBack={() => setCurrentScreen('orderDetail')} onDone={() => setCurrentScreen('unpaidOrders')} lang={lang} />
       )}
 
       {currentScreen === 'paymentConfirmation' && paymentConfirmation && (
         <PaymentConfirmationScreen
           confirmation={paymentConfirmation}
           onDone={handlePaymentConfirmationDone}
+          lang={lang}
         />
       )}
 
       {currentScreen === 'kitchen' && canAccessKitchen && (
-        <Suspense fallback={<OperationalScreenLoader />}>
-          <KitchenScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} />
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <KitchenScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} lang={lang} />
         </Suspense>
       )}
 
       {currentScreen === 'readyToServe' && canAccessReadyToServe && (
-        <Suspense fallback={<OperationalScreenLoader />}>
-          <ReadyToServeScreen onBack={() => setCurrentScreen('welcome')} />
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <ReadyToServeScreen onBack={() => setCurrentScreen('welcome')} lang={lang} />
         </Suspense>
       )}
 
       {currentScreen === 'reports' && canAccessReports && (
-        <Suspense fallback={<OperationalScreenLoader />}>
-          <ReportsScreen onBack={() => setCurrentScreen('welcome')} />
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <ReportsScreen onBack={() => setCurrentScreen('welcome')} lang={lang} />
         </Suspense>
       )}
 
       {currentScreen === 'tableManagement' && canAccessTables && (
-        <Suspense fallback={<OperationalScreenLoader />}>
-          <TableManagementScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} />
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <TableManagementScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} lang={lang} />
         </Suspense>
       )}
 
       {currentScreen === 'unpaidOrders' && canAccessUnpaidOrders && (
-        <Suspense fallback={<OperationalScreenLoader />}>
-          <UnpaidOrdersScreen onBack={() => setCurrentScreen('welcome')} onOpenOrder={handleOpenUnpaidOrder} />
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <UnpaidOrdersScreen onBack={() => setCurrentScreen('welcome')} onOpenOrder={handleOpenUnpaidOrder} lang={lang} />
         </Suspense>
       )}
 
@@ -684,6 +709,8 @@ export default function App() {
           onBack={() => setCurrentScreen(orderDetailBackScreen)}
           onAddItems={handleAddItems}
           onPayment={handleProceedToPayment}
+          onSplitBill={handleOpenSplitBill}
+          lang={lang}
         />
       )}
 
@@ -721,6 +748,7 @@ export default function App() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         onLogout={handleLogout}
+        lang={lang}
       />
     </IpadShell>
   );

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getAllProducts } from '../services/catalog.service';
+import { getAllProducts, subscribeToCatalog } from '../services/catalog.service';
 import {
   getProductCache,
+  invalidateProductCache,
   isProductCacheStale,
   refreshProductCache,
   subscribeToProductCache,
   type ProductCacheEntry,
 } from '../services/product-cache.service';
 import type { Product } from '../types/product';
+import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 interface ProductHookFilters {
   categoryId?: string | null;
@@ -56,6 +58,22 @@ export function useProducts({ categoryId = null, search = '' }: ProductHookFilte
     setCache(cached);
     if (!cached || isProductCacheStale(cached)) void executeRefresh();
 
+    const trackRealtime = createRealtimeRecoveryTracker();
+    const unsubscribeRealtime = subscribeToCatalog(
+      () => {
+        invalidateProductCache();
+        void executeRefresh(true);
+      },
+      (status) => {
+        const realtime = trackRealtime(status);
+        if (realtime.failed) setError('Live catalogue updates are temporarily unavailable.');
+        if (realtime.shouldRefetch) {
+          invalidateProductCache();
+          void executeRefresh(true);
+        }
+      },
+    );
+
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible' && isProductCacheStale()) void executeRefresh();
     };
@@ -66,6 +84,7 @@ export function useProducts({ categoryId = null, search = '' }: ProductHookFilte
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeRealtime();
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('online', refreshWhenOnline);
     };
