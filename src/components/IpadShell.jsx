@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, Battery, Maximize2, User } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
+import { env } from '../config/env';
 
 export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile, lang = 'en', setLang }) {
   const tr = (key) => translate(lang, key);
@@ -21,6 +22,13 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
       {/* Top Device Bar Mode Selector Controls */}
       <div className="mb-3 flex flex-wrap items-center gap-3 bg-[#1A1A1E] px-4 py-2 rounded-full border border-white/10 shadow-lg text-xs z-50">
         <span className="text-gray-400 font-medium">{tr('canvasMode')}</span>
+        <span className={`rounded-full border px-2.5 py-1 font-black uppercase tracking-wide ${
+          env.appEnv === 'staging'
+            ? 'border-amber-700/60 bg-amber-950 text-amber-300'
+            : 'border-sky-700/60 bg-sky-950 text-sky-300'
+        }`}>
+          {env.appEnv}
+        </span>
         <button
           onClick={() => setDeviceMode('11inch')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer font-medium ${

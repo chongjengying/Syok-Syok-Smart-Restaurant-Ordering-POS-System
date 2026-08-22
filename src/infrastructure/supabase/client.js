@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../../config/env';
 
-export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey);
+console.info(`[POS] Environment: ${env.appEnv}`);
+console.info(`[POS] Supabase: ${env.supabaseUrl}`);
+
+export const supabase = createClient(env.supabaseUrl, env.supabaseKey);

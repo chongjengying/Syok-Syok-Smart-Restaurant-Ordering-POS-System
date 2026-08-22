@@ -6,6 +6,10 @@ function requiredEnvironmentValue(name, value) {
 }
 
 const supabaseUrl = requiredEnvironmentValue('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL);
+const supabaseKey = requiredEnvironmentValue(
+  'VITE_SUPABASE_PUBLISHABLE_KEY',
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY,
+);
 
 try {
   new URL(supabaseUrl);
@@ -14,6 +18,7 @@ try {
 }
 
 export const env = Object.freeze({
+  appEnv: import.meta.env.VITE_APP_ENV?.trim() || import.meta.env.MODE,
   supabaseUrl,
-  supabaseAnonKey: requiredEnvironmentValue('VITE_SUPABASE_ANON_KEY', import.meta.env.VITE_SUPABASE_ANON_KEY),
+  supabaseKey,
 });
