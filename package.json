@@ -11,6 +11,10 @@
     "build:local": "vite build --mode development",
     "build:staging": "vite build --mode staging",
     "lint": "oxlint src",
+    "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
+    "test:security-contracts": "node scripts/test-security-contracts.mjs",
+    "test:split-money": "node scripts/test-split-money.mjs",
+    "test:split-payment-local": "node scripts/smoke-split-payment-local.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

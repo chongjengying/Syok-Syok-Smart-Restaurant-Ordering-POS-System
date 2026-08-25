@@ -68,7 +68,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     setOrderHistory((order.items || []).filter((item) => item.itemStatus !== 'DRAFT'));
     setActiveOrder(activeView);
     sessionStorage.setItem(activeOrderKey, order.id);
-    if ((order.paymentStatus || order.payment_status) === 'UNPAID') {
+    if (['UNPAID', 'PARTIALLY_PAID'].includes(order.paymentStatus || order.payment_status)) {
       const pendingView = pendingOrderView(order);
       setPendingOrder(pendingView);
       sessionStorage.setItem(pendingOrderKey, order.id);

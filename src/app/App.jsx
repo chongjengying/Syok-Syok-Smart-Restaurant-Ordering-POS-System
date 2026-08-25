@@ -410,6 +410,15 @@ export default function App() {
     setCurrentScreen('welcome');
   };
 
+  const handleSplitBillDone = () => {
+    clearCart();
+    resetCheckout();
+    setSplitBillOrderId(null);
+    setSelectedTable(null);
+    setStayOnDashboard(false);
+    setCurrentScreen('unpaidOrders');
+  };
+
   const handleResetOrder = async () => {
     const result = await discardDraft();
     if (result.error) {
@@ -661,7 +670,7 @@ export default function App() {
       )}
 
       {currentScreen === 'splitBill' && canAccessPayments && splitBillOrderId && (
-        <SplitBillScreen orderId={splitBillOrderId} onBack={() => setCurrentScreen('orderDetail')} onDone={() => setCurrentScreen('unpaidOrders')} lang={lang} />
+        <SplitBillScreen orderId={splitBillOrderId} onBack={() => setCurrentScreen('orderDetail')} onDone={handleSplitBillDone} lang={lang} />
       )}
 
       {currentScreen === 'paymentConfirmation' && paymentConfirmation && (

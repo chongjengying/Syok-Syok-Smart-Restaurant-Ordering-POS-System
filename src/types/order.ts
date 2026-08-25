@@ -60,7 +60,13 @@ export interface OrderRecord {
   payments?: Array<{
     id: string;
     payment_number?: string;
+    payment_method?: string;
+    amount?: number | string;
+    received_amount?: number | string | null;
+    change_amount?: number | string | null;
+    split_type?: string;
     status?: string;
+    paid_at?: string | null;
     created_at?: string;
   }>;
   restaurant_tables?: {
@@ -117,6 +123,17 @@ export interface Order {
   takeawayPackaging: string[];
   paymentId: string | null;
   paymentNumber: string | null;
+  payments: Array<{
+    id: string;
+    paymentNumber: string | null;
+    paymentMethod: string;
+    amount: number;
+    receivedAmount: number | null;
+    changeAmount: number | null;
+    splitType: string;
+    status: string;
+    paidAt: string | null;
+  }>;
   table: {
     id: string;
     tableNumber: string;

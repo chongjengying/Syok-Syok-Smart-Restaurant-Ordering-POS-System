@@ -13,7 +13,7 @@ export default function OrderDetailScreen({ orderId, canPay, onBack, onAddItems,
   const paymentReady = Boolean(
     order
     && ['CONFIRMED', 'PREPARING', 'READY', 'SERVED'].includes(order.status)
-    && order.paymentStatus === 'UNPAID'
+    && ['UNPAID', 'PARTIALLY_PAID'].includes(order.paymentStatus)
     && !hasUnsentItems,
   );
 
@@ -97,7 +97,7 @@ export default function OrderDetailScreen({ orderId, canPay, onBack, onAddItems,
               </section>
 
               <footer className="border-t border-gray-200 bg-gray-50 p-5">
-                {!paymentReady && order.paymentStatus === 'UNPAID' && (
+                {!paymentReady && ['UNPAID', 'PARTIALLY_PAID'].includes(order.paymentStatus) && (
                   <p className="mb-3 text-center text-xs font-semibold text-amber-700">
                     {hasUnsentItems
                       ? tr('unsentPayment')
@@ -111,7 +111,7 @@ export default function OrderDetailScreen({ orderId, canPay, onBack, onAddItems,
                     </button>
                   )}
                   {canPay && (
-                    <><button disabled={!paymentReady} onClick={onPayment} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-black text-black disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"><CreditCard className="h-5 w-5" /> {tr('viewBillPay')}</button><button disabled={!paymentReady} onClick={onSplitBill} className="rounded-xl border-2 border-[#D4AF37] px-6 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{tr('splitBill')}</button></>
+                    <>{order.paymentStatus === 'UNPAID' && <button disabled={!paymentReady} onClick={onPayment} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-black text-black disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"><CreditCard className="h-5 w-5" /> {tr('viewBillPay')}</button>}<button disabled={!paymentReady} onClick={onSplitBill} className="rounded-xl border-2 border-[#D4AF37] px-6 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{order.paymentStatus === 'PARTIALLY_PAID' ? tr('payRemaining') : tr('splitBill')}</button></>
                   )}
                 </div>
               </footer>

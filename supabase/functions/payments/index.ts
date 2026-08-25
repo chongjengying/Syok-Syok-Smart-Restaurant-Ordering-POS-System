@@ -38,9 +38,21 @@ Deno.serve(async (request) => {
   const paymentAction = functionIndex >= 0 ? pathParts[functionIndex + 1] || null : null;
 
   if (request.method === 'GET') {
+    if (paymentAction === 'summary') {
+      const orderId = new URL(request.url).searchParams.get('orderId')?.trim() || '';
+      if (!orderId) return jsonResponse(400, { error: 'orderId is required.', code: 'ORDER_ID_REQUIRED' });
+      const { data, error } = await supabase.rpc('get_pos_payment_summary', { p_order_id: orderId });
+      if (error) {
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_SUMMARY_FAILED';
+        const statusCode = code === 'ORDER_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409;
+        return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data });
+    }
+
     if (paymentAction === 'report') {
       const reportType = pathParts[functionIndex + 2] || null;
-      if (reportType !== 'daily') return jsonResponse(404, { error: 'Report was not found.' });
+      if (!['daily', 'products'].includes(reportType || '')) return jsonResponse(404, { error: 'Report was not found.' });
 
       if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
         return jsonResponse(403, { error: 'Administrator or manager access is required.' });
@@ -61,13 +73,26 @@ Deno.serve(async (request) => {
       if (dateFrom && dateTo && dateFrom > dateTo) {
         return jsonResponse(400, { error: 'dateFrom must not be after dateTo.' });
       }
-      const { data, error } = await supabase.rpc('get_daily_sales_report', {
+      if (reportType === 'products' && (!dateFrom || !dateTo)) {
+        return jsonResponse(400, {
+          error: 'dateFrom and dateTo are required for the product sales report.',
+          code: 'REPORT_DATE_RANGE_REQUIRED',
+        });
+      }
+      const { data, error } = await supabase.rpc(
+        reportType === 'products' ? 'get_product_sales_report' : 'get_daily_sales_report', {
         p_date_from: dateFrom,
         p_date_to: dateTo,
       });
       if (error) {
-        console.error('Unable to load daily sales report', error);
-        return jsonResponse(500, { error: 'Unable to load the daily sales report.' });
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'REPORT_LOAD_FAILED';
+        const statusCode = code === 'INSUFFICIENT_PERMISSION'
+          ? 403
+          : ['REPORT_DATE_RANGE_REQUIRED', 'INVALID_DATE_RANGE', 'REPORT_DATE_RANGE_TOO_LARGE'].includes(code)
+            ? 400
+            : 500;
+        console.error(`Unable to load ${reportType} sales report`, error);
+        return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
       }
       return jsonResponse(200, { data });
     }
@@ -115,6 +140,90 @@ Deno.serve(async (request) => {
     return jsonResponse(200, { data });
   }
 
+  const splitType = typeof body.splitType === 'string' ? body.splitType.trim().toUpperCase() : '';
+  if (splitType) {
+    const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+    const rawMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod.toUpperCase() : '';
+    const method = rawMethod === 'E_WALLET' ? 'EWALLET' : rawMethod;
+    const amount = typeof body.amount === 'string' || typeof body.amount === 'number' ? String(body.amount) : null;
+    const receivedAmount = typeof body.receivedAmount === 'string' || typeof body.receivedAmount === 'number'
+      ? String(body.receivedAmount)
+      : amount;
+    const itemAllocations = Array.isArray(body.itemAllocations) ? body.itemAllocations : [];
+    const billId = typeof body.billId === 'string' && body.billId.trim() ? body.billId.trim() : null;
+    const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    if (!orderId || !['FULL', 'EQUAL', 'AMOUNT', 'ITEM'].includes(splitType)) {
+      return jsonResponse(400, { error: 'Split payment details are invalid.', code: 'INVALID_SPLIT_PAYMENT' });
+    }
+    if (!methods.has(method)) return jsonResponse(400, { error: 'paymentMethod is invalid.', code: 'INVALID_PAYMENT_METHOD' });
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      return jsonResponse(400, { error: 'idempotencyKey is invalid.', code: 'IDEMPOTENCY_KEY_REQUIRED' });
+    }
+    if (splitType === 'AMOUNT' && (
+      !amount || !/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0
+    )) {
+      return jsonResponse(400, { error: 'amount is invalid.', code: 'INVALID_PAYMENT_AMOUNT' });
+    }
+    if (amount && !/^\d+(\.\d{1,2})?$/.test(amount)) {
+      return jsonResponse(400, { error: 'amount is invalid.', code: 'INVALID_PAYMENT_AMOUNT' });
+    }
+    if (receivedAmount && !/^\d+(\.\d{1,2})?$/.test(receivedAmount)) {
+      return jsonResponse(400, { error: 'receivedAmount is invalid.', code: 'INSUFFICIENT_CASH_RECEIVED' });
+    }
+    if (splitType === 'ITEM' && itemAllocations.length === 0) {
+      return jsonResponse(400, { error: 'Select at least one item.', code: 'ITEM_ALLOCATIONS_REQUIRED' });
+    }
+    if (itemAllocations.some((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return true;
+      const item = entry as Record<string, unknown>;
+      return typeof item.orderItemId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.orderItemId)
+        || !Number.isInteger(item.quantity)
+        || Number(item.quantity) <= 0;
+    })) return jsonResponse(400, { error: 'Item allocations are invalid.', code: 'INVALID_ITEM_QUANTITY' });
+    if (splitType === 'EQUAL' && !billId) {
+      return jsonResponse(400, { error: 'Select an equal split.', code: 'EQUAL_SPLIT_BILL_REQUIRED' });
+    }
+
+    const provider = createPaymentProvider(method as PaymentRequest['method']);
+    const providerResult = await provider.process({
+      orderId,
+      amount: amount ? Number(amount) : 0,
+      method: method as PaymentRequest['method'],
+      idempotencyKey,
+    });
+    if (!providerResult.confirmed) {
+      return jsonResponse(503, {
+        error: providerResult.error || 'Payment provider did not confirm the transaction.',
+        code: 'PAYMENT_PROVIDER_UNAVAILABLE',
+        retryable: providerResult.retryable || false,
+      });
+    }
+
+    const { data, error } = await supabase.rpc('process_pos_split_payment', {
+      p_order_id: orderId,
+      p_split_type: splitType,
+      p_payment_method: method,
+      p_amount: amount,
+      p_received_amount: receivedAmount,
+      p_item_allocations: itemAllocations,
+      p_bill_id: billId,
+      p_idempotency_key: idempotencyKey,
+      p_provider: providerResult.provider,
+      p_transaction_reference: providerResult.transactionReference,
+    });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'SPLIT_PAYMENT_FAILED';
+      const statusCode = code === 'ORDER_NOT_FOUND'
+        ? 404
+        : ['AUTHENTICATION_REQUIRED', 'INSUFFICIENT_PERMISSION'].includes(code)
+          ? 403
+          : 409;
+      return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
   const billId = typeof body.billId === 'string' ? body.billId.trim() : '';
   if (billId) {
     const mixedPayments = Array.isArray(body.payments) ? body.payments : [];
@@ -144,7 +253,7 @@ Deno.serve(async (request) => {
   const submitTakeaway = body.submitTakeaway === true;
   if (!orderId || orderId.length > 128) return jsonResponse(400, { error: 'orderId is invalid.' });
   if (!methods.has(method)) return jsonResponse(400, { error: 'paymentMethod is invalid.' });
-  if (!Number.isFinite(finalAmount) || finalAmount < 0) return jsonResponse(400, { error: 'finalAmount is invalid.' });
+  if (!Number.isFinite(finalAmount) || finalAmount <= 0) return jsonResponse(400, { error: 'finalAmount is invalid.' });
   if (!Number.isFinite(receivedAmount) || (method === 'CASH' && receivedAmount < finalAmount)) {
     return jsonResponse(400, { error: 'receivedAmount is invalid.', code: 'INSUFFICIENT_CASH_RECEIVED' });
   }

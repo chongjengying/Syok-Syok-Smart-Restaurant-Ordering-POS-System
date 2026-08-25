@@ -122,6 +122,11 @@ export function subscribeToOrderChanges(
       { event: '*', schema: 'public', table: 'order_item_batches', filter: `order_id=eq.${orderId}` },
       () => onChange({ new: {} as OrderRecord }),
     )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'payments', filter: `order_id=eq.${orderId}` },
+      () => onChange({ new: {} as OrderRecord }),
+    )
     .subscribe((status) => onStatus?.(status));
 
   return () => { void supabase.removeChannel(channel); };

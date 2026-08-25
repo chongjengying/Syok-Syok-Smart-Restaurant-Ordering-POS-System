@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createClient } from '@supabase/supabase-js';
+import { getLocalSupabaseStatus } from './local-supabase-status.mjs';
 
-const status = JSON.parse(execFileSync('npx', ['--no-install', 'supabase', 'status', '--output', 'json'], { encoding: 'utf8' }));
+const status = getLocalSupabaseStatus();
 const baseUrl = status.API_URL;
 const anonKey = status.ANON_KEY;
 const serviceKey = status.SERVICE_ROLE_KEY;

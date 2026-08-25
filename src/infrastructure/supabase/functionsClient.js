@@ -51,7 +51,7 @@ export async function apiRequest(
         method,
         signal: controller.signal,
         headers: {
-          apikey: env.supabaseAnonKey,
+          apikey: env.supabaseKey,
           Authorization: `Bearer ${sessionData.session.access_token}`,
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },

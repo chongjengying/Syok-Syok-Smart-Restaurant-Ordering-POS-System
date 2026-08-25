@@ -2,12 +2,15 @@ import { PAYMENT_METHODS } from '../shared/constants';
 import {
   fetchDailySalesReport,
   fetchPaymentCapabilities,
+  fetchPaymentSummary,
+  fetchProductSalesReport,
   submitPayment,
   submitBillPayment,
   submitRefund,
+  submitSplitPayment,
 } from '../repositories/payment.repository';
 import type { RequestOptions } from '../types/api';
-import type { DailySalesFilters, PaymentMethod } from '../types/payment';
+import type { DailySalesFilters, PaymentMethod, SplitPaymentInput } from '../types/payment';
 
 const supportedMethods = new Set<string>(Object.values(PAYMENT_METHODS));
 
@@ -19,6 +22,31 @@ export async function getPaymentCapabilities(options: RequestOptions = {}) {
 
 export function getDailySalesReport(query: DailySalesFilters = {}, options: RequestOptions = {}) {
   return fetchDailySalesReport(query, options);
+}
+
+export function getProductSalesReport(query: DailySalesFilters, options: RequestOptions = {}) {
+  if (!query.dateFrom || !query.dateTo) {
+    return Promise.resolve({ data: null, error: new Error('A report start and end date are required.') });
+  }
+  if (query.dateFrom > query.dateTo) {
+    return Promise.resolve({ data: null, error: new Error('The report start date must not be after the end date.') });
+  }
+  return fetchProductSalesReport(query, options);
+}
+
+export function getPaymentSummary(orderId: string, options: RequestOptions = {}) {
+  if (!orderId) return Promise.resolve({ data: null, error: new Error('Order ID is required.') });
+  return fetchPaymentSummary(orderId, options);
+}
+
+export function processSplitPayment(input: SplitPaymentInput) {
+  if (!input.orderId || !input.idempotencyKey) {
+    return Promise.resolve({ data: null, error: new Error('Split payment details are incomplete.') });
+  }
+  if (!supportedMethods.has(input.paymentMethod)) {
+    return Promise.resolve({ data: null, error: new Error('The selected payment method is unsupported.') });
+  }
+  return submitSplitPayment(input);
 }
 
 export function processPayment(
@@ -34,7 +62,7 @@ export function processPayment(
   if (!supportedMethods.has(method)) {
     return Promise.resolve({ data: null, error: new Error('The selected payment method is unsupported.') });
   }
-  if (!Number.isFinite(finalAmount) || finalAmount < 0) {
+  if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
     return Promise.resolve({ data: null, error: new Error('The final amount is invalid.') });
   }
   if (!idempotencyKey) return Promise.resolve({ data: null, error: new Error('Payment request key is required.') });

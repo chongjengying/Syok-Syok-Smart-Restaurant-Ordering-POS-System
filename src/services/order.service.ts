@@ -1,6 +1,8 @@
 import {
   appendOrderItems as appendPersistedOrderItems,
+  createOrderBillSplit as createPersistedOrderBillSplit,
   fetchOrder,
+  fetchOrderBills,
   fetchUnpaidOrders,
   insertOrder,
   insertOrderDraft,
@@ -123,6 +125,18 @@ export function saveTakeawayPackaging(orderId: string, packaging: string[]) {
   return updateTakeawayPackaging(orderId, packaging);
 }
 
+export function getOrderBills(orderId: string) {
+  if (!orderId) return Promise.resolve({ data: null, error: new Error('Order ID is required.') });
+  return fetchOrderBills(orderId);
+}
+
+export function createEqualOrderSplit(orderId: string, billCount: number) {
+  if (!orderId || !Number.isInteger(billCount) || billCount < 2 || billCount > 10) {
+    return Promise.resolve({ data: null, error: new Error('Equal split details are invalid.') });
+  }
+  return createPersistedOrderBillSplit(orderId, { mode: 'EQUAL', billCount });
+}
+
 export function mapOrder(order: OrderRecord): Order {
   const batchIdentities = new Map(
     (order.order_item_batches || []).map((batch) => [batch.id, {
@@ -146,6 +160,17 @@ export function mapOrder(order: OrderRecord): Order {
     takeawayPackaging: order.takeaway_packaging || [],
     paymentId: payment?.id || null,
     paymentNumber: payment?.payment_number || null,
+    payments: (order.payments || []).map((entry) => ({
+      id: entry.id,
+      paymentNumber: entry.payment_number || null,
+      paymentMethod: entry.payment_method || '',
+      amount: Number(entry.amount || 0),
+      receivedAmount: entry.received_amount == null ? null : Number(entry.received_amount),
+      changeAmount: entry.change_amount == null ? null : Number(entry.change_amount),
+      splitType: entry.split_type || 'FULL',
+      status: entry.status || '',
+      paidAt: entry.paid_at || null,
+    })),
     table: order.restaurant_tables ? {
       id: order.restaurant_tables.id,
       tableNumber: order.restaurant_tables.table_number,

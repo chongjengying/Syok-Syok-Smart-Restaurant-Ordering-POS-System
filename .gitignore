@@ -17,6 +17,12 @@ dist-ssr/
 # Supabase CLI local runtime state and generated secrets
 supabase/.temp/
 
+# Local database dumps may contain Auth users, sessions, refresh tokens,
+# personal data, and transaction history. Never commit them.
+backup/
+*.dump
+*.sql.backup
+
 # Environment variables
 .env
 .env.*

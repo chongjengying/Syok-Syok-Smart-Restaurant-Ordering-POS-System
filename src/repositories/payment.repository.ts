@@ -1,6 +1,6 @@
 import { apiRequest } from '../infrastructure/supabase/functionsClient';
 import type { ApiResult, RequestOptions } from '../types/api';
-import type { DailySalesFilters, DailySalesRow, PaymentCapability, PaymentMethod } from '../types/payment';
+import type { DailySalesFilters, DailySalesRow, PaymentCapability, PaymentMethod, PaymentSummary, ProductSalesRow, SplitPaymentInput } from '../types/payment';
 
 export function fetchPaymentCapabilities({ signal }: RequestOptions = {}) {
   return apiRequest('payments', { signal }) as Promise<ApiResult<{ methods: PaymentCapability[] }>>;
@@ -8,6 +8,14 @@ export function fetchPaymentCapabilities({ signal }: RequestOptions = {}) {
 
 export function fetchDailySalesReport(query: DailySalesFilters = {}, { signal }: RequestOptions = {}) {
   return apiRequest('payments', { path: 'report/daily', query, signal }) as Promise<ApiResult<DailySalesRow[]>>;
+}
+
+export function fetchProductSalesReport(query: DailySalesFilters, { signal }: RequestOptions = {}) {
+  return apiRequest('payments', { path: 'report/products', query, signal }) as Promise<ApiResult<ProductSalesRow[]>>;
+}
+
+export function fetchPaymentSummary(orderId: string, { signal }: RequestOptions = {}) {
+  return apiRequest('payments', { path: 'summary', query: { orderId }, signal }) as Promise<ApiResult<PaymentSummary>>;
 }
 
 export function submitPayment(
@@ -26,6 +34,14 @@ export function submitPayment(
 
 export function submitBillPayment(billId: string, payments: Array<{ method: string; amount: number; receivedAmount?: number }>, idempotencyKey: string) {
   return apiRequest('payments', { method: 'POST', body: { billId, payments, idempotencyKey } }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function submitSplitPayment(input: SplitPaymentInput) {
+  return apiRequest('payments', { method: 'POST', body: input }) as Promise<ApiResult<{
+    payment: Record<string, unknown>;
+    summary: PaymentSummary;
+    replayed: boolean;
+  }>>;
 }
 
 export function submitRefund(orderId: string, reason: string, idempotencyKey: string) {
