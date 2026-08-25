@@ -47,6 +47,15 @@ const transport = contents.get(transportPath);
 assert.match(transport, /apikey:\s*env\.supabaseKey\b/, 'Edge Function requests must send the configured publishable key.');
 assert.doesNotMatch(transport, /env\.supabaseAnonKey\b/, 'Transport must not use an undefined environment property.');
 
+const splitBillScreen = contents.get(path.join(srcRoot, 'components', 'SplitBillScreen.jsx'));
+const splitBillErrorBoundary = splitBillScreen.indexOf("summaryError && !summary");
+const splitBillLoadingBoundary = splitBillScreen.indexOf("loadingOrder || loadingSummary || !summary");
+assert.ok(
+  splitBillErrorBoundary >= 0 && splitBillErrorBoundary < splitBillLoadingBoundary,
+  'Split-bill summary failures must render an error before the empty-summary loading state.',
+);
+assert.match(splitBillScreen, /finally\s*{\s*setBusy\(false\);\s*}/, 'Split-payment actions must always clear their busy state.');
+
 const stagingEnv = await readFile(path.join(root, '.env.staging'), 'utf8');
 const stagingUrl = stagingEnv.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1]?.trim();
 const stagingAppEnv = stagingEnv.match(/^VITE_APP_ENV=(.+)$/m)?.[1]?.trim();

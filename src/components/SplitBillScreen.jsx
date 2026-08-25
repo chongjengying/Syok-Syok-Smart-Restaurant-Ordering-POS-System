@@ -75,10 +75,15 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   const createEqualSplit = async () => {
     if (paidCents > 0 || bills.length > 0 || busy) return;
     setBusy(true); setError('');
-    const result = await createEqualOrderSplit(orderId, equalCount);
-    if (result.error) setError(getUserErrorMessage(result.error, tr('splitCreateFailed')));
-    else await loadPaymentState();
-    setBusy(false);
+    try {
+      const result = await createEqualOrderSplit(orderId, equalCount);
+      if (result.error) setError(getUserErrorMessage(result.error, tr('splitCreateFailed')));
+      else await loadPaymentState();
+    } catch (requestError) {
+      setError(getUserErrorMessage(requestError, tr('splitCreateFailed')));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const prepareConfirmation = () => {
@@ -123,35 +128,45 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   const confirmPayment = async () => {
     if (!confirmation || busy || !requestKey.current) return;
     setBusy(true); setError('');
-    const result = await processSplitPayment({
-      orderId,
-      splitType: confirmation.splitType,
-      paymentMethod: confirmation.paymentMethod,
-      amount: confirmation.amount,
-      receivedAmount: confirmation.receivedAmount,
-      itemAllocations: confirmation.itemAllocations,
-      billId: confirmation.billId,
-      idempotencyKey: requestKey.current,
-    });
-    if (result.error) {
-      setError(getUserErrorMessage(result.error, tr('splitPaymentFailed')));
+    try {
+      const result = await processSplitPayment({
+        orderId,
+        splitType: confirmation.splitType,
+        paymentMethod: confirmation.paymentMethod,
+        amount: confirmation.amount,
+        receivedAmount: confirmation.receivedAmount,
+        itemAllocations: confirmation.itemAllocations,
+        billId: confirmation.billId,
+        idempotencyKey: requestKey.current,
+      });
+      if (result.error) {
+        setError(getUserErrorMessage(result.error, tr('splitPaymentFailed')));
+        return;
+      }
+      await refetchSummary();
+      const billsResult = await getOrderBills(orderId);
+      if (!billsResult.error) setBills(billsResult.data || []);
+      setConfirmation(null);
+      requestKey.current = null;
+      setAmountInput('');
+      setReceivedInput('');
+      setItemQuantities({});
+      setSelectedBillId('');
+    } catch (requestError) {
+      setError(getUserErrorMessage(requestError, tr('splitPaymentFailed')));
+    } finally {
       setBusy(false);
-      return;
     }
-    await refetchSummary();
-    const billsResult = await getOrderBills(orderId);
-    if (!billsResult.error) setBills(billsResult.data || []);
-    setConfirmation(null);
-    requestKey.current = null;
-    setAmountInput('');
-    setReceivedInput('');
-    setItemQuantities({});
-    setSelectedBillId('');
-    setBusy(false);
   };
 
+  if (orderError && !order) {
+    return <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-red-700"><p>{orderError}</p><button onClick={onBack} className="rounded-xl bg-[#121212] px-6 py-3 font-black text-[#D4AF37]">{tr('back')}</button></div>;
+  }
+  if (summaryError && !summary) {
+    return <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-red-700"><p>{summaryError}</p><button onClick={() => void refetchSummary()} className="rounded-xl bg-[#121212] px-6 py-3 font-black text-[#D4AF37]">{tr('retry')}</button></div>;
+  }
   if (loadingOrder || loadingSummary || !summary) return <div className="flex h-full items-center justify-center gap-2"><Loader2 className="animate-spin" /> {tr('loadingOrder')}</div>;
-  if (orderError || !order) return <div className="p-8 text-red-700">{orderError || tr('orderNotFound')}</div>;
+  if (!order) return <div className="p-8 text-red-700">{tr('orderNotFound')}</div>;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#F5F6F8] text-[#121212]">

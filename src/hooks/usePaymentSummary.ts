@@ -10,15 +10,24 @@ export function usePaymentSummary(orderId: string | null | undefined, enabled = 
   const refetch = useCallback(async () => {
     if (!enabled || !orderId) return { data: null, error: null };
     setIsLoading(true);
-    const result = await getPaymentSummary(orderId);
-    if (result.error || !result.data) {
-      setError(result.error?.message || 'Unable to load the payment summary.');
-    } else {
-      setSummary(result.data);
-      setError('');
+    try {
+      const result = await getPaymentSummary(orderId);
+      if (result.error || !result.data) {
+        setError(result.error?.message || 'Unable to load the payment summary.');
+      } else {
+        setSummary(result.data);
+        setError('');
+      }
+      return result;
+    } catch (requestError) {
+      const normalizedError = requestError instanceof Error
+        ? requestError
+        : new Error('Unable to load the payment summary.');
+      setError(normalizedError.message);
+      return { data: null, error: normalizedError };
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-    return result;
   }, [enabled, orderId]);
 
   useEffect(() => { void refetch(); }, [refetch, refreshKey]);
