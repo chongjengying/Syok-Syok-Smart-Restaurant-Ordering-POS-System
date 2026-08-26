@@ -126,6 +126,21 @@ assert.match(adminUsersFunction, /auth\.admin\.inviteUserByEmail/i,
 assert.match(adminUsersFunction, /has_pos_permission/i,
   'The Admin user boundary must verify database permissions.');
 
+const dashboardSecurity = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260826143000_production_admin_dashboard.sql'),
+  'utf8',
+);
+assert.match(dashboardSecurity, /has_pos_permission\('dashboard\.view'\)[\s\S]*INSUFFICIENT_PERMISSION/i,
+  'The dashboard RPC must require dashboard.view in PostgreSQL.');
+for (const permission of ['report.view','payment.view','order.view','audit.view','staff.performance.view']) {
+  assert.match(dashboardSecurity, new RegExp(`has_pos_permission\\('${permission.replace('.', '\\.')}\\'\\)`, 'i'),
+    `Dashboard data must enforce ${permission} at the database boundary.`);
+}
+assert.match(dashboardSecurity, /staff\.performance\.view[\s\S]*where r\.name='ADMIN'/i,
+  'Sensitive staff performance must be granted only to Admin by default.');
+assert.match(dashboardSecurity, /revoke all on function public\.get_admin_dashboard\(date,date,text,text,uuid,uuid,text\) from public,anon/i,
+  'The filtered dashboard RPC must not be executable by anonymous users.');
+
 const tableMoveRpc = await readFile(
   path.join(root, 'supabase', 'migrations', '20260812112000_bind_table_move_idempotency.sql'),
   'utf8',

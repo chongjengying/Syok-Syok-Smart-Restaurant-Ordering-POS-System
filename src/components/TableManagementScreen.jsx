@@ -11,7 +11,7 @@ const statusStyles = {
   DISABLED: 'bg-red-100 text-red-800',
 };
 
-export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false }) {
+export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false, initialStatus = '' }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const includeInactive = ['ADMIN', 'MANAGER'].includes(role);
   const {
@@ -32,12 +32,14 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
     edit,
   } = useTableManagement(true, { includeInactive });
   const [move, setMove] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [tableEditor, setTableEditor] = useState(null);
   const [tableForm, setTableForm] = useState({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' });
   const destinations = useMemo(
     () => tables.filter((table) => table.id !== move?.sourceTableId && ['AVAILABLE', 'RESERVED'].includes(table.status)),
     [move, tables],
   );
+  const visibleTables = useMemo(() => statusFilter ? tables.filter(table => table.status === statusFilter) : tables, [statusFilter, tables]);
 
   const runOutOfService = async (tableId) => {
     if (!globalThis.confirm(tr('confirmOutOfService'))) return;
@@ -68,7 +70,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
         </button>
       </header>}
 
-      {embedded && <div className="mb-5 flex items-center justify-between"><div><h1 className="text-2xl font-black">Tables</h1><p className="text-sm text-gray-500">Capacity, areas, availability, and operational status.</p></div><div className="flex gap-2"><button onClick={() => { setTableEditor({ isNew: true }); setTableForm({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' }); }} className="flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 font-black"><Plus size={16}/>Add Table</button><button onClick={() => refresh()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div></div>}
+      {embedded && <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-black">Tables</h1><p className="text-sm text-gray-500">Capacity, areas, availability, and operational status.</p></div><div className="flex gap-2"><select aria-label="Table status" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className="rounded-xl border bg-white px-3 text-sm"><option value="">All statuses</option>{Object.keys(statusStyles).map(status=><option key={status}>{status}</option>)}</select><button onClick={() => { setTableEditor({ isNew: true }); setTableForm({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' }); }} className="flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 font-black"><Plus size={16}/>Add Table</button><button onClick={() => refresh()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div></div>}
 
       <main className={`flex-1 ${embedded ? '' : 'overflow-y-auto p-6'} space-y-5`}>
         {(error || actionError) && (
@@ -78,11 +80,11 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
         )}
         {isLoading ? (
           <div className="h-full flex items-center justify-center gap-3 text-gray-500"><Loader2 className="w-6 h-6 animate-spin" /> {tr('loadingTables')}</div>
-        ) : tables.length === 0 ? (
+        ) : visibleTables.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">{tr('noTables')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {tables.map((table) => {
+            {visibleTables.map((table) => {
               const order = table.activeOrder;
               const busy = updatingId === table.id || updatingId === order?.id;
               return (

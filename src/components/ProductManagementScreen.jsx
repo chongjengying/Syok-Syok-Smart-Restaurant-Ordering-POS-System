@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ImagePlus, PackagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import { useProductManagement } from '../hooks/useProductManagement';
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
@@ -7,7 +7,7 @@ import ProductImage from './products/ProductImage';
 
 const emptyForm = { categoryId: '', name: '', description: '', unit: '', price: '', cost: '', isActive: true, isAvailable: true };
 
-export default function ProductManagementScreen({ role, onBack, embedded = false, permissions = null }) {
+export default function ProductManagementScreen({ role, onBack, embedded = false, permissions = null, initialProductId = '' }) {
   const manager = useProductManagement();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -16,6 +16,7 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
   const [fileError, setFileError] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const deepLinkOpened = useRef(false);
   const canDelete = hasPosCapability(role, POS_CAPABILITIES.DELETE_PRODUCT_IMAGE);
   const canCreate = !permissions || permissions.includes('product.create');
   const canEdit = !permissions || permissions.includes('product.edit');
@@ -33,6 +34,11 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
     setForm(product.id ? { categoryId: product.categoryId, name: product.name, description: product.description, unit: product.unit, price: String(product.price), cost: String(product.cost), isActive: product.isActive, isAvailable: product.isAvailable } : emptyForm);
     setFile(null); setPreview(''); setFileError('');
   };
+  useEffect(() => {
+    if (!initialProductId || deepLinkOpened.current || manager.isLoading) return;
+    const product = manager.products.find(item => item.id === initialProductId);
+    if (product) { deepLinkOpened.current = true; open(product); }
+  }, [initialProductId, manager.isLoading, manager.products]);
   const chooseFile = (event) => {
     const next = event.target.files?.[0] || null;
     if (preview) URL.revokeObjectURL(preview);

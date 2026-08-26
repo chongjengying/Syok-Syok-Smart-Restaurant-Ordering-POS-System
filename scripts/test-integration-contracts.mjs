@@ -106,10 +106,30 @@ const adminShell = contents.get(path.join(srcRoot, 'components', 'admin', 'Admin
 for (const route of ['dashboard','orders','payments','tables','products','categories','users','roles','reports','audit']) {
   assert.match(adminShell, new RegExp(`['\"]${route}['\"]`), `Admin navigation must include ${route}.`);
 }
-assert.match(adminShell, /allowed\.has\(x\[2\]\)/, 'Admin navigation must hide modules without permission.');
+assert.match(adminShell, /allowed\.has\((?:x|item)\[2\]\)/, 'Admin navigation must hide modules without permission.');
 const adminRepository = contents.get(path.join(srcRoot, 'repositories', 'admin.repository.ts'));
 assert.match(adminRepository, /get_admin_dashboard/, 'The Admin dashboard must load real database metrics.');
+assert.match(adminRepository, /p_date_from:\s*filters\.dateFrom[\s\S]*p_date_to:\s*filters\.dateTo/, 'Dashboard filters must be passed to one database aggregation boundary.');
+for (const table of ['orders', 'payments', 'restaurant_tables', 'order_item_batches']) {
+  assert.match(adminRepository, new RegExp(`['"]${table}['"]`), `Dashboard realtime must react to ${table}.`);
+}
 assert.doesNotMatch(adminShell, /supabase\.(?:from|rpc)/, 'The Admin shell must not query Supabase directly.');
+
+const dashboard = contents.get(path.join(srcRoot, 'components', 'admin', 'AdminDashboard.jsx'));
+assert.match(dashboard, /DashboardFilters/, 'The dashboard must use one shared global filter component.');
+assert.match(dashboard, /formatCurrency/, 'Dashboard currency must use the shared Malaysia formatter.');
+assert.match(dashboard, /onNavigate/, 'Dashboard widgets must navigate into operational modules.');
+for (const section of ['Sales Performance','Payment Overview','Order Overview','Live Operations','Top Selling Products','Alerts & Attention','Recent Orders','Staff Performance','Recent Activity']) {
+  assert.match(dashboard, new RegExp(section), `Dashboard must include ${section}.`);
+}
+
+const dashboardMigration = await readFile(path.join(root, 'supabase', 'migrations', '20260826143000_production_admin_dashboard.sql'), 'utf8');
+assert.match(dashboardMigration, /p_date_from date[\s\S]*p_date_to date[\s\S]*p_granularity text/i, 'Dashboard aggregation must accept the shared reporting period and granularity.');
+assert.match(dashboardMigration, /max\(coalesce\(p\.paid_at,p\.created_at\)\) settled_at/i, 'Sales must be recognised at final settlement time.');
+assert.match(dashboardMigration, /s\.gross-s\.discount\+s\.tax\+s\.service_charge-r\.amount/i, 'Net sales must apply discounts, tax, service charge and refunds exactly once.');
+assert.match(dashboardMigration, /p\.status in \('PAID','REFUNDED'\)/i, 'Sales aggregation must only use successful historical payment transactions.');
+assert.match(dashboardMigration, /p\.status='FAILED'[\s\S]*failed/i, 'Failed payments must be reported separately.');
+assert.match(dashboardMigration, /dashboard\.delayed_order_minutes/i, 'Kitchen delay threshold must be configurable.');
 
 const stagingEnv = await readFile(path.join(root, '.env.staging'), 'utf8');
 const stagingUrl = stagingEnv.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1]?.trim();

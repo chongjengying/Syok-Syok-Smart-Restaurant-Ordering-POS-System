@@ -1,9 +1,27 @@
 import { supabase } from '../infrastructure/supabase/client';
 import { apiRequest } from '../infrastructure/supabase/functionsClient';
 import type { ApiResult } from '../types/api';
+import type { DashboardData, DashboardFilters } from '../types/admin-dashboard';
 
 export const fetchMyPermissions = () => supabase.rpc('get_my_permissions') as unknown as Promise<ApiResult<string[]>>;
-export const fetchAdminDashboard = () => supabase.rpc('get_admin_dashboard') as unknown as Promise<ApiResult<Record<string, unknown>>>;
+export const fetchAdminDashboard = (filters: DashboardFilters) => supabase.rpc('get_admin_dashboard', {
+  p_date_from: filters.dateFrom,
+  p_date_to: filters.dateTo,
+  p_dining_mode: filters.diningMode || null,
+  p_payment_method: filters.paymentMethod || null,
+  p_staff_id: filters.staffId || null,
+  p_branch_id: filters.branchId || null,
+  p_granularity: filters.granularity.toUpperCase(),
+}) as unknown as Promise<ApiResult<DashboardData>>;
+
+export function subscribeAdminDashboard(onChange: () => void) {
+  const channel = supabase.channel(`admin-dashboard-${crypto.randomUUID()}`);
+  ['orders', 'payments', 'restaurant_tables', 'order_item_batches'].forEach(table => {
+    channel.on('postgres_changes', { event: '*', schema: 'public', table }, onChange);
+  });
+  channel.subscribe();
+  return () => { void supabase.removeChannel(channel); };
+}
 
 export function fetchRolesAndPermissions() {
   return Promise.all([
