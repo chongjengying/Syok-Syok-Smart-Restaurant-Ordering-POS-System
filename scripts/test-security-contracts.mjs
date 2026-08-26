@@ -1,9 +1,32 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
 const root = process.cwd();
+
+const { hasPosCapability, POS_CAPABILITIES } = await import(pathToFileURL(
+  path.join(root, 'src', 'shared', 'permissions.js'),
+));
+assert.equal(hasPosCapability('CASHIER', POS_CAPABILITIES.VIEW_REPORTS), false,
+  'Cashier must not receive report/admin capabilities.');
+assert.equal(hasPosCapability('KITCHEN', POS_CAPABILITIES.TAKE_PAYMENT), false,
+  'Kitchen must not receive payment capabilities.');
+assert.equal(hasPosCapability('WAITER', POS_CAPABILITIES.SERVE_ORDER), true,
+  'Waiter must be allowed to perform serving operations.');
+assert.equal(hasPosCapability('WAITER', POS_CAPABILITIES.OPERATE_KITCHEN), false,
+  'Waiter must not receive kitchen operations.');
+assert.equal(hasPosCapability('MANAGER', POS_CAPABILITIES.VIEW_REPORTS), true,
+  'Manager must be able to view reports.');
+assert.equal(hasPosCapability('MANAGER', POS_CAPABILITIES.HANDLE_EXCEPTIONS), true,
+  'Manager must be able to handle operational exceptions.');
+assert.equal(hasPosCapability('MANAGER', POS_CAPABILITIES.MANAGE_USERS), false,
+  'Manager must not manage users.');
+assert.equal(hasPosCapability('ADMIN', POS_CAPABILITIES.MANAGE_USERS), true,
+  'Admin must be able to manage users.');
+assert.equal(hasPosCapability('ADMIN', POS_CAPABILITIES.MANAGE_SYSTEM_SETTINGS), true,
+  'Admin must be able to manage system settings.');
 
 async function filesUnder(directory, pattern) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -61,5 +84,33 @@ assert.match(permissionAudit, /after\s+update\s+of\s+role_id,\s*role_name,\s*sta
   'Profile permission changes must have a database audit trigger.');
 assert.match(permissionAudit, /previousRole[\s\S]*newRole[\s\S]*previousStatus[\s\S]*newStatus/,
   'Permission audits must include previous and new authorization state.');
+
+const roleRls = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260815190000_phase15_rls_and_permissions.sql'),
+  'utf8',
+);
+assert.match(roleRls, /public\.current_pos_role\(\)\s+in\s+\('MANAGER',\s*'CASHIER'\)/,
+  'Only finance roles may read payment rows through RLS.');
+assert.match(roleRls, /public\.current_pos_role\(\)\s+in\s+\('ADMIN',\s*'MANAGER'\)/,
+  'Reports must enforce the manager/admin role boundary in the database.');
+assert.match(roleRls, /staff_update_own_profile[\s\S]*id\s*=\s*auth\.uid\(\)/,
+  'Non-admin staff profile writes must be limited to their own row.');
+
+const tableMoveRpc = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260812112000_bind_table_move_idempotency.sql'),
+  'utf8',
+);
+assert.match(tableMoveRpc, /security\s+definer/i, 'Table moves must use a transactional RPC.');
+assert.match(tableMoveRpc, /pg_advisory_xact_lock/i, 'Table moves must serialize idempotent retries.');
+assert.match(tableMoveRpc, /move_pos_order_unbound/i, 'The public table-move boundary must delegate to the atomic worker.');
+
+const tableLifecycle = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260812110000_production_table_lifecycle.sql'),
+  'utf8',
+);
+assert.match(tableLifecycle, /create\s+unique\s+index[\s\S]*one_active_order_per_restaurant_table/i,
+  'The database must prevent two active dine-in orders from claiming one table.');
+assert.match(tableLifecycle, /where\s+id\s+in\s*\([\s\S]*order\s+by\s+id\s+for\s+update/i,
+  'Table moves must lock source and destination in deterministic order.');
 
 console.log('PASS security contracts');

@@ -10,6 +10,7 @@ export default function WelcomeScreen({
   onOpenReports,
   onOpenTables,
   onOpenUnpaidOrders,
+  canStartOrder,
   canAccessKitchen,
   canAccessReadyToServe,
   canAccessReports,
@@ -95,13 +96,15 @@ export default function WelcomeScreen({
 
         {/* Action Center: Large Primary Button (320x72pt) */}
         <div className="pt-4 flex flex-col items-center gap-4">
-          <button
-            onClick={handleStart}
-            className="w-[320px] h-[72px] rounded-[20px] bg-gradient-to-r from-[#D4AF37] to-[#C59B27] text-black font-bold text-xl tracking-wider shadow-[0_12px_32px_rgba(212,175,55,0.4)] hover:shadow-[0_16px_40px_rgba(212,175,55,0.6)] active:scale-95 transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer border border-[#FFF0B3]/40"
-          >
-            <span>{t.startOrder}</span>
-            <ArrowRight className="w-6 h-6 stroke-[2.5]" />
-          </button>
+          {canStartOrder && (
+            <button
+              onClick={handleStart}
+              className="w-[320px] h-[72px] rounded-[20px] bg-gradient-to-r from-[#D4AF37] to-[#C59B27] text-black font-bold text-xl tracking-wider shadow-[0_12px_32px_rgba(212,175,55,0.4)] hover:shadow-[0_16px_40px_rgba(212,175,55,0.6)] active:scale-95 transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer border border-[#FFF0B3]/40"
+            >
+              <span>{t.startOrder}</span>
+              <ArrowRight className="w-6 h-6 stroke-[2.5]" />
+            </button>
+          )}
 
           {(canAccessKitchen || canAccessReadyToServe || canAccessReports || canAccessTables || canAccessUnpaidOrders) && (
             <div className="flex flex-wrap items-center justify-center gap-3">

@@ -56,6 +56,24 @@ assert.ok(
 );
 assert.match(splitBillScreen, /finally\s*{\s*setBusy\(false\);\s*}/, 'Split-payment actions must always clear their busy state.');
 
+const paymentProviders = await readFile(
+  path.join(root, 'supabase', 'functions', '_shared', 'paymentProviders.ts'),
+  'utf8',
+);
+assert.match(paymentProviders, /method:\s*'CASH',\s*available:\s*true/, 'Cash payments must be available.');
+assert.match(paymentProviders, /method:\s*'QR',\s*available:\s*true/, 'QR payments must be available.');
+assert.match(paymentProviders, /provider:\s*'CASH_REGISTER'/, 'Cash payments must persist their provider.');
+assert.match(paymentProviders, /provider:\s*'QR_TERMINAL'/, 'QR payments must persist their provider.');
+
+const paymentAcceptanceMigration = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260826120000_enforce_payment_acceptance_rules.sql'),
+  'utf8',
+);
+assert.match(paymentAcceptanceMigration, /for update;/i, 'Payment completion must lock the order row.');
+assert.match(paymentAcceptanceMigration, /normalized_amount\s*<>\s*outstanding/i, 'Full payment must equal the outstanding balance.');
+assert.match(paymentAcceptanceMigration, /payment_status\s*=\s*'PAID',\s*status\s*=\s*'COMPLETED'/i, 'Successful payment must complete the order.');
+assert.match(paymentAcceptanceMigration, /set status\s*=\s*'CLEANING'/i, 'Successful dine-in payment must move the table to cleaning.');
+
 const stagingEnv = await readFile(path.join(root, '.env.staging'), 'utf8');
 const stagingUrl = stagingEnv.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1]?.trim();
 const stagingAppEnv = stagingEnv.match(/^VITE_APP_ENV=(.+)$/m)?.[1]?.trim();

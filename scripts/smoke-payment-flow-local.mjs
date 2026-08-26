@@ -64,7 +64,8 @@ async function createFulfilledOrder({ diningMode = 'takeaway', tableId = null, k
 
 const capabilities = (await request('/functions/v1/payments', { token: cashierOne })).payload.data.methods;
 assert.equal(capabilities.find((entry) => entry.method === 'CASH')?.available, true, 'Cash payment is not available');
-for (const method of ['CARD', 'QR', 'EWALLET']) {
+assert.equal(capabilities.find((entry) => entry.method === 'QR')?.available, true, 'QR payment is not available');
+for (const method of ['CARD', 'EWALLET']) {
   const capability = capabilities.find((entry) => entry.method === method);
   assert.equal(capability?.available, false, `${method} must remain disabled until a real provider is configured`);
   assert.equal(capability?.mode, 'unavailable', `${method} did not disclose its unavailable provider state`);
@@ -100,21 +101,74 @@ assert.ok(concurrentSameKey.some(({ payload }) => payload.data.replayed === true
 const [completedDineIn] = (await request(`/rest/v1/orders?id=eq.${dineIn.id}&select=status,payment_status`, { key: serviceKey })).payload;
 assert.deepEqual(completedDineIn, { status: 'COMPLETED', payment_status: 'PAID' });
 const [cleaningTable] = (await request(`/rest/v1/restaurant_tables?id=eq.${table.id}&select=status`, { key: serviceKey })).payload;
-assert.equal(cleaningTable.status, 'OCCUPIED', 'Payment released the table before staff started cleaning');
-await request(`/functions/v1/tables/${table.id}/start-cleaning`, {
-  method: 'POST', token: adminToken, body: { operationKey: `start-cleaning-${suffix}` },
-});
-const [startedCleaningTable] = (await request(`/rest/v1/restaurant_tables?id=eq.${table.id}&select=status`, { key: serviceKey })).payload;
-assert.equal(startedCleaningTable.status, 'CLEANING', 'Manual cleaning start did not persist');
-const paidRows = (await request(`/rest/v1/payments?order_id=eq.${dineIn.id}&status=eq.PAID&select=id,idempotency_key,amount,received_amount,change_amount`, { key: serviceKey })).payload;
+assert.equal(cleaningTable.status, 'CLEANING', 'Paid dine-in table did not enter cleaning');
+const paidRows = (await request(`/rest/v1/payments?order_id=eq.${dineIn.id}&status=eq.PAID&select=id,idempotency_key,payment_method,provider,transaction_reference,amount,received_amount,change_amount`, { key: serviceKey })).payload;
 assert.equal(paidRows.length, 1, 'More than one paid payment exists for the order');
+assert.equal(paidRows[0].payment_method, 'CASH', 'Cash payment method was not persisted');
+assert.equal(paidRows[0].provider, 'CASH_REGISTER', 'Cash provider was not persisted');
+assert.match(paidRows[0].transaction_reference, /^CASH-/, 'Cash transaction reference was not persisted');
 assert.equal(Number(paidRows[0].received_amount), 100, 'Cash received amount was not persisted');
 assert.equal(Number(paidRows[0].change_amount), Number((100 - Number(paidRows[0].amount)).toFixed(2)), 'Cash change was not persisted');
 
 const differentKeyRetry = await paymentRequest(cashierTwo, { ...sharedBody, idempotencyKey: `different-${suffix}` }, true);
 assert.equal(differentKeyRetry.status, 409, 'A second payment with another key was accepted');
 
-for (const method of ['CARD', 'QR', 'EWALLET']) {
+const qrOrder = await createFulfilledOrder({ key: `QR-${suffix}` });
+const qrPayment = await paymentRequest(cashierOne, {
+  orderId: qrOrder.id,
+  paymentMethod: 'QR',
+  finalAmount: Number(qrOrder.total),
+  idempotencyKey: `pay-QR-${suffix}`,
+});
+assert.equal(qrPayment.payload.data.payment.payment_method, 'QR', 'QR response recorded the wrong method');
+const qrPaidRows = (await request(`/rest/v1/payments?order_id=eq.${qrOrder.id}&status=eq.PAID&select=payment_method,provider,transaction_reference,amount,received_amount,change_amount`, { key: serviceKey })).payload;
+assert.equal(qrPaidRows.length, 1, 'QR payment did not create exactly one paid ledger row');
+assert.equal(qrPaidRows[0].payment_method, 'QR', 'QR payment method was not persisted');
+assert.equal(qrPaidRows[0].provider, 'QR_TERMINAL', 'QR provider was not persisted');
+assert.match(qrPaidRows[0].transaction_reference, /^QR-/, 'QR transaction reference was not persisted');
+assert.equal(Number(qrPaidRows[0].received_amount), Number(qrOrder.total), 'QR received amount was incorrect');
+assert.equal(Number(qrPaidRows[0].change_amount), 0, 'QR payment recorded cash change');
+
+const balanceOrder = await createFulfilledOrder({ key: `balance-${suffix}` });
+await paymentRequest(cashierOne, {
+  orderId: balanceOrder.id,
+  splitType: 'AMOUNT',
+  paymentMethod: 'CASH',
+  amount: 10,
+  receivedAmount: 10,
+  itemAllocations: [],
+  idempotencyKey: `partial-${suffix}`,
+});
+const balanceSummary = (await request(
+  `/functions/v1/payments/summary?orderId=${balanceOrder.id}`,
+  { token: cashierOne },
+)).payload.data;
+assert.equal(balanceSummary.paymentStatus, 'PARTIALLY_PAID', 'Partial collection did not preserve the unpaid balance');
+const rejectedTotalInsteadOfBalance = await paymentRequest(cashierOne, {
+  orderId: balanceOrder.id,
+  paymentMethod: 'QR',
+  finalAmount: Number(balanceOrder.total),
+  idempotencyKey: `wrong-balance-${suffix}`,
+}, true);
+assert.equal(rejectedTotalInsteadOfBalance.status, 409, 'Full order total was accepted after a partial payment');
+const [stillPartial] = (await request(
+  `/rest/v1/orders?id=eq.${balanceOrder.id}&select=status,payment_status`,
+  { key: serviceKey },
+)).payload;
+assert.equal(stillPartial.payment_status, 'PARTIALLY_PAID', 'Rejected balance payment changed the order payment state');
+await paymentRequest(cashierOne, {
+  orderId: balanceOrder.id,
+  paymentMethod: 'QR',
+  finalAmount: Number(balanceSummary.remainingAmount),
+  idempotencyKey: `remaining-balance-${suffix}`,
+});
+const [balanceCompleted] = (await request(
+  `/rest/v1/orders?id=eq.${balanceOrder.id}&select=status,payment_status`,
+  { key: serviceKey },
+)).payload;
+assert.deepEqual(balanceCompleted, { status: 'COMPLETED', payment_status: 'PAID' }, 'Paying the exact balance did not complete the order');
+
+for (const method of ['CARD', 'EWALLET']) {
   const fulfilled = await createFulfilledOrder({ key: `${method}-${suffix}` });
   const blocked = await paymentRequest(cashierOne, {
     orderId: fulfilled.id, paymentMethod: method, finalAmount: Number(fulfilled.total), idempotencyKey: `pay-${method}-${suffix}`,
@@ -137,17 +191,18 @@ const racePaidRows = (await request(`/rest/v1/payments?order_id=eq.${raceOrder.i
 assert.equal(racePaidRows.length, 1, 'Two-cashier race created duplicate paid rows');
 
 console.log(JSON.stringify({
-  availableMethods: ['CASH'],
-  blockedUntilProviderConfigured: ['CARD', 'QR', 'EWALLET'],
+  availableMethods: ['CASH', 'QR'],
+  blockedUntilProviderConfigured: ['CARD', 'EWALLET'],
   authoritativeAmountValidation: true,
   transactionalCompletion: true,
-  dineInTableAwaitingCleaning: true,
-  manualCleaningStart: true,
+  dineInTableEnteredCleaning: true,
   sameKeyRetryReplay: true,
   doubleClickProtected: true,
   twoCashierRaceAcceptedOne: true,
   onePaidPaymentPerOrder: true,
   cashTenderAndChangePersisted: true,
+  qrPaymentPersisted: true,
+  exactOutstandingBalanceRequired: true,
   orderPageToDetailFlow: true,
   authoritativeDetailTotal: true,
 }));

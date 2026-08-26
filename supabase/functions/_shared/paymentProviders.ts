@@ -33,6 +33,16 @@ export class CashPaymentProvider implements PaymentProvider {
   }
 }
 
+export class QrPaymentProvider implements PaymentProvider {
+  async process(request: PaymentRequest): Promise<PaymentProviderResult> {
+    return {
+      confirmed: true,
+      provider: 'QR_TERMINAL',
+      transactionReference: `QR-${request.idempotencyKey}`,
+    };
+  }
+}
+
 export class UnavailablePaymentProvider implements PaymentProvider {
   constructor(private readonly method: string) {}
 
@@ -50,12 +60,13 @@ export function getPaymentCapabilities(): PaymentCapability[] {
   return [
     { method: 'CASH', available: true, mode: 'manual' },
     { method: 'CARD', available: false, mode: 'unavailable' },
-    { method: 'QR', available: false, mode: 'unavailable' },
+    { method: 'QR', available: true, mode: 'manual' },
     { method: 'EWALLET', available: false, mode: 'unavailable' },
   ];
 }
 
 export function createPaymentProvider(method: PaymentRequest['method']): PaymentProvider {
   if (method === 'CASH') return new CashPaymentProvider();
+  if (method === 'QR') return new QrPaymentProvider();
   return new UnavailablePaymentProvider(method);
 }

@@ -119,12 +119,7 @@ await request('/functions/v1/payments', {
 const [paidOrder] = await request(`/rest/v1/orders?id=eq.${order.id}&select=status,payment_status`, { key: serviceKey });
 const [cleaningTable] = await request(`/rest/v1/restaurant_tables?id=eq.${tables[0].id}&select=status`, { key: serviceKey });
 assert.deepEqual(paidOrder, { status: 'COMPLETED', payment_status: 'PAID' });
-assert.equal(cleaningTable.status, 'OCCUPIED');
-await request(`/functions/v1/tables/${tables[0].id}/start-cleaning`, {
-  method: 'POST', token: auth.access_token, body: { operationKey: `start-cleaning-${suffix}` },
-});
-const [startedCleaningTable] = await request(`/rest/v1/restaurant_tables?id=eq.${tables[0].id}&select=status`, { key: serviceKey });
-assert.equal(startedCleaningTable.status, 'CLEANING');
+assert.equal(cleaningTable.status, 'CLEANING');
 
 // The per-order lock plus unique(order_id, batch_no) protects simultaneous
 // submissions with different request keys from allocating the same number.
@@ -148,5 +143,4 @@ console.log(JSON.stringify({
   concurrentBatchNumbers: [1, 2, 3],
   combinedPayment: true,
   tableAfterServe: cleaningTable.status,
-  tableAfterCleaningStart: startedCleaningTable.status,
 }));

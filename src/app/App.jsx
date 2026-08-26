@@ -22,6 +22,7 @@ import { useUnpaidOrders } from '../hooks/useUnpaidOrders';
 import { clearProductCache } from '../services/product-cache.service';
 import { changeCartItemQuantity, removeCartItem as removeCartEntry } from '../services/cart.service';
 import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessages';
+import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { getStoredLanguage, LANGUAGE_STORAGE_KEY, translate } from '../utils/i18n';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
@@ -76,8 +77,9 @@ export default function App() {
   const [orderNotice, setOrderNotice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
-  const canAccessUnpaidOrders = ['ADMIN', 'MANAGER', 'WAITER', 'CASHIER'].includes(profile?.role);
-  const canAccessPayments = ['ADMIN', 'MANAGER', 'CASHIER'].includes(profile?.role);
+  const canStartOrder = hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canAccessUnpaidOrders = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
+  const canAccessPayments = hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
   const {
     orders: unpaidOrders,
     isLoading: unpaidOrdersLoading,
@@ -486,10 +488,10 @@ export default function App() {
     setCurrentScreen(activeOrder.status === 'DRAFT' || draftCart.length > 0 ? 'menu' : 'orderStatus');
   }, [activeOrder, checkoutRestoring, currentScreen, draftCart.length, stayOnDashboard]);
 
-  const canAccessKitchen = ['ADMIN', 'MANAGER', 'KITCHEN'].includes(profile?.role);
-  const canAccessReadyToServe = ['ADMIN', 'MANAGER', 'WAITER'].includes(profile?.role);
-  const canAccessReports = ['ADMIN', 'MANAGER'].includes(profile?.role);
-  const canAccessTables = ['ADMIN', 'MANAGER', 'WAITER'].includes(profile?.role);
+  const canAccessKitchen = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
+  const canAccessReadyToServe = hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
+  const canAccessReports = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
+  const canAccessTables = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
 
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
@@ -567,6 +569,7 @@ export default function App() {
           onOpenReports={() => setCurrentScreen('reports')}
           onOpenTables={() => setCurrentScreen('tableManagement')}
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
+          canStartOrder={canStartOrder}
           canAccessKitchen={canAccessKitchen}
           canAccessReadyToServe={canAccessReadyToServe}
           canAccessReports={canAccessReports}

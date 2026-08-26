@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Banknote, CheckCircle, CreditCard, Loader2, Smartphone } from 'lucide-react';
 import { useOrder } from '../hooks/useOrder';
 import { usePaymentCapabilities } from '../hooks/usePaymentCapabilities';

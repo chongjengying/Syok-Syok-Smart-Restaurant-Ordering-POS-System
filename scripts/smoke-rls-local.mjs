@@ -79,6 +79,13 @@ try {
   const managerProducts = await successful('/rest/v1/products?select=id,status', { token: users.MANAGER.token });
   assert.ok(managerProducts.some(({ id }) => id === inactiveProduct.id), 'MANAGER cannot manage inactive products');
 
+  const kitchenPriceWrite = await request(`/rest/v1/products?id=eq.${activeProduct.id}`, {
+    method: 'PATCH', token: users.KITCHEN.token, body: { sell_price: 0.01 },
+  });
+  assert.deepEqual(kitchenPriceWrite.payload, [], 'KITCHEN changed a product price through the Data API');
+  const [unchangedProduct] = await successful(`/rest/v1/products?id=eq.${activeProduct.id}&select=sell_price`, { key: serviceKey });
+  assert.equal(Number(unchangedProduct.sell_price), 8, 'Denied KITCHEN price update changed persisted data');
+
   const waiterCategoryWrite = await request('/rest/v1/categories', {
     method: 'POST', token: users.WAITER.token, body: { name: `Forbidden ${suffix}` },
   });
@@ -165,6 +172,20 @@ try {
     'Database did not report the payment role violation',
   );
 
+  const kitchenPayment = await request('/functions/v1/payments', {
+    method: 'POST', token: users.KITCHEN.token,
+    body: {
+      orderId: payableOrder.id, paymentMethod: 'CASH', finalAmount: 8,
+      receivedAmount: 8, idempotencyKey: `kitchen-${suffix}`,
+    },
+  });
+  assert.equal(kitchenPayment.response.status, 403, 'KITCHEN accessed the payment function');
+  const [stillUnpaid] = await successful(
+    `/rest/v1/orders?id=eq.${payableOrder.id}&select=payment_status`,
+    { key: serviceKey },
+  );
+  assert.equal(stillUnpaid.payment_status, 'UNPAID', 'Denied KITCHEN payment changed the order');
+
   const managerReport = await successful(
     `/rest/v1/daily_sales_report?payment_id=eq.${(await successful(`/rest/v1/payments?order_id=eq.${completedOrder.id}&select=id`, { key: serviceKey }))[0].id}`,
     { token: users.MANAGER.token },
@@ -178,6 +199,15 @@ try {
 
   const managerProfiles = await successful('/rest/v1/profiles?select=id', { token: users.MANAGER.token });
   assert.deepEqual(managerProfiles.map(({ id }) => id), [users.MANAGER.id], 'MANAGER can enumerate staff profiles');
+  const cashierPrivilegeWrite = await request(`/rest/v1/profiles?id=eq.${users.WAITER.id}`, {
+    method: 'PATCH', token: users.CASHIER.token, body: { role_name: 'ADMIN', status: 'ACTIVE' },
+  });
+  assert.deepEqual(cashierPrivilegeWrite.payload, [], 'CASHIER changed another user permission');
+  const [unchangedWaiter] = await successful(
+    `/rest/v1/profiles?id=eq.${users.WAITER.id}&select=role_name,status`,
+    { key: serviceKey },
+  );
+  assert.deepEqual(unchangedWaiter, { role_name: 'WAITER', status: 'ACTIVE' }, 'Denied user-management write changed the profile');
   const adminProfiles = await successful('/rest/v1/profiles?select=id', { token: users.ADMIN.token });
   assert.ok(createdUserIds.every((id) => adminProfiles.some((profile) => profile.id === id)), 'ADMIN lacks full profile access');
 
@@ -191,6 +221,8 @@ try {
     disabledTableLifecycle: true,
     directOperationalWritesDenied: true,
     waiterPaymentDeniedByDatabase: true,
+    kitchenPriceAndPaymentDenied: true,
+    cashierAdminFunctionsDenied: true,
   }));
 } finally {
   if (fixture.orderIds.length) {

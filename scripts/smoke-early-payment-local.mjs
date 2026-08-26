@@ -82,7 +82,7 @@ let [persistedTable] = (await request(
   `/rest/v1/restaurant_tables?id=eq.${table.id}&select=status`, { key: serviceKey },
 )).payload;
 assert.deepEqual(persisted, { status: 'COMPLETED', payment_status: 'PAID' });
-assert.equal(persistedTable.status, 'OCCUPIED', 'Payment released the table while guests may still order');
+assert.equal(persistedTable.status, 'CLEANING', 'Paid dine-in table did not enter cleaning');
 let tableView = (await request('/functions/v1/tables', { token: auth.access_token })).payload.data
   .find(({ id }) => id === table.id);
 assert.ok(
@@ -90,12 +90,38 @@ assert.ok(
   'The paid order disappeared from the table food-progress view',
 );
 
-const prematureCleaning = await request(`/functions/v1/tables/${table.id}/start-cleaning`, {
+const prematureCleaning = await request(`/functions/v1/tables/${table.id}/complete-cleaning`, {
   method: 'POST', token: auth.access_token, allowError: true,
   body: { operationKey: `premature-cleaning-${suffix}` },
 });
-assert.equal(prematureCleaning.status, 409, 'Cleaning started while paid kitchen items were still active');
+assert.equal(prematureCleaning.status, 409, 'Cleaning completed while paid kitchen items were still active');
 assert.equal(prematureCleaning.payload.code, 'KITCHEN_ITEMS_NOT_FULFILLED');
+
+const blockedSecondBill = await request('/functions/v1/orders', {
+  method: 'POST', token: auth.access_token, allowError: true,
+  body: {
+    items: [{
+      productId: product.id, quantity: 1, optionIds: [], specialRequest: '', serviceMode: 'DINE_IN',
+    }],
+    paymentMethod: 'CASH', diningMode: 'dine-in', tableId: table.id,
+    idempotencyKey: `blocked-second-bill-${suffix}`,
+  },
+});
+assert.equal(blockedSecondBill.status, 409, 'A new bill claimed a table that was still cleaning');
+
+await orderRequest(`/${confirmedOrder.id}/batches/${confirmedBatch.id}/start`, { method: 'POST', body: {} });
+await orderRequest(`/${confirmedOrder.id}/batches/${confirmedBatch.id}/ready`, { method: 'POST', body: {} });
+[persisted] = (await request(`/rest/v1/orders?id=eq.${confirmedOrder.id}&select=status,payment_status`, { key: serviceKey })).payload;
+assert.deepEqual(persisted, { status: 'COMPLETED', payment_status: 'PAID' }, 'Kitchen actions regressed the completed bill');
+const readyQueue = (await orderRequest('?scope=ready-to-serve')).payload.data;
+assert.ok(readyQueue.some(({ id }) => id === confirmedOrder.id), 'Paid ready order disappeared from waiter flow');
+await orderRequest(`/${confirmedOrder.id}/serve`, { method: 'POST', body: {} });
+await request(`/functions/v1/tables/${table.id}/complete-cleaning`, {
+  method: 'POST', token: auth.access_token,
+  body: { operationKey: `cleaning-complete-${suffix}` },
+});
+[persistedTable] = (await request(`/rest/v1/restaurant_tables?id=eq.${table.id}&select=status`, { key: serviceKey })).payload;
+assert.equal(persistedTable.status, 'AVAILABLE', 'Table became available before cleaning completion');
 
 const secondBill = await createOrder('dine-in', table.id, `second-bill-${suffix}`);
 assert.notEqual(secondBill.id, confirmedOrder.id, 'New items were appended to the already-paid order');
@@ -111,14 +137,6 @@ assert.ok(tableView.orders.some(({ id }) => id === secondBill.id), 'The current 
 const kitchenQueue = (await orderRequest()).payload.data;
 assert.ok(kitchenQueue.some(({ id }) => id === confirmedOrder.id), 'Paid confirmed order disappeared from kitchen');
 assert.ok(kitchenQueue.some(({ id }) => id === secondBill.id), 'New same-table bill did not reach kitchen');
-
-await orderRequest(`/${confirmedOrder.id}/batches/${confirmedBatch.id}/start`, { method: 'POST', body: {} });
-await orderRequest(`/${confirmedOrder.id}/batches/${confirmedBatch.id}/ready`, { method: 'POST', body: {} });
-[persisted] = (await request(`/rest/v1/orders?id=eq.${confirmedOrder.id}&select=status,payment_status`, { key: serviceKey })).payload;
-assert.deepEqual(persisted, { status: 'COMPLETED', payment_status: 'PAID' }, 'Kitchen actions regressed the completed bill');
-const readyQueue = (await orderRequest('?scope=ready-to-serve')).payload.data;
-assert.ok(readyQueue.some(({ id }) => id === confirmedOrder.id), 'Paid ready order disappeared from waiter flow');
-await orderRequest(`/${confirmedOrder.id}/serve`, { method: 'POST', body: {} });
 
 [persisted] = (await request(`/rest/v1/orders?id=eq.${confirmedOrder.id}&select=status,payment_status`, { key: serviceKey })).payload;
 [persistedTable] = (await request(`/rest/v1/restaurant_tables?id=eq.${table.id}&select=status`, { key: serviceKey })).payload;
@@ -145,9 +163,9 @@ console.log(JSON.stringify({
   kitchenContinuesAfterPayment: true,
   readyToServeIncludesPaid: true,
   billRemainsCompletedDuringFulfillment: true,
-  tableRemainsOccupiedAfterPayment: true,
-  cleaningBlockedDuringFulfillment: true,
-  newBillAfterPayment: true,
+  tableEntersCleaningAfterPayment: true,
+  cleaningCompletionBlockedDuringFulfillment: true,
+  newBillBlockedUntilCleaningComplete: true,
   paidBillRemainsImmutable: true,
   paidFoodProgressVisibleFromTable: true,
 }));

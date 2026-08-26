@@ -65,6 +65,9 @@ assert.equal(kitchen.data.find((order) => order.id === orderId)?.order_items.len
 const cashierAuth = await request('/auth/v1/signup', { method: 'POST', body: {
   email: `cashier-${suffix}@example.com`, password: `Cashier-${suffix}-Pass!`, data: { full_name: 'Second Terminal Cashier' },
 } });
+await request(`/rest/v1/profiles?id=eq.${cashierAuth.user.id}`, {
+  method: 'PATCH', key: serviceKey, body: { role_name: 'CASHIER', status: 'ACTIVE' },
+});
 const cashierTables = await request('/functions/v1/tables', { token: cashierAuth.access_token });
 const cashierTable = cashierTables.data.find((entry) => entry.id === tables[0].id);
 assert.equal(cashierTable?.orders?.[0]?.id, orderId, 'A second staff terminal could not see the table unpaid order');
@@ -108,12 +111,7 @@ assert.equal(restored.data.payment_status, 'PAID');
 unpaidOrders = await request('/functions/v1/orders?scope=unpaid', { token: cashierAuth.access_token });
 assert.ok(!unpaidOrders.data.some((entry) => entry.id === orderId), 'Paid order remained in the unpaid order list');
 table = await request(`/rest/v1/restaurant_tables?id=eq.${tables[0].id}&select=status`, { key: serviceKey });
-assert.equal(table[0].status, 'OCCUPIED', 'Payment released the table before staff started cleaning');
-await request(`/functions/v1/tables/${tables[0].id}/start-cleaning`, {
-  method: 'POST', token, body: { operationKey: `start-cleaning-${suffix}` },
-});
-table = await request(`/rest/v1/restaurant_tables?id=eq.${tables[0].id}&select=status`, { key: serviceKey });
-assert.equal(table[0].status, 'CLEANING', 'Manual cleaning start did not persist');
+assert.equal(table[0].status, 'CLEANING', 'Paid dine-in table did not enter cleaning');
 
 const takeaway = await request('/functions/v1/orders', { method: 'POST', token, body: {
   draft: true, diningMode: 'takeaway', tableId: null, idempotencyKey: `takeaway-${suffix}`,
@@ -145,10 +143,16 @@ assert.equal(rejectedSubmit.httpStatus, 422, 'Disabled product was accepted at s
 const unavailableOrder = await request(`/functions/v1/orders/${unavailable.data.id}`, { token });
 assert.equal(unavailableOrder.data.status, 'DRAFT', 'Rejected submission did not roll back');
 
+const secondCashierAuth = await request('/auth/v1/signup', { method: 'POST', body: {
+  email: `cashier-race-${suffix}@example.com`, password: `Cashier-Race-${suffix}-Pass!`, data: { full_name: 'Race Terminal Cashier' },
+} });
+await request(`/rest/v1/profiles?id=eq.${secondCashierAuth.user.id}`, {
+  method: 'PATCH', key: serviceKey, body: { role_name: 'CASHIER', status: 'ACTIVE' },
+});
 const race = await Promise.all([
-  request('/functions/v1/orders', { method: 'POST', token, allowError: true, body: { draft: true, diningMode: 'dine-in', tableId: tables[1].id, idempotencyKey: `race-a-${suffix}` } }),
-  request('/functions/v1/orders', { method: 'POST', token, allowError: true, body: { draft: true, diningMode: 'dine-in', tableId: tables[1].id, idempotencyKey: `race-b-${suffix}` } }),
+  request('/functions/v1/orders', { method: 'POST', token: cashierAuth.access_token, allowError: true, body: { draft: true, diningMode: 'dine-in', tableId: tables[1].id, idempotencyKey: `race-a-${suffix}` } }),
+  request('/functions/v1/orders', { method: 'POST', token: secondCashierAuth.access_token, allowError: true, body: { draft: true, diningMode: 'dine-in', tableId: tables[1].id, idempotencyKey: `race-b-${suffix}` } }),
 ]);
-assert.equal(race.filter((result) => result.httpStatus === 201).length, 1, 'Concurrent table claim did not produce exactly one winner');
+assert.equal(race.filter((result) => result.httpStatus === 201).length, 1, 'Two cashiers concurrently claimed the same table');
 
 console.log(JSON.stringify({ orderId, takeawayOrderId: takeaway.data.id, tableMarkedCleaning: true, temporaryTakeawayTable: true, unpaidOrderList: true, paidOrderRemovedFromList: true, crossTerminalResume: true, unpaidHistoryRetained: true, secondRoundSameBill: true, priorItemsNotResent: true, draftRecovery: true, kitchenDraftExcluded: true, mixedServiceModes: true, authoritativeSubmitPrice: true, idempotentSubmit: true, idempotentPayment: true, unavailableProductRejected: true, concurrentTableClaim: true }));
