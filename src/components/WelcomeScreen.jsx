@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, TrendingUp, UtensilsCrossed, ReceiptText, PackageSearch, Settings } from 'lucide-react';
+import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, UtensilsCrossed, ReceiptText, Settings } from 'lucide-react';
 import { LANGUAGE_LABELS, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { APP_VERSION } from '../config/appVersion';
@@ -128,19 +128,9 @@ export default function WelcomeScreen({
                   <BellRing className="w-4 h-4 text-emerald-400" /> {tr('readyServeCollect')}
                 </button>
               )}
-              {canAccessReports && (
-                <button onClick={onOpenReports} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <TrendingUp className="w-4 h-4 text-[#D4AF37]" /> {tr('salesReports')}
-                </button>
-              )}
               {canAccessTables && (
                 <button onClick={onOpenTables} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
                   <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> {tr('tableOperations')}
-                </button>
-              )}
-              {canManageProducts && (
-                <button onClick={onOpenProducts} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
-                  <PackageSearch className="w-4 h-4 text-[#D4AF37]" /> Products
                 </button>
               )}
               {canAccessAdmin && (
