@@ -1,0 +1,43 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Supabase CLI local runtime state and generated secrets
+supabase/.temp/
+
+# Local database dumps may contain Auth users, sessions, refresh tokens,
+# personal data, and transaction history. Never commit them.
+backup/
+*.dump
+*.sql.backup
+
+# Environment variables
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store

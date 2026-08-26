@@ -1,0 +1,21 @@
+{
+  "short_name": "SmartPOS",
+  "name": "Smart Restaurant iPad POS System",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F8F9FA",
+  "theme_color": "#121212",
+  "display": "standalone",
+  "orientation": "landscape"
+}

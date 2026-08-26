@@ -1,0 +1,35 @@
+{
+  "name": "pos-order",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev:local",
+    "build": "vite build",
+    "dev:local": "vite --mode development --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:staging": "vite --mode staging --host 127.0.0.1 --port 5174 --strictPort",
+    "build:local": "vite build --mode development",
+    "build:staging": "vite build --mode staging",
+    "lint": "oxlint src",
+    "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
+    "test:security-contracts": "node scripts/test-security-contracts.mjs",
+    "test:split-money": "node scripts/test-split-money.mjs",
+    "test:split-payment-local": "node scripts/smoke-split-payment-local.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
+    "lucide-react": "^1.28.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0"
+  }
+}
