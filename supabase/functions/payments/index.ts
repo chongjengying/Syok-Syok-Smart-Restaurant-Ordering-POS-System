@@ -248,6 +248,7 @@ Deno.serve(async (request) => {
   const method = rawMethod === 'E_WALLET' ? 'EWALLET' : rawMethod;
   const finalAmount = typeof body.finalAmount === 'number' ? body.finalAmount : Number.NaN;
   const receivedAmount = typeof body.receivedAmount === 'number' ? body.receivedAmount : finalAmount;
+  const paymentReference = typeof body.paymentReference === 'string' ? body.paymentReference.trim().slice(0, 150) : '';
   const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
   const submitTakeaway = body.submitTakeaway === true;
   if (!orderId || orderId.length > 128) return jsonResponse(400, { error: 'orderId is invalid.' });
@@ -257,6 +258,22 @@ Deno.serve(async (request) => {
     return jsonResponse(400, { error: 'receivedAmount is invalid.', code: 'INSUFFICIENT_CASH_RECEIVED' });
   }
   if (!idempotencyKey || idempotencyKey.length > 128) return jsonResponse(400, { error: 'idempotencyKey is invalid.' });
+
+  if (method === 'QR') {
+    const { data, error } = await supabase.rpc('confirm_manual_qr_payment', {
+      p_order_id: orderId,
+      p_final_amount: finalAmount,
+      p_idempotency_key: idempotencyKey,
+      p_payment_reference: paymentReference || null,
+      p_submit_takeaway: submitTakeaway,
+    });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'QR_PAYMENT_FAILED';
+      const statusCode = ['INSUFFICIENT_PERMISSION', 'AUTHENTICATION_REQUIRED'].includes(code) ? 403 : code === 'ORDER_NOT_FOUND' ? 404 : 409;
+      return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
 
   const paymentRequest: PaymentRequest = {
     orderId,

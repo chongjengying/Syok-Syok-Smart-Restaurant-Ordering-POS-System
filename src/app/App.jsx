@@ -401,6 +401,7 @@ export default function App() {
       paymentMethod: paymentDetails.paymentMethod,
       receivedAmount: paymentDetails.receivedAmount,
       changeAmount: paymentDetails.changeAmount,
+      paymentReference: paymentDetails.paymentReference,
     });
     setCurrentScreen('paymentConfirmation');
     return { error: null };

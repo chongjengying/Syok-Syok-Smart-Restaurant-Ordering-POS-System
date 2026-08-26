@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {ArrowLeft,ChartNoAxesCombined,ClipboardList,FolderTree,LayoutDashboard,Logs,Menu,PackageSearch,ReceiptText,ShieldCheck,TrendingUp,Users,UtensilsCrossed,X} from 'lucide-react';
+import {ArrowLeft,ChartNoAxesCombined,ClipboardList,FolderTree,LayoutDashboard,Logs,Menu,PackageSearch,ReceiptText,ShieldCheck,TrendingUp,Users,UtensilsCrossed,X,QrCode} from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
 import ProductManagementScreen from '../ProductManagementScreen';
 import CategoryManagement from './CategoryManagement';
@@ -10,13 +10,14 @@ import AdminPayments from './AdminPayments';
 import AuditLogs from './AuditLogs';
 import TableManagementScreen from '../TableManagementScreen';
 import ReportsScreen from '../ReportsScreen';
+import QrPaymentSettings from './QrPaymentSettings';
 
 const groups=[
   ['', [['dashboard','Dashboard','dashboard.view',LayoutDashboard]]],
   ['OPERATIONS',[['orders','Orders','order.view',ClipboardList],['payments','Payments','payment.view',ReceiptText],['tables','Tables','table.view',UtensilsCrossed]]],
   ['CATALOG',[['products','Products','product.view',PackageSearch],['categories','Categories','category.view',FolderTree]]],
   ['MANAGEMENT',[['users','Users','user.view',Users],['roles','Roles & Permissions','role.view',ShieldCheck],['reports','Reports','report.view',TrendingUp]]],
-  ['SYSTEM',[['audit','Audit Logs','audit.view',Logs]]],
+  ['SYSTEM',[['audit','Audit Logs','audit.view',Logs],['qr-settings','DuitNow QR','settings.manage',QrCode]]],
 ];
 const items=groups.flatMap(group=>group[1]);
 
@@ -60,6 +61,7 @@ export default function AdminShell({role,permissions,onBack,lang}){
     tables:<TableManagementScreen role={role} embedded lang={lang} initialStatus={activeParams.get('status')||''}/>,
     reports:<ReportsScreen embedded lang={lang}/>,
     audit:<AuditLogs/>,
+    'qr-settings':<QrPaymentSettings/>,
   }[section];
 
   const sidebar=<aside className="h-full w-64 overflow-y-auto bg-[#121212] p-4 text-white"><div className="flex justify-between"><button onClick={()=>{globalThis.history?.replaceState(null,'',globalThis.location?.pathname||'/');onBack();}} className="mb-6 flex items-center gap-2 text-sm font-bold text-gray-300"><ArrowLeft size={17}/>POS Dashboard</button><button onClick={()=>setSidebarOpen(false)} className="mb-6 lg:hidden" aria-label="Close navigation"><X size={20}/></button></div><div className="mb-6 flex items-center gap-2 text-lg font-black text-[#D4AF37]"><ChartNoAxesCombined/>ADMIN</div>{groups.map(([label,groupItems])=>{const visible=groupItems.filter(item=>allowed.has(item[2]));return visible.length?<div key={label} className="mb-5">{label&&<p className="mb-2 px-3 text-[10px] font-black tracking-widest text-gray-500">{label}</p>}{visible.map(([id,text,,Icon])=><button key={id} onClick={()=>navigate(id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section===id?'bg-[#D4AF37] text-black':'text-gray-300 hover:bg-white/10'}`}><Icon size={17}/>{text}</button>)}</div>:null})}</aside>;

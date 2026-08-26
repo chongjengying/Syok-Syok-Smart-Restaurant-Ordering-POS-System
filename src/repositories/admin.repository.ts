@@ -35,6 +35,10 @@ export const persistRolePermissions = (roleId: string, codes: string[]) => supab
   p_role_id: roleId, p_permission_codes: codes,
 }) as unknown as Promise<ApiResult<string[]>>;
 
+export const insertAdminRole = (name: string, description: string) => supabase.rpc('create_admin_role', {
+  p_name: name, p_description: description || null,
+}) as unknown as Promise<ApiResult<Record<string, unknown>>>;
+
 export function fetchAdminUsers(search = '', page = 1) {
   return apiRequest('admin-users', { query: { search, page: String(page), pageSize: '25' } }) as Promise<ApiResult<Record<string, unknown>>>;
 }

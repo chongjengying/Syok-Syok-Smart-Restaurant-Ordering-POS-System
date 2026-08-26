@@ -37,13 +37,71 @@ Deno.serve(async (request) => {
     const search = requestUrl.searchParams.get('search')?.trim().slice(0, 100) || '';
     const page = Math.max(1, Number(requestUrl.searchParams.get('page')) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('pageSize')) || 25));
-    let query = admin.from('profiles').select('id,name,username,email,role_name,status,branch_id,created_at,updated_at', { count: 'exact' })
-      .order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
-    const safeSearch = search.replace(/[^a-z0-9@._ -]/gi, '');
-    if (safeSearch) query = query.or(`name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,username.ilike.%${safeSearch}%`);
-    const { data, error, count } = await query;
-    if (error) { console.error('Admin user listing failed', error); return json(500, { error: 'Unable to load staff accounts.' }); }
-    return json(200, { data: { users: data || [], pagination: { page, pageSize, total: count || 0 } } });
+    const { data: profiles, error: profileError } = await admin.from('profiles')
+      .select('id,name,username,email,role_name,status,branch_id,created_at,updated_at')
+      .order('created_at', { ascending: false });
+    if (profileError) {
+      console.error('Admin profile listing failed', profileError);
+      return json(500, { error: 'Unable to load staff accounts.' });
+    }
+
+    const authUsers = [];
+    for (let authPage = 1; authPage <= 10; authPage += 1) {
+      const { data: authPageData, error: authError } = await admin.auth.admin.listUsers({ page: authPage, perPage: 1000 });
+      if (authError) {
+        console.error('Admin Auth user listing failed', authError);
+        return json(500, { error: 'Unable to verify staff authentication accounts.' });
+      }
+      authUsers.push(...authPageData.users);
+      if (authPageData.users.length < 1000) break;
+    }
+
+    const authById = new Map(authUsers.map((authUser) => [authUser.id, authUser]));
+    const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const linkedUsers = (profiles || []).map((profile) => {
+      const authUser = authById.get(profile.id);
+      return {
+        ...profile,
+        auth_linked: Boolean(authUser),
+        email_confirmed: Boolean(authUser?.email_confirmed_at),
+        email_confirmed_at: authUser?.email_confirmed_at || null,
+        last_sign_in_at: authUser?.last_sign_in_at || null,
+        auth_created_at: authUser?.created_at || null,
+      };
+    });
+    for (const authUser of authUsers) {
+      if (profileById.has(authUser.id)) continue;
+      linkedUsers.push({
+        id: authUser.id,
+        name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Auth user',
+        username: '',
+        email: authUser.email || '',
+        role_name: null,
+        status: 'MISSING_PROFILE',
+        branch_id: null,
+        created_at: authUser.created_at,
+        updated_at: authUser.updated_at || authUser.created_at,
+        auth_linked: true,
+        email_confirmed: Boolean(authUser.email_confirmed_at),
+        email_confirmed_at: authUser.email_confirmed_at || null,
+        last_sign_in_at: authUser.last_sign_in_at || null,
+        auth_created_at: authUser.created_at,
+      });
+    }
+
+    const normalizedSearch = search.toLowerCase();
+    const filtered = normalizedSearch
+      ? linkedUsers.filter((user) => [user.name, user.email, user.username, user.role_name]
+        .some((value) => String(value || '').toLowerCase().includes(normalizedSearch)))
+      : linkedUsers;
+    filtered.sort((left, right) => String(right.created_at || '').localeCompare(String(left.created_at || '')));
+    const start = (page - 1) * pageSize;
+    return json(200, {
+      data: {
+        users: filtered.slice(start, start + pageSize),
+        pagination: { page, pageSize, total: filtered.length },
+      },
+    });
   }
 
   const body = await bodyOf(request);

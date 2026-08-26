@@ -1,155 +1,45 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Eye, Loader2, PackageSearch, Printer, RefreshCw, TrendingUp, X } from 'lucide-react';
-import { useDailySalesReport } from '../hooks/useDailySalesReport';
-import { useProductSalesReport } from '../hooks/useProductSalesReport';
-import { useAdminReport } from '../hooks/useAdminReport';
-import { getOrder } from '../services/order.service';
-import { translate, translateStatus } from '../utils/i18n';
+import { ArrowDownAZ, ArrowLeft, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Loader2, PackageSearch, RefreshCw, Search, TrendingUp } from 'lucide-react';
+import { REPORT_DEFINITIONS, REPORT_GROUPS } from '../features/reports/config/reportDefinitions';
+import { useReport } from '../features/reports/hooks/useReport';
+import { exportReportExcel } from '../features/reports/services/excelExportService';
+import { exportReportPdf } from '../features/reports/services/pdfExportService';
+import { formatReportValue } from '../features/reports/utils/reportFormatters';
+import { buildReportSummary } from '../features/reports/utils/reportSummary';
+import { fetchCompleteReportRows } from '../features/reports/services/reportService';
 
-function today() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function isoDate(date) { const offset = date.getTimezoneOffset(); return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10); }
+function presetRange(preset) {
+  const now = new Date(); const end = new Date(now); const start = new Date(now);
+  if (preset === 'yesterday') { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
+  if (preset === 'last7') start.setDate(start.getDate() - 6);
+  if (preset === 'month') start.setDate(1);
+  if (preset === 'lastMonth') { start.setMonth(start.getMonth() - 1, 1); end.setDate(0); }
+  return [isoDate(start), isoDate(end)];
 }
 
-export default function ReportsScreen({ onBack, lang = 'en', embedded = false }) {
-  const tr = (key) => translate(lang, key);
-  const [reportType, setReportType] = useState('daily');
-  const [dateFrom, setDateFrom] = useState(today());
-  const [dateTo, setDateTo] = useState(today());
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [isLoadingTransaction, setIsLoadingTransaction] = useState(false);
-  const [transactionError, setTransactionError] = useState('');
-  const filters = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
-  const dailyReport = useDailySalesReport(reportType === 'daily', filters);
-  const productReport = useProductSalesReport(reportType === 'products', filters);
-  const extendedTypes = ['monthly','category','payment-method','staff','orders','cancellations','refunds','discounts'];
-  const extendedReport = useAdminReport(extendedTypes.includes(reportType), reportType, dateFrom, dateTo);
-
-  const dailySummary = useMemo(() => {
-    const orderIds = new Set();
-    const methods = {};
-    const totals = dailyReport.rows.reduce((sum, row) => {
-      orderIds.add(row.order_id);
-      const method = String(row.payment_method || 'UNKNOWN');
-      methods[method] = (methods[method] || 0) + Number(row.amount_paid || 0);
-      return {
-        sales: sum.sales + Number(row.amount_paid || 0),
-        tax: sum.tax + Number(row.tax || 0),
-        service: sum.service + Number(row.service_charge || 0),
-      };
-    }, { sales: 0, tax: 0, service: 0 });
-    return { ...totals, orderCount: orderIds.size, methods };
-  }, [dailyReport.rows]);
-
-  const productSummary = useMemo(() => productReport.rows.reduce((summary, row) => ({
-    quantity: summary.quantity + Number(row.quantity_sold || 0),
-    sales: summary.sales + Number(row.gross_sales || 0),
-  }), { quantity: 0, sales: 0 }), [productReport.rows]);
-
-  const activeReport = reportType === 'daily' ? dailyReport : reportType === 'products' ? productReport : extendedReport;
-
-  const openTransaction = async (row) => {
-    setSelectedRow(row);
-    setSelectedOrder(null);
-    setTransactionError('');
-    setIsLoadingTransaction(true);
-    const result = await getOrder(row.order_id);
-    setIsLoadingTransaction(false);
-    if (result.error || !result.data) {
-      setTransactionError(result.error?.message || tr('transactionLoadFailed'));
-      return;
-    }
-    setSelectedOrder(result.data);
-  };
-
-  return (
-    <div className={`flex ${embedded ? '' : 'h-full'} w-full flex-col ${embedded ? '' : 'overflow-hidden'} bg-[#F5F6F8] text-[#121212]`}>
-      {!embedded && <header className="flex h-16 shrink-0 items-center justify-between bg-[#121212] px-6 text-white">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]"><ArrowLeft className="h-5 w-5" /> {tr('dashboard')}</button>
-        <div className="flex items-center gap-2 font-black uppercase tracking-wider"><TrendingUp className="h-5 w-5 text-[#D4AF37]" /> {tr('salesReports')}</div>
-        <button onClick={() => activeReport.refetch()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]"><RefreshCw className="h-4 w-4" /> {tr('refresh')}</button>
-      </header>}
-
-      {embedded && <div className="mb-5 flex items-center justify-between"><div><h1 className="text-2xl font-black">Reports</h1><p className="text-sm text-gray-500">Database-backed financial and product sales reports.</p></div><button onClick={() => activeReport.refetch()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div>}
-
-      <main className={`flex-1 space-y-5 ${embedded ? '' : 'overflow-y-auto p-6'}`}>
-        <div className="flex flex-wrap gap-2 rounded-2xl bg-white p-2 shadow-sm">
-          {[['daily',tr('dailySalesSummary')],['monthly','Monthly Sales'],['products',tr('productSalesReport')],['category','Category Sales'],['payment-method','Payment Methods'],['staff','Staff Sales'],['orders','Order Report'],['cancellations','Cancellations'],['refunds','Refunds'],['discounts','Discounts']].map(([id,label])=><button key={id} onClick={() => setReportType(id)} className={`rounded-xl px-4 py-3 text-sm font-black ${reportType === id ? 'bg-[#121212] text-[#D4AF37]' : 'text-gray-500'}`}>{label}</button>)}
-        </div>
-
-        <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-gray-200 bg-white p-4">
-          <label className="text-xs font-bold text-gray-600">{tr('from')}<input required type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-lg border border-gray-300 px-3 py-2" /></label>
-          <label className="text-xs font-bold text-gray-600">{tr('to')}<input required type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-lg border border-gray-300 px-3 py-2" /></label>
-          <p className="ml-auto max-w-md text-right text-xs text-gray-500">{reportType === 'products' ? tr('productReportDateHelp') : tr('dailyReportDateHelp')}</p>
-        </div>
-
-        {reportType === 'daily' ? (
-          <>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[[tr('netPaid'), dailySummary.sales], ['SST', dailySummary.tax], [tr('serviceCharge'), dailySummary.service]].map(([label, value]) => <div key={label} className="rounded-2xl border border-gray-200 bg-white p-5"><p className="text-xs font-bold uppercase text-gray-400">{label}</p><p className="mt-2 text-2xl font-black">RM {value.toFixed(2)}</p></div>)}
-            </div>
-            <div className="flex flex-wrap gap-3 rounded-2xl border border-gray-200 bg-white p-4">
-              <div className="rounded-xl bg-gray-50 px-4 py-3 text-sm"><span>{tr('paidOrders')}</span><strong className="ml-3">{dailySummary.orderCount}</strong></div>
-              {Object.entries(dailySummary.methods).map(([method, value]) => <div key={method} className="rounded-xl bg-gray-50 px-4 py-3 text-sm"><span className="font-bold">{method}</span><strong className="ml-3">RM {value.toFixed(2)}</strong></div>)}
-            </div>
-            {dailyReport.error && <ReportError message={dailyReport.error} />}
-            {dailyReport.isLoading ? <ReportLoading label={tr('loadingReport')} /> : dailyReport.rows.length === 0 ? <ReportEmpty label={tr('noSales')} /> : (
-              <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white"><table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">{tr('paidAt')}</th><th className="p-3">{tr('paymentNumber')}</th><th className="p-3">{tr('order')}</th><th className="p-3">{tr('method')}</th><th className="p-3">{tr('mode')}</th><th className="p-3 text-right">{tr('amount')}</th><th className="p-3 text-right">{tr('actions')}</th></tr></thead><tbody>{dailyReport.rows.map((row) => <tr key={row.payment_id} className="border-t border-gray-100"><td className="p-3">{new Date(row.paid_at).toLocaleString()}</td><td className="p-3 font-bold">{row.payment_number || '-'}</td><td className="p-3 font-bold">{row.order_number}</td><td className="p-3">{row.payment_method}</td><td className="p-3">{row.dining_mode}</td><td className="p-3 text-right font-black">RM {Number(row.amount_paid).toFixed(2)}</td><td className="p-3 text-right"><button onClick={() => void openTransaction(row)} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold hover:border-[#D4AF37]"><Eye className="h-4 w-4" /> {tr('view')}</button></td></tr>)}</tbody></table></div>
-            )}
-          </>
-        ) : reportType === 'products' ? (
-          <>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <SummaryCard label={tr('productsSold')} value={productReport.rows.length} />
-              <SummaryCard label={tr('unitsSold')} value={productSummary.quantity} />
-              <SummaryCard label={tr('productGrossSales')} value={`RM ${productSummary.sales.toFixed(2)}`} />
-            </div>
-            {productReport.error && <ReportError message={productReport.error} />}
-            {productReport.isLoading ? <ReportLoading label={tr('loadingProductReport')} /> : productReport.rows.length === 0 ? <ReportEmpty label={tr('noProductSales')} /> : (
-              <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white">
-                <table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">{tr('productCode')}</th><th className="p-3">{tr('product')}</th><th className="p-3">{tr('category')}</th><th className="p-3 text-right">{tr('quantitySold')}</th><th className="p-3 text-right">{tr('orderCount')}</th><th className="p-3 text-right">{tr('averagePrice')}</th><th className="p-3 text-right">{tr('grossSales')}</th></tr></thead>
-                  <tbody>{productReport.rows.map((row) => <tr key={row.product_id} className="border-t border-gray-100"><td className="p-3 font-mono text-xs">{row.product_code || '-'}</td><td className="p-3 font-bold">{row.product_name}</td><td className="p-3">{row.category_name || '-'}</td><td className="p-3 text-right font-black">{Number(row.quantity_sold)}</td><td className="p-3 text-right">{Number(row.order_count)}</td><td className="p-3 text-right">RM {Number(row.average_unit_price).toFixed(2)}</td><td className="p-3 text-right font-black">RM {Number(row.gross_sales).toFixed(2)}</td></tr>)}</tbody>
-                </table>
-              </div>
-            )}
-          </>
-        ) : <GenericReport report={extendedReport} />}
+export default function ReportsScreen({ onBack, embedded = false }) {
+  const state = useReport(); const [reportId, setReportId] = useState('daily-sales'); const initial = presetRange('today');
+  const [dateFrom, setDateFrom] = useState(initial[0]); const [dateTo, setDateTo] = useState(initial[1]);
+  const [exporting, setExporting] = useState(''); const [exportError, setExportError] = useState('');
+  const definition = REPORT_DEFINITIONS[reportId];
+  const summary = useMemo(() => state.report ? buildReportSummary(state.report.reportId, state.rows, state.report.summary) : [], [state.report, state.rows]);
+  const applyPreset = value => { const [from, to] = presetRange(value); setDateFrom(from); setDateTo(to); };
+  const exportFile = async type => { if (!state.report) return; setExporting(type); setExportError(''); try { const query = { search: state.search, sortKey: state.sort.key, sortDirection: state.sort.direction }; const rows = await fetchCompleteReportRows(state.report, query); const exportReport = { ...state.report, appliedFilters: query }; if (type === 'pdf') await exportReportPdf(exportReport, rows); else await exportReportExcel(exportReport, rows); } catch (error) { console.error('Report export failed', error); setExportError(`Unable to export ${type.toUpperCase()}.`); } finally { setExporting(''); } };
+  return <div className={`${embedded ? '' : 'h-full overflow-y-auto bg-slate-50 p-6'} text-slate-950`}>
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-3">{!embedded&&<button onClick={onBack} className="rounded-xl border bg-white p-3"><ArrowLeft/></button>}<div className="flex-1"><h1 className="flex items-center gap-2 text-2xl font-black"><TrendingUp className="text-amber-600"/>Reports</h1><p className="text-sm text-slate-500">Generate, review, then export database-backed operational and financial reports.</p></div>{state.report&&<button onClick={()=>state.run(reportId,dateFrom,dateTo)} className="rounded-xl border bg-white p-3" title="Regenerate"><RefreshCw size={17}/></button>}</header>
+    <div className="grid gap-5 xl:grid-cols-[260px_1fr]">
+      <aside className="rounded-2xl border bg-white p-3 shadow-sm">{REPORT_GROUPS.map(group=><section key={group.id} className="mb-4"><h2 className="px-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{group.label}</h2>{group.reports.map(id=><button key={id} onClick={()=>setReportId(id)} className={`mb-1 w-full rounded-xl px-3 py-2.5 text-left text-sm font-bold ${reportId===id?'bg-slate-950 text-amber-400':'hover:bg-slate-50'}`}>{REPORT_DEFINITIONS[id].title}</button>)}</section>)}</aside>
+      <main className="space-y-5">
+        <section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="mb-4"><p className="text-xs font-black uppercase text-amber-700">Selected report</p><h2 className="text-xl font-black">{definition.title}</h2></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-bold">Quick range<select onChange={e=>applyPreset(e.target.value)} className="mt-1 block rounded-xl border px-3 py-2"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="last7">Last 7 Days</option><option value="month">This Month</option><option value="lastMonth">Last Month</option></select></label><label className="text-xs font-bold">From<input type="date" value={dateFrom} max={dateTo} onChange={e=>setDateFrom(e.target.value)} className="mt-1 block rounded-xl border px-3 py-2"/></label><label className="text-xs font-bold">To<input type="date" value={dateTo} min={dateFrom} onChange={e=>setDateTo(e.target.value)} className="mt-1 block rounded-xl border px-3 py-2"/></label><button disabled={state.loading} onClick={()=>state.run(reportId,dateFrom,dateTo)} className="rounded-xl bg-amber-400 px-6 py-2.5 font-black disabled:opacity-50">{state.loading?'Generating…':'Generate Preview'}</button></div></section>
+        {(state.error||exportError)&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{state.error||exportError}</div>}
+        {state.loading?<div className="flex justify-center gap-2 rounded-2xl border bg-white p-14 text-slate-500"><Loader2 className="animate-spin"/>Loading report…</div>:state.report&&<>
+          <section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex flex-wrap justify-between gap-4"><div><p className="text-xs font-black uppercase text-amber-700">Preview</p><h2 className="text-xl font-black">{state.report.definition.title}</h2><p className="mt-1 text-xs text-slate-500">Period: {state.report.dateFrom} – {state.report.dateTo} · Generated {new Date(state.report.generatedAt).toLocaleString()} by {state.report.generatedBy}</p></div><div className="flex gap-2"><button disabled={Boolean(exporting)} onClick={()=>exportFile('pdf')} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-50"><FileText size={16}/>{exporting==='pdf'?'Exporting…':'Export PDF'}</button><button disabled={Boolean(exporting)} onClick={()=>exportFile('excel')} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><FileSpreadsheet size={16}/>{exporting==='excel'?'Exporting…':'Export Excel'}</button></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{summary.map(item=><div key={item.label} className="rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-black uppercase text-slate-400">{item.label}</p><strong className="mt-1 block text-xl">{formatReportValue(item.value,item.type)}</strong></div>)}</div></section>
+          <section className="overflow-hidden rounded-2xl border bg-white shadow-sm"><div className="flex flex-wrap items-center gap-3 border-b p-4"><div className="relative min-w-64 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><input value={state.search} onChange={e=>state.setSearch(e.target.value)} placeholder="Search this generated report" className="w-full rounded-xl border py-2.5 pl-10"/></div><label className="text-xs font-bold">Rows <select value={state.pageSize} onChange={e=>state.setPageSize(Number(e.target.value))} className="ml-1 rounded-lg border p-2"><option>25</option><option>50</option><option>100</option></select></label><span className="flex items-center gap-1 text-xs text-slate-400"><Download size={14}/>{state.total} matching rows</span></div>
+          {state.rows.length===0?<div className="p-12 text-center text-slate-500"><PackageSearch className="mx-auto mb-3"/>No transactions found for the selected period.<p className="text-xs">Try changing the date range or search.</p></div>:<div className="overflow-x-auto"><table className="w-full min-w-max text-sm"><thead className="bg-slate-100 text-left text-[10px] uppercase text-slate-500"><tr>{state.report.definition.columns.map(column=><th key={column.key} className="p-3"><button onClick={()=>state.toggleSort(column.key)} className="flex items-center gap-1 font-black">{column.label}<ArrowDownAZ size={12}/></button></th>)}</tr></thead><tbody>{state.visibleRows.map((row,index)=><tr key={row.id||row.order_id||row.payment_id||`${state.page}-${index}`} className="border-t hover:bg-amber-50">{state.report.definition.columns.map(column=><td key={column.key} className={`max-w-xs p-3 ${['currency','number','percent'].includes(column.type)?'text-right':''}`}>{formatReportValue(row[column.key],column.type)}</td>)}</tr>)}</tbody></table></div>}
+          <div className="flex items-center justify-between border-t p-4 text-xs"><span>Showing {state.total?((state.page-1)*state.pageSize)+1:0}–{Math.min(state.page*state.pageSize,state.total)} of {state.total}</span><div className="flex items-center gap-2"><button disabled={state.page<=1} onClick={()=>state.setPage(state.page-1)} className="rounded-lg border p-2 disabled:opacity-30"><ChevronLeft size={15}/></button><strong>Page {state.page} of {state.pageCount}</strong><button disabled={state.page>=state.pageCount} onClick={()=>state.setPage(state.page+1)} className="rounded-lg border p-2 disabled:opacity-30"><ChevronRight size={15}/></button></div></div></section>
+        </>}
       </main>
-
-      {selectedRow && <TransactionModal row={selectedRow} order={selectedOrder} loading={isLoadingTransaction} error={transactionError} onClose={() => setSelectedRow(null)} lang={lang} />}
     </div>
-  );
-}
-
-function GenericReport({ report }) {
-  if (report.error) return <ReportError message={report.error} />;
-  if (report.isLoading) return <ReportLoading label="Loading report…" />;
-  if (!report.rows.length) return <ReportEmpty label="No report data for this period." />;
-  const columns = Object.keys(report.rows[0]);
-  return <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white"><table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr>{columns.map(column=><th key={column} className="p-3">{column.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{report.rows.map((row,index)=><tr key={index} className="border-t">{columns.map(column=><td key={column} className="p-3">{typeof row[column]==='number' ? Number(row[column]).toFixed(2) : row[column]==null ? '-' : String(row[column])}</td>)}</tr>)}</tbody></table></div>;
-}
-
-function SummaryCard({ label, value }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white p-5"><p className="text-xs font-bold uppercase text-gray-400">{label}</p><p className="mt-2 text-2xl font-black">{value}</p></div>;
-}
-
-function ReportLoading({ label }) {
-  return <div className="flex justify-center gap-2 py-12 text-gray-500"><Loader2 className="h-5 w-5 animate-spin" /> {label}</div>;
-}
-
-function ReportEmpty({ label }) {
-  return <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500"><PackageSearch className="mx-auto mb-3 h-9 w-9" />{label}</div>;
-}
-
-function ReportError({ message }) {
-  return <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</div>;
-}
-
-function TransactionModal({ row, order, loading, error, onClose, lang }) {
-  const tr = (key) => translate(lang, key);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={tr('transactionDetails')}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4 border-b border-gray-200 pb-4"><div><p className="text-xs font-black uppercase text-[#B08D20]">{tr('transactionDetails')}</p><h2 className="mt-1 text-2xl font-black">{row.order_number}</h2></div><button onClick={onClose} className="rounded-lg p-2 hover:bg-gray-100" aria-label={tr('close')}><X className="h-5 w-5" /></button></div>{loading ? <ReportLoading label={tr('loadingOrderDetails')} /> : error ? <ReportError message={error} /> : order && <div id="printable-report-receipt" className="space-y-4 pt-5"><div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-gray-500">{tr('paymentNumber')}</p><strong>{row.payment_number || '-'}</strong></div><div><p className="text-xs text-gray-500">{tr('paidAt')}</p><strong>{new Date(row.paid_at).toLocaleString()}</strong></div><div><p className="text-xs text-gray-500">{tr('paymentMethod')}</p><strong>{row.payment_method}</strong></div><div><p className="text-xs text-gray-500">{tr('status')}</p><strong>{translateStatus(lang, row.order_status)}</strong></div></div><div className="border-y border-dashed border-gray-300 py-4"><p className="mb-3 text-xs font-black uppercase text-gray-500">{tr('items')}</p>{order.items.map((item) => <div key={item.id} className="flex justify-between gap-4 py-1 text-sm"><span>{item.name} ×{item.quantity}</span><strong>RM {Number(item.subtotal).toFixed(2)}</strong></div>)}</div><div className="space-y-2 text-sm"><div className="flex justify-between"><span>{tr('subtotal')}</span><span>RM {order.subtotal.toFixed(2)}</span></div><div className="flex justify-between"><span>{tr('tax')}</span><span>RM {order.tax.toFixed(2)}</span></div><div className="flex justify-between"><span>{tr('serviceCharge')}</span><span>RM {order.serviceCharge.toFixed(2)}</span></div><div className="flex justify-between border-t-2 border-[#121212] pt-2 text-lg font-black"><span>{tr('totalPaid')}</span><span>RM {Number(row.amount_paid).toFixed(2)}</span></div></div><button onClick={() => window.print()} className="no-print flex w-full items-center justify-center gap-2 rounded-xl bg-[#121212] px-4 py-3 font-black text-[#D4AF37]"><Printer className="h-4 w-4" /> {tr('printReceipt')}</button></div>}</div></div>;
+  </div>;
 }

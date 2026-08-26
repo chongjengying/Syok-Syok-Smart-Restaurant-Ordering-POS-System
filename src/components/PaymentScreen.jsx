@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Banknote, CheckCircle, CreditCard, Loader2, Smartphone } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Banknote, CheckCircle, CreditCard, Loader2, Smartphone, X } from 'lucide-react';
 import { useOrder } from '../hooks/useOrder';
 import { usePaymentCapabilities } from '../hooks/usePaymentCapabilities';
 import { soundFx } from '../utils/audio';
@@ -7,6 +7,7 @@ import { getUserErrorMessage } from '../shared/errorMessages';
 import { calculateCashTender } from '../services/cash-payment.service';
 import { groupOrderRounds } from '../services/order-rounds.service';
 import { translate, translatePackaging, translateStatus } from '../utils/i18n';
+import { useManualQrPayment } from '../hooks/useManualQrPayment';
 
 const METHOD_DETAILS = {
   CASH: { icon: Banknote, label: 'Cash' },
@@ -25,6 +26,9 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [earlyPaymentAcknowledged, setEarlyPaymentAcknowledged] = useState(false);
+  const [qrReference, setQrReference] = useState('');
+  const [showQrConfirmation, setShowQrConfirmation] = useState(false);
+  const { settings: qrSettings, error: qrSettingsError } = useManualQrPayment(Boolean(selectedMethod === 'QR'));
 
   useEffect(() => {
     setSelectedMethod((current) => (
@@ -66,6 +70,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
     && selectedCapability?.available
     && orderPayable
     && validCashReceived
+    && (selectedMethod !== 'QR' || (qrSettings.enabled && qrSettings.imageUrl && (!qrSettings.referenceRequired || qrReference.trim()) && qrSettings.scheme === 'DUITNOW' && qrSettings.mode === 'STATIC' && qrSettings.confirmationMode === 'MANUAL'))
     && (!hasActiveKitchenItems || earlyPaymentAcknowledged)
     && !isProcessing,
   );
@@ -82,6 +87,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
       receivedAmount: selectedMethod === 'CASH' ? cashTender.receivedAmount : authoritativeTotal,
       changeAmount,
       submitTakeaway: takeawayAwaitingPayment,
+      paymentReference: selectedMethod === 'QR' ? qrReference.trim() : '',
     });
     setIsProcessing(false);
     if (result?.error) {
@@ -90,6 +96,11 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
       return;
     }
     soundFx.playSuccess();
+  };
+
+  const requestPayment = () => {
+    if (selectedMethod === 'QR') setShowQrConfirmation(true);
+    else void handlePayment();
   };
 
   return (
@@ -186,6 +197,17 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
               </div>
             )}
 
+            {selectedMethod === 'QR' && (
+              <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-center">
+                <p className="text-xs font-black uppercase text-sky-800">{qrSettings.displayName}</p>
+                {qrSettings.enabled && qrSettings.imageUrl ? <img src={qrSettings.imageUrl} alt="Restaurant DuitNow QR" className="mx-auto mt-3 h-56 w-56 rounded-xl bg-white object-contain p-2" /> : <div className="mx-auto mt-3 flex h-56 w-56 items-center justify-center rounded-xl bg-white text-xs text-slate-500">DuitNow QR is not configured</div>}
+                <p className="mt-3 text-3xl font-black">{money(authoritativeTotal)}</p>
+                <p className="mt-1 text-xs text-sky-900">Ask the customer to scan and pay the exact amount. Verify receipt in the merchant banking app before confirming.</p>
+                <label className="mt-4 block text-left text-xs font-bold text-sky-900">Payment reference <span className="font-normal">(optional)</span><input value={qrReference} onChange={event => setQrReference(event.target.value)} maxLength={150} placeholder="Bank reference or transaction ID" className="mt-1 w-full rounded-xl border border-sky-200 bg-white p-3 text-sm font-normal" /></label>
+                {qrSettingsError && <p className="mt-2 text-left text-xs text-red-600">{qrSettingsError}</p>}
+              </div>
+            )}
+
             {!isLoadingOrder && order && !orderPayable && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">{hasUnsentItems ? tr('dineInDraftPaymentWarning') : tr('orderNotPayableState', { status: order.status, paymentStatus: order.paymentStatus })}</div>}
             {!isLoadingOrder && orderPayable && hasActiveKitchenItems && (
               <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
@@ -202,9 +224,10 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
             )}
             {paymentError && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{paymentError}{capabilitiesError && <button onClick={() => refresh()} className="ml-2 underline">{tr('retry')}</button>}</div>}
 
-            <button disabled={!canConfirm} onClick={() => void handlePayment()} className="mt-5 w-full rounded-xl bg-emerald-500 px-5 py-4 font-black text-black disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500">
-              {isProcessing ? tr('recordingPayment') : takeawayAwaitingPayment ? tr('paySubmitTakeaway') : tr('confirmPayment')}
+            <button disabled={!canConfirm} onClick={requestPayment} className="mt-5 w-full rounded-xl bg-emerald-500 px-5 py-4 font-black text-black disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500">
+              {isProcessing ? tr('recordingPayment') : selectedMethod === 'QR' ? 'Confirm QR Payment' : takeawayAwaitingPayment ? tr('paySubmitTakeaway') : tr('confirmPayment')}
             </button>
+            {showQrConfirmation && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 text-[#121212] shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase text-amber-700">Manual verification</p><h2 className="mt-1 text-xl font-black">Confirm QR Payment</h2></div><button onClick={()=>setShowQrConfirmation(false)} disabled={isProcessing} aria-label="Close"><X/></button></div><div className="my-5 rounded-xl bg-slate-50 p-4 text-sm"><p>Have you verified that <strong>{money(authoritativeTotal)}</strong> was successfully received?</p><p className="mt-2">Order: <strong>{order?.orderNumber}</strong></p><p className="mt-1">Payment: <strong>DuitNow QR</strong></p></div><p className="mb-5 text-xs text-slate-500">Only confirm after checking the merchant banking app or receipt.</p><div className="grid grid-cols-2 gap-3"><button onClick={()=>setShowQrConfirmation(false)} disabled={isProcessing} className="rounded-xl border px-4 py-3 font-bold">Go Back</button><button onClick={()=>{setShowQrConfirmation(false);void handlePayment();}} disabled={isProcessing} className="rounded-xl bg-emerald-500 px-4 py-3 font-black">{isProcessing?'Confirming…':'Yes, Payment Received'}</button></div></div></div>}
             <p className="mt-3 text-center text-[10px] text-gray-500">{tr('paymentDbNotice')}</p>
           </section>
         </div>

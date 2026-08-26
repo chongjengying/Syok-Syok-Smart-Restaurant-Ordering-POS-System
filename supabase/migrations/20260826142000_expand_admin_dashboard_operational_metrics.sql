@@ -113,9 +113,9 @@ begin
       ) a
     ), '[]'::jsonb),
     'salesTrend', coalesce((
-      select jsonb_agg(to_jsonb(s) order by day)
+      select jsonb_agg(to_jsonb(s) order by sales_day)
       from (
-        select d::date day, coalesce(sum(p.amount), 0) sales
+        select d::date as sales_day, coalesce(sum(p.amount), 0) sales
         from generate_series((start_at - interval '6 day')::date, start_at::date, interval '1 day') d
         left join public.payments p on (coalesce(p.paid_at, p.created_at) at time zone 'Asia/Kuala_Lumpur')::date = d::date
           and p.status = 'PAID'

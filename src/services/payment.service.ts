@@ -56,6 +56,7 @@ export function processPayment(
   idempotencyKey: string,
   receivedAmount?: number,
   submitTakeaway = false,
+  paymentReference?: string,
 ) {
   const method = String(paymentMethod || '').toUpperCase();
   if (!orderId) return Promise.resolve({ data: null, error: new Error('Order ID is required.') });
@@ -69,7 +70,7 @@ export function processPayment(
   if (receivedAmount !== undefined && (!Number.isFinite(receivedAmount) || receivedAmount < finalAmount)) {
     return Promise.resolve({ data: null, error: new Error('The received amount is insufficient.') });
   }
-  return submitPayment(orderId, method as PaymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway);
+  return submitPayment(orderId, method as PaymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference);
 }
 
 export function processBillPayment(billId: string, payments: Array<{ method: string; amount: number; receivedAmount?: number }>, idempotencyKey: string) {

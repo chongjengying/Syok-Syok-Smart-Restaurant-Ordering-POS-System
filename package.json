@@ -10,6 +10,8 @@
     "dev:staging": "vite --mode staging --host 127.0.0.1 --port 5174 --strictPort",
     "build:local": "vite build --mode development",
     "build:staging": "vite build --mode staging",
+    "deploy:staging": "npm run build:staging && npx wrangler pages deploy dist --branch staging",
+    "deploy:worker:staging": "npm run build:staging && npx wrangler deploy --config wrangler.toml --env staging",
     "lint": "oxlint src",
     "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
     "test:security-contracts": "node scripts/test-security-contracts.mjs",
@@ -21,6 +23,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
+    "exceljs": "^4.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

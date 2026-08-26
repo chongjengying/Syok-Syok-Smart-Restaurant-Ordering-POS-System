@@ -1,12 +1,14 @@
 import React from 'react';
 import { CheckCircle2, Printer, ReceiptText } from 'lucide-react';
 import { translate } from '../utils/i18n';
+import { useManualQrPayment } from '../hooks/useManualQrPayment';
 
 const money = (value) => `RM ${Number(value || 0).toFixed(2)}`;
 
 export default function PaymentConfirmationScreen({ confirmation, onDone, lang = 'en' }) {
   const tr = (key, variables) => translate(lang, key, variables);
-  const { order, paymentMethod, receivedAmount, changeAmount } = confirmation;
+  const { order, paymentMethod, receivedAmount, changeAmount, paymentReference } = confirmation;
+  const { settings: qrSettings } = useManualQrPayment(paymentMethod === 'QR');
   const fulfillmentContinues = order.items.some((item) =>
     ['SUBMITTED', 'PREPARING', 'READY'].includes(item.itemStatus),
   );
@@ -40,6 +42,7 @@ export default function PaymentConfirmationScreen({ confirmation, onDone, lang =
           <div className="space-y-2 border-t border-dashed border-gray-300 pt-4 text-sm">
             {order.paymentNumber && <div className="flex justify-between"><span>{tr('paymentNumber')}</span><strong>{order.paymentNumber}</strong></div>}
             <div className="flex justify-between"><span>{tr('paymentMethod')}</span><strong>{paymentMethod}</strong></div>
+            {paymentMethod === 'QR' && paymentReference && <div className="flex justify-between"><span>Payment Reference</span><strong>{paymentReference}</strong></div>}
             <div className="flex justify-between text-lg"><span>{tr('totalPaid')}</span><strong>{money(order.total)}</strong></div>
             {paymentMethod === 'CASH' && (
               <>
@@ -51,6 +54,12 @@ export default function PaymentConfirmationScreen({ confirmation, onDone, lang =
           {fulfillmentContinues && (
             <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold text-sky-800">
               {tr('paidKitchenNotice')}
+            </div>
+          )}
+          {paymentMethod === 'QR' && qrSettings.imageUrl && (
+            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-center">
+              <p className="text-xs font-bold text-sky-800">{qrSettings.displayName}</p>
+              <img src={qrSettings.imageUrl} alt="DuitNow QR" className="mx-auto mt-2 h-28 w-28 rounded-lg bg-white object-contain p-1" />
             </div>
           )}
           <div className="mt-6 grid grid-cols-2 gap-3">

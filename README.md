@@ -52,4 +52,18 @@ npx supabase functions deploy orders products tables payments --use-api
 npm run build:staging
 ```
 
+For Cloudflare Pages staging, configure the project with build command
+`npm run build:staging`, output directory `dist`, and branch/environment
+`staging`. The repository also provides a direct deployment command:
+
+```sh
+npx wrangler login
+npm run deploy:staging
+```
+
+Set the staging Supabase values (`VITE_SUPABASE_URL`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_APP_ENV=staging`) as Cloudflare
+Pages environment variables for the **staging/preview** environment only.
+Never put a Supabase service-role key in Pages variables.
+
 Card and e-wallet providers remain unavailable until real gateway adapters and credentials are configured. Cash and QR use authenticated staff confirmation and persist provider and transaction references.

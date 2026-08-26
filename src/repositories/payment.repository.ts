@@ -25,10 +25,11 @@ export function submitPayment(
   idempotencyKey: string,
   receivedAmount?: number,
   submitTakeaway = false,
+  paymentReference?: string,
 ) {
   return apiRequest('payments', {
     method: 'POST',
-    body: { orderId, paymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway },
+    body: { orderId, paymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference },
   }) as Promise<ApiResult<unknown>>;
 }
 

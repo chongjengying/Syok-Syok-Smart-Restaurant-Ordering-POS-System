@@ -31,8 +31,8 @@ begin
   return public.write_pos_audit('LOGIN','PROFILE',auth.uid(),null,'{}'::jsonb);
 end;
 $$;
-revoke all on function public.record_user_admin_action(uuid,text), function public.record_my_login() from public,anon;
-grant execute on function public.record_user_admin_action(uuid,text), function public.record_my_login() to authenticated;
+revoke all on function public.record_user_admin_action(uuid,text), public.record_my_login() from public,anon;
+grant execute on function public.record_user_admin_action(uuid,text), public.record_my_login() to authenticated;
 
 create or replace function public.enforce_admin_exception_permissions()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -123,7 +123,7 @@ end;
 $$;
 revoke all on function public.get_admin_report(text,date,date) from public,anon;
 grant execute on function public.get_admin_report(text,date,date) to authenticated;
-revoke execute on function public.get_daily_sales_report(date,date), function public.get_product_sales_report(date,date) from authenticated;
+revoke execute on function public.get_daily_sales_report(date,date), public.get_product_sales_report(date,date) from authenticated;
 revoke select on public.daily_sales_report from authenticated;
 
 create or replace function public.list_admin_orders(
@@ -169,8 +169,8 @@ begin
   return jsonb_build_object('rows',rows,'total',total,'limit',safe_limit,'offset',safe_offset);
 end;
 $$;
-revoke all on function public.list_admin_orders(text,text,text,text,date,date,integer,integer), function public.list_admin_payments(text,text,text,date,date,integer,integer) from public,anon;
-grant execute on function public.list_admin_orders(text,text,text,text,date,date,integer,integer), function public.list_admin_payments(text,text,text,date,date,integer,integer) to authenticated;
+revoke all on function public.list_admin_orders(text,text,text,text,date,date,integer,integer), public.list_admin_payments(text,text,text,date,date,integer,integer) from public,anon;
+grant execute on function public.list_admin_orders(text,text,text,text,date,date,integer,integer), public.list_admin_payments(text,text,text,date,date,integer,integer) to authenticated;
 
 create or replace function public.audit_profile_permission_change()
 returns trigger language plpgsql security definer set search_path = public as $$

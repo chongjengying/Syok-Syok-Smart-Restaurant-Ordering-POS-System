@@ -104,8 +104,8 @@ returns text[] language sql stable security definer set search_path = public as 
   where profile.id = auth.uid() and profile.status = 'ACTIVE'
 $$;
 
-revoke all on function public.has_pos_permission(text), function public.get_my_permissions() from public, anon;
-grant execute on function public.has_pos_permission(text), function public.get_my_permissions() to authenticated;
+revoke all on function public.has_pos_permission(text), public.get_my_permissions() from public, anon;
+grant execute on function public.has_pos_permission(text), public.get_my_permissions() to authenticated;
 
 create policy active_staff_read_permission_catalog on public.permissions for select to authenticated
 using (
@@ -249,8 +249,8 @@ begin
 end;
 $$;
 
-revoke all on function public.save_admin_category(uuid,jsonb), function public.save_admin_product(uuid,jsonb), function public.set_role_permissions(uuid,text[]), function public.admin_update_staff(uuid,jsonb) from public, anon;
-grant execute on function public.save_admin_category(uuid,jsonb), function public.save_admin_product(uuid,jsonb), function public.set_role_permissions(uuid,text[]), function public.admin_update_staff(uuid,jsonb) to authenticated;
+revoke all on function public.save_admin_category(uuid,jsonb), public.save_admin_product(uuid,jsonb), public.set_role_permissions(uuid,text[]), public.admin_update_staff(uuid,jsonb) from public, anon;
+grant execute on function public.save_admin_category(uuid,jsonb), public.save_admin_product(uuid,jsonb), public.set_role_permissions(uuid,text[]), public.admin_update_staff(uuid,jsonb) to authenticated;
 
 drop policy if exists admin_full_access_profiles on public.profiles;
 
@@ -349,7 +349,7 @@ begin
     'cancelledOrders',(select count(*) from public.orders where created_at>=start_at and status='CANCELLED'),
     'topProducts',coalesce((select jsonb_agg(to_jsonb(t)) from (select oi.product_name_snapshot name,sum(oi.quantity) quantity,sum(oi.subtotal) sales from public.order_items oi join public.orders o on o.id=oi.order_id where o.created_at>=start_at and o.status not in ('CANCELLED','REFUNDED') group by oi.product_name_snapshot order by quantity desc limit 5)t),'[]'::jsonb),
     'recentActivities',coalesce((select jsonb_agg(to_jsonb(a)) from (select id,action,entity_type,entity_id,actor_id,created_at from public.audit_logs order by created_at desc limit 8)a),'[]'::jsonb),
-    'salesTrend',coalesce((select jsonb_agg(to_jsonb(s) order by day) from (select d::date day,coalesce(sum(p.amount),0) sales from generate_series((start_at-interval '6 day')::date,start_at::date,interval '1 day')d left join public.payments p on coalesce(p.paid_at,p.created_at)::date=d::date and p.status='PAID' group by d)s),'[]'::jsonb),
+    'salesTrend',coalesce((select jsonb_agg(to_jsonb(s) order by sales_day) from (select d::date as sales_day,coalesce(sum(p.amount),0) sales from generate_series((start_at-interval '6 day')::date,start_at::date,interval '1 day')d left join public.payments p on coalesce(p.paid_at,p.created_at)::date=d::date and p.status='PAID' group by d)s),'[]'::jsonb),
     'hasInventory',false,'lowStockProducts','[]'::jsonb
   ) into result;
   return result;
