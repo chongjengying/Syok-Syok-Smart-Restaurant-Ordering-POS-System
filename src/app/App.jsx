@@ -31,7 +31,6 @@ const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen')
 const ReportsScreen = lazy(() => import('../components/ReportsScreen'));
 const TableManagementScreen = lazy(() => import('../components/TableManagementScreen'));
 const UnpaidOrdersScreen = lazy(() => import('../components/UnpaidOrdersScreen'));
-const ProductManagementScreen = lazy(() => import('../components/ProductManagementScreen'));
 const AdminShell = lazy(() => import('../components/admin/AdminShell'));
 
 function OperationalScreenLoader({ lang }) {
@@ -508,8 +507,6 @@ export default function App() {
       setCurrentScreen('welcome');
     }
   }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
-  const canAccessStaffAccounts = profile?.role === 'ADMIN';
-
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
     return (
@@ -593,6 +590,15 @@ export default function App() {
           onOpenReports={() => setCurrentScreen('reports')}
           onOpenTables={() => setCurrentScreen('tableManagement')}
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
+          onOpenProducts={() => {
+            globalThis.history?.replaceState(null, '', '#admin/products');
+            setCurrentScreen('admin');
+          }}
+          onOpenAdmin={() => {
+            globalThis.history?.replaceState(null, '', '#admin/dashboard');
+            setCurrentScreen('admin');
+          }}
+          canStartOrder={canStartOrder}
           canAccessKitchen={canAccessKitchen}
           canAccessReadyToServe={canAccessReadyToServe}
           canAccessReports={canAccessReports}
@@ -600,7 +606,6 @@ export default function App() {
           canAccessUnpaidOrders={canAccessUnpaidOrders}
           canManageProducts={canManageProducts}
           canAccessAdmin={canAccessAdmin}
-          canAccessStaffAccounts={canAccessStaffAccounts}
           lang={lang}
           setLang={setLang}
           installPrompt={installPrompt}
@@ -737,6 +742,20 @@ export default function App() {
       {currentScreen === 'unpaidOrders' && canAccessUnpaidOrders && (
         <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
           <UnpaidOrdersScreen onBack={() => setCurrentScreen('welcome')} onOpenOrder={handleOpenUnpaidOrder} lang={lang} />
+        </Suspense>
+      )}
+
+      {currentScreen === 'admin' && canAccessAdmin && (
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <AdminShell
+            role={profile.role}
+            permissions={permissionState.permissions}
+            onBack={() => {
+              globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+              setCurrentScreen('welcome');
+            }}
+            lang={lang}
+          />
         </Suspense>
       )}
 

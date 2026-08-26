@@ -79,23 +79,6 @@ export function updatePassword(password) {
   return replacePassword(password);
 }
 
-export function resendConfirmation(email) {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) return validationError('Email is required.');
-  return resendSignupConfirmation(normalizedEmail);
-}
-
-export function sendPasswordReset(email) {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) return validationError('Email is required.');
-  return requestPasswordRecovery(normalizedEmail);
-}
-
-export function updatePassword(password) {
-  if (password.length < 8) return validationError('Password must be at least 8 characters long.');
-  return replacePassword(password);
-}
-
 export async function signOut() {
   const { error } = await destroyAuthSession();
   return { error };
