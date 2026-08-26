@@ -20,7 +20,7 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
   return (
     <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-2 sm:p-4 text-white overflow-hidden select-none">
       {/* Top Device Bar Mode Selector Controls */}
-      <div className="mb-3 flex flex-wrap items-center gap-3 bg-[#1A1A1E] px-4 py-2 rounded-full border border-white/10 shadow-lg text-xs z-50">
+      <div className="mb-3 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#1A1A1E] px-2 py-2 text-[10px] shadow-lg z-50 sm:gap-3 sm:rounded-full sm:px-4 sm:text-xs">
         <span className="text-gray-400 font-medium">{tr('canvasMode')}</span>
         <span className={`rounded-full border px-2.5 py-1 font-black uppercase tracking-wide ${
           env.appEnv === 'staging'
@@ -91,9 +91,9 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
       <div
         className={`relative flex flex-col transition-all duration-300 overflow-hidden bg-[#F8F9FA] text-[#121212] ${
           deviceMode === '11inch'
-            ? 'w-[1194px] h-[834px] rounded-[36px] border-[14px] border-[#1C1C1E] shadow-[0_25px_60px_rgba(0,0,0,0.8)]'
+            ? 'w-[calc(100vw-1rem)] h-[calc(100vh-5rem)] max-w-[1194px] max-h-[834px] aspect-[1194/834] rounded-[24px] sm:rounded-[36px] border-8 sm:border-[14px] border-[#1C1C1E] shadow-[0_25px_60px_rgba(0,0,0,0.8)]'
             : deviceMode === '129inch'
-            ? 'w-[1366px] h-[1024px] rounded-[42px] border-[16px] border-[#1C1C1E] shadow-[0_30px_70px_rgba(0,0,0,0.9)]'
+            ? 'w-[calc(100vw-1rem)] h-[calc(100vh-5rem)] max-w-[1366px] max-h-[1024px] aspect-[1366/1024] rounded-[28px] sm:rounded-[42px] border-8 sm:border-[16px] border-[#1C1C1E] shadow-[0_30px_70px_rgba(0,0,0,0.9)]'
             : 'w-full max-w-[1400px] h-[92vh] rounded-2xl border-4 border-[#1C1C1E] shadow-2xl'
         }`}
       >
