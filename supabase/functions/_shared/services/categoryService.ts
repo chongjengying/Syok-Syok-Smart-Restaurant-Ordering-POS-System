@@ -6,6 +6,7 @@ type CategoryRow = {
   name: string;
   description: string | null;
   status?: boolean;
+  display_order?: number;
 };
 
 export class CategoryService {
@@ -18,11 +19,12 @@ export class CategoryService {
     if (result.error) return { data: null, error: result.error };
 
     return {
-      data: (result.data as CategoryRow[]).map(({ id, category_code, name, description }) => ({
+      data: (result.data as CategoryRow[]).map(({ id, category_code, name, description, display_order }) => ({
         id,
         code: category_code,
         name,
         description: description || '',
+        displayOrder: display_order || 0,
       })),
       error: null,
     };

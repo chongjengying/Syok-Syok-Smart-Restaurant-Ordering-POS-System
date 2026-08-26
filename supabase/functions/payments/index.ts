@@ -54,9 +54,8 @@ Deno.serve(async (request) => {
       const reportType = pathParts[functionIndex + 2] || null;
       if (!['daily', 'products'].includes(reportType || '')) return jsonResponse(404, { error: 'Report was not found.' });
 
-      if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
-        return jsonResponse(403, { error: 'Administrator or manager access is required.' });
-      }
+      const { data: canViewReports } = await supabase.rpc('has_pos_permission', { p_permission: 'report.view' });
+      if (!canViewReports) return jsonResponse(403, { error: 'Report permission is required.' });
 
       const url = new URL(request.url);
       const dateFrom = url.searchParams.get('dateFrom');
@@ -80,7 +79,8 @@ Deno.serve(async (request) => {
         });
       }
       const { data, error } = await supabase.rpc(
-        reportType === 'products' ? 'get_product_sales_report' : 'get_daily_sales_report', {
+        'get_admin_report', {
+        p_report_type: reportType,
         p_date_from: dateFrom,
         p_date_to: dateTo,
       });
@@ -118,9 +118,8 @@ Deno.serve(async (request) => {
   }
 
   if (paymentAction === 'refund') {
-    if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
-      return jsonResponse(403, { error: 'Administrator or manager access is required.', code: 'INSUFFICIENT_PERMISSION' });
-    }
+    const { data: canRefund } = await supabase.rpc('has_pos_permission', { p_permission: 'payment.refund' });
+    if (!canRefund) return jsonResponse(403, { error: 'Refund permission is required.', code: 'INSUFFICIENT_PERMISSION' });
     const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';

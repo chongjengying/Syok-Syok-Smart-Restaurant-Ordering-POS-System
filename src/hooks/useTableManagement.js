@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import {
   completeTableCleaning,
   moveOrderToTable,
+  createTable,
+  updateTable,
   restoreRestaurantTable,
   setTableOutOfService,
   startTableCleaning,
@@ -38,5 +40,7 @@ export function useTableManagement(enabled, { includeInactive = false } = {}) {
     setOutOfService: (tableId, reason) => execute(tableId, () => setTableOutOfService(tableId, reason)),
     restore: (tableId) => execute(tableId, () => restoreRestaurantTable(tableId)),
     moveOrder: (orderId, destinationTableId) => execute(orderId, () => moveOrderToTable(orderId, destinationTableId)),
+    create: (input) => execute('new-table', () => createTable(input)),
+    edit: (tableId, input) => execute(tableId, () => updateTable(tableId, input)),
   };
 }

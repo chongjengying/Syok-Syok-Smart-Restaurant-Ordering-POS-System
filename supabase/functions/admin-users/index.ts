@@ -1,0 +1,91 @@
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
+
+const cors = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
+const json = (status: number, body: Record<string, unknown>) => respond(status, body, cors);
+const roles = new Set(['ADMIN', 'MANAGER', 'CASHIER', 'WAITER', 'KITCHEN']);
+
+async function bodyOf(request: Request) {
+  try {
+    const value = await request.json();
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  if (!['GET', 'POST', 'PATCH'].includes(request.method)) return json(405, { error: 'Method not allowed.' });
+  const authorization = request.headers.get('Authorization');
+  const url = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authorization?.startsWith('Bearer ')) return json(401, { error: 'Authentication is required.' });
+  if (!url || !anonKey || !serviceKey) return json(500, { error: 'Server configuration is incomplete.' });
+
+  const caller = createClient(url, anonKey, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } });
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const { data: userResult, error: userError } = await caller.auth.getUser();
+  if (userError || !userResult.user) return json(401, { error: 'The session is invalid or expired.' });
+  const { data: callerProfile } = await caller.from('profiles').select('status').eq('id', userResult.user.id).single();
+  if (!callerProfile || callerProfile.status !== 'ACTIVE') return json(403, { error: 'An active staff profile is required.' });
+  const permission = request.method === 'GET' ? 'user.view' : request.method === 'POST' ? 'user.create' : 'user.edit';
+  const { data: allowed } = await caller.rpc('has_pos_permission', { p_permission: permission });
+  if (!allowed) return json(403, { error: 'You do not have permission to manage staff.' });
+
+  if (request.method === 'GET') {
+    const requestUrl = new URL(request.url);
+    const search = requestUrl.searchParams.get('search')?.trim().slice(0, 100) || '';
+    const page = Math.max(1, Number(requestUrl.searchParams.get('page')) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('pageSize')) || 25));
+    let query = admin.from('profiles').select('id,name,username,email,role_name,status,branch_id,created_at,updated_at', { count: 'exact' })
+      .order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+    const safeSearch = search.replace(/[^a-z0-9@._ -]/gi, '');
+    if (safeSearch) query = query.or(`name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,username.ilike.%${safeSearch}%`);
+    const { data, error, count } = await query;
+    if (error) { console.error('Admin user listing failed', error); return json(500, { error: 'Unable to load staff accounts.' }); }
+    return json(200, { data: { users: data || [], pagination: { page, pageSize, total: count || 0 } } });
+  }
+
+  const body = await bodyOf(request);
+  if (!body) return json(400, { error: 'A valid JSON body is required.' });
+
+  if (request.method === 'POST') {
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const role = typeof body.role === 'string' ? body.role.toUpperCase() : '';
+    if (!/^\S+@\S+\.\S+$/.test(email) || !name || name.length > 150 || !roles.has(role)) return json(400, { error: 'Valid name, email, and role are required.' });
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name, name } });
+    if (inviteError || !invited.user) {
+      console.error('Staff invitation failed', inviteError);
+      return json(inviteError?.message?.toLowerCase().includes('already') ? 409 : 500, { error: inviteError?.message?.toLowerCase().includes('already') ? 'A staff account already uses this email.' : 'Unable to invite staff.' });
+    }
+    const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: invited.user.id, p_payload: { name, role, status: 'ACTIVE' } });
+    if (error) {
+      console.error('Invited Auth user profile setup failed', error);
+      await admin.auth.admin.deleteUser(invited.user.id);
+      return json(500, { error: 'The staff invitation could not be completed.' });
+    }
+    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: invited.user.id, p_action: 'USER_CREATED' });
+    if (auditError) console.error('Unable to audit staff invitation', auditError);
+    return json(201, { data });
+  }
+
+  const userId = typeof body.userId === 'string' ? body.userId : '';
+  if (!userId) return json(400, { error: 'userId is required.' });
+  if (body.action === 'reset-password') {
+    const { data: target } = await admin.from('profiles').select('email').eq('id', userId).single();
+    if (!target?.email) return json(404, { error: 'Staff account was not found.' });
+    const { error } = await admin.auth.resetPasswordForEmail(target.email);
+    if (error) { console.error('Password reset request failed', error); return json(500, { error: 'Unable to send password reset instructions.' }); }
+    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: userId, p_action: 'USER_PASSWORD_RESET_REQUESTED' });
+    if (auditError) console.error('Unable to audit password reset request', auditError);
+    return json(200, { data: { resetRequested: true } });
+  }
+  const payload = { name: body.name, username: body.username, role: body.role, status: body.status, branchId: body.branchId };
+  const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: userId, p_payload: payload });
+  if (error) {
+    const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'USER_UPDATE_FAILED';
+    return json(code === 'INSUFFICIENT_PERMISSION' ? 403 : code === 'USER_NOT_FOUND' ? 404 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+  }
+  return json(200, { data });
+});

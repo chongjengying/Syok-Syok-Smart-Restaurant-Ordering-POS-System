@@ -10,7 +10,7 @@ type ProductRow = {
   sell_price: number | string;
   status: boolean;
   is_available: boolean;
-  image_url: string | null;
+  image_path: string | null;
   categories?: { id: string; name: string } | Array<{ id: string; name: string }> | null;
 };
 
@@ -110,7 +110,7 @@ export class ProductService {
         price: Number(product.sell_price),
         isActive: product.status,
         isAvailable: product.is_available,
-        imageUrl: product.image_url || '',
+        imagePath: product.image_path || null,
         optionGroups: groupsByProduct.get(product.id) || [],
       })),
       error: null,

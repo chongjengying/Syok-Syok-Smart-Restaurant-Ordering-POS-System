@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Loader2, MoveRight, RefreshCw, Sparkles, UtensilsCrossed, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Loader2, MoveRight, Pencil, Plus, RefreshCw, Sparkles, UtensilsCrossed, Wrench, X } from 'lucide-react';
 import { useTableManagement } from '../hooks/useTableManagement';
 import { translate, translateStatus } from '../utils/i18n';
 
@@ -11,7 +11,7 @@ const statusStyles = {
   DISABLED: 'bg-red-100 text-red-800',
 };
 
-export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
+export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const includeInactive = ['ADMIN', 'MANAGER'].includes(role);
   const {
@@ -28,8 +28,12 @@ export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
     setOutOfService,
     restore,
     moveOrder,
+    create,
+    edit,
   } = useTableManagement(true, { includeInactive });
   const [move, setMove] = useState(null);
+  const [tableEditor, setTableEditor] = useState(null);
+  const [tableForm, setTableForm] = useState({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' });
   const destinations = useMemo(
     () => tables.filter((table) => table.id !== move?.sourceTableId && ['AVAILABLE', 'RESERVED'].includes(table.status)),
     [move, tables],
@@ -51,8 +55,8 @@ export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
   };
 
   return (
-    <div className="w-full h-full bg-[#F5F6F8] text-[#121212] flex flex-col overflow-hidden">
-      <header className="h-16 shrink-0 bg-[#121212] text-white px-6 flex items-center justify-between">
+    <div className={`w-full ${embedded ? '' : 'h-full'} bg-[#F5F6F8] text-[#121212] flex flex-col ${embedded ? '' : 'overflow-hidden'}`}>
+      {!embedded && <header className="h-16 shrink-0 bg-[#121212] text-white px-6 flex items-center justify-between">
         <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
           <ArrowLeft className="w-5 h-5" /> {tr('dashboard')}
         </button>
@@ -62,9 +66,11 @@ export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
         <button onClick={() => refresh()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
           <RefreshCw className="w-4 h-4" /> {tr('refresh')}
         </button>
-      </header>
+      </header>}
 
-      <main className="flex-1 overflow-y-auto p-6 space-y-5">
+      {embedded && <div className="mb-5 flex items-center justify-between"><div><h1 className="text-2xl font-black">Tables</h1><p className="text-sm text-gray-500">Capacity, areas, availability, and operational status.</p></div><div className="flex gap-2"><button onClick={() => { setTableEditor({ isNew: true }); setTableForm({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' }); }} className="flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 font-black"><Plus size={16}/>Add Table</button><button onClick={() => refresh()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div></div>}
+
+      <main className={`flex-1 ${embedded ? '' : 'overflow-y-auto p-6'} space-y-5`}>
         {(error || actionError) && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" /> {actionError || error}
@@ -96,6 +102,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
                     ) : <p className="text-gray-400">{tr('noActiveOrder')}</p>}
                   </div>
                   <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                    {embedded && ['ADMIN', 'MANAGER'].includes(role) && <button disabled={busy} onClick={() => { setTableEditor(table); setTableForm({ tableNumber: table.tableNumber, tableName: table.tableName || '', capacity: table.capacity, area: table.area || 'Indoor' }); }} className="rounded-lg border px-3 py-2 text-xs font-bold flex items-center gap-1"><Pencil size={13}/> Edit</button>}
                     {table.status === 'AVAILABLE' && (
                       <button disabled={busy} onClick={() => reserve(table.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{tr('reserve')}</button>
                     )}
@@ -143,6 +150,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en' }) {
           </div>
         </div>
       )}
+      {tableEditor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><form onSubmit={async e => { e.preventDefault(); const input = { ...tableForm, capacity: Number(tableForm.capacity) }; const result = tableEditor.id ? await edit(tableEditor.id, input) : await create(input); if (!result.error) setTableEditor(null); }} className="w-full max-w-md rounded-2xl bg-white p-6"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{tableEditor.id ? 'Edit' : 'Add'} Table</h2><button type="button" onClick={() => setTableEditor(null)}><X/></button></div><label className="block text-sm font-bold">Table number<input required maxLength={20} value={tableForm.tableNumber} onChange={e => setTableForm({...tableForm,tableNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Name<input maxLength={100} value={tableForm.tableName} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Area<input required maxLength={100} value={tableForm.area} onChange={e => setTableForm({...tableForm,area:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Capacity<input required type="number" min="1" max="100" value={tableForm.capacity} onChange={e => setTableForm({...tableForm,capacity:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>{actionError&&<p className="mt-3 text-sm text-red-600">{actionError}</p>}<button disabled={Boolean(updatingId)} className="mt-6 w-full rounded-xl bg-[#D4AF37] p-3 font-black">{updatingId?'Saving…':'Save Table'}</button></form></div>}
     </div>
   );
 }

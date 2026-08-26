@@ -221,9 +221,8 @@ Deno.serve(async (request) => {
     return jsonResponse(200, { data });
   }
 
-  if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
-    return jsonResponse(403, { error: 'Administrator or manager access is required.' });
-  }
+  const { data: canManageTables } = await caller.rpc('has_pos_permission', { p_permission: 'table.manage' });
+  if (!canManageTables) return jsonResponse(403, { error: 'Table management permission is required.' });
   if (!serviceKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const adminRepository = new TableRepository(admin);
@@ -236,6 +235,8 @@ Deno.serve(async (request) => {
     const { data, error } = await adminRepository.create(validation.data!);
     if (error?.code === '23505') return jsonResponse(409, { error: 'Table number or QR code already exists.' });
     if (error) return jsonResponse(500, { error: 'Unable to create restaurant table.' });
+    const { error: auditError } = await caller.rpc('record_table_admin_action', { p_table_id: data.id, p_action: 'TABLE_CREATED', p_details: validation.data });
+    if (auditError) console.error('Unable to audit table creation', auditError);
     return jsonResponse(201, { data });
   }
 
@@ -250,6 +251,8 @@ Deno.serve(async (request) => {
     if (error?.code === '23505') return jsonResponse(409, { error: 'Table number or QR code already exists.' });
     if (error) return jsonResponse(500, { error: 'Unable to update restaurant table.' });
     if (!data) return jsonResponse(404, { error: 'Restaurant table was not found.' });
+    const { error: auditError } = await caller.rpc('record_table_admin_action', { p_table_id: tableId, p_action: 'TABLE_UPDATED', p_details: validation.data });
+    if (auditError) console.error('Unable to audit table update', auditError);
     return jsonResponse(200, { data });
   }
 

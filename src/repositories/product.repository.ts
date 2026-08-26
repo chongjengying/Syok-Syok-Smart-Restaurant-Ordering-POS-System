@@ -1,7 +1,7 @@
 import { apiRequest } from '../infrastructure/supabase/functionsClient';
 import { supabase } from '../infrastructure/supabase/client';
 import type { ApiResult, RequestOptions } from '../types/api';
-import type { ProductFilters, ProductPage, ProductRecord } from '../types/product';
+import type { ProductFilters, ProductManagementInput, ProductPage, ProductRecord } from '../types/product';
 
 export function fetchProducts(filters: ProductFilters = {}, { signal }: RequestOptions = {}) {
   return apiRequest('products', {
@@ -34,6 +34,30 @@ export function fetchAvailableProducts(
   options: RequestOptions = {},
 ) {
   return fetchProducts({ ...filters, availableOnly: true }, options);
+}
+
+const managedProductColumns = 'id, product_code, category_id, product_name, description, unit, cost_price, sell_price, status, is_available, image_path, created_at, updated_at';
+
+export function fetchManagedProducts() {
+  return supabase
+    .from('products')
+    .select(managedProductColumns)
+    .order('product_name') as unknown as Promise<ApiResult<Array<Record<string, unknown>>>>;
+}
+
+export function insertManagedProduct(input: ProductManagementInput) {
+  return supabase.rpc('save_admin_product', { p_product_id: null, p_payload: input }) as unknown as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function updateManagedProduct(productId: string, input: ProductManagementInput) {
+  return supabase.rpc('save_admin_product', { p_product_id: productId, p_payload: input }) as unknown as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function persistProductImagePath(productId: string, imagePath: string | null) {
+  return supabase.rpc('set_product_image_path', {
+    p_product_id: productId,
+    p_image_path: imagePath,
+  }) as unknown as Promise<ApiResult<Record<string, unknown>>>;
 }
 
 export function subscribeToCatalogChanges(

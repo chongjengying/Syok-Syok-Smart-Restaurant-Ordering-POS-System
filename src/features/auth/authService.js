@@ -7,6 +7,7 @@ import {
   fetchProfile,
   patchAuthMetadata,
   patchProfile,
+  recordSuccessfulLogin,
   subscribeToAuthState,
 } from './authRepository';
 
@@ -45,10 +46,15 @@ export function signUp(email, password, fullName) {
   return createAuthAccount(normalizedEmail, password, normalizedName);
 }
 
-export function signIn(email, password) {
+export async function signIn(email, password) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) return validationError('Email and password are required.');
-  return createAuthSession(normalizedEmail, password);
+  const result = await createAuthSession(normalizedEmail, password);
+  if (!result.error) {
+    const audit = await recordSuccessfulLogin();
+    if (audit.error) console.error('Unable to record login audit', audit.error);
+  }
+  return result;
 }
 
 export async function signOut() {

@@ -18,6 +18,7 @@ function mapCategory(category: CategoryRecord): Category {
     name: category.name,
     description: category.description || '',
     isActive: category.status !== false,
+    displayOrder: category.displayOrder || 0,
   };
 }
 

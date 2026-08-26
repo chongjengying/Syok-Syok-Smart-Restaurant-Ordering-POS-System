@@ -18,6 +18,7 @@ import { useCart } from '../hooks/useCart';
 import { useCheckout } from '../hooks/useCheckout';
 import { useTables } from '../hooks/useTables';
 import { useProfile } from '../hooks/useProfile';
+import { usePermissions } from '../hooks/usePermissions';
 import { useUnpaidOrders } from '../hooks/useUnpaidOrders';
 import { clearProductCache } from '../services/product-cache.service';
 import { changeCartItemQuantity, removeCartItem as removeCartEntry } from '../services/cart.service';
@@ -30,6 +31,8 @@ const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen')
 const ReportsScreen = lazy(() => import('../components/ReportsScreen'));
 const TableManagementScreen = lazy(() => import('../components/TableManagementScreen'));
 const UnpaidOrdersScreen = lazy(() => import('../components/UnpaidOrdersScreen'));
+const ProductManagementScreen = lazy(() => import('../components/ProductManagementScreen'));
+const AdminShell = lazy(() => import('../components/admin/AdminShell'));
 
 function OperationalScreenLoader({ lang }) {
   return <div className="w-full h-full flex items-center justify-center bg-[#121212] text-[#D4AF37] font-bold">{translate(lang, 'loading')}</div>;
@@ -43,9 +46,10 @@ export default function App() {
     isLoading: profileLoading,
     error: profileError,
   } = useProfile(Boolean(session));
+  const permissionState = usePermissions(Boolean(session));
 
   // Navigation includes order list → detail → payment → confirmation.
-  const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [currentScreen, setCurrentScreen] = useState(() => globalThis.location?.hash?.startsWith('#admin/') ? 'admin' : 'welcome');
   const [tableSelectionBackScreen, setTableSelectionBackScreen] = useState('welcome');
   const [orderDetailBackScreen, setOrderDetailBackScreen] = useState('unpaidOrders');
   const [paymentReturnScreen, setPaymentReturnScreen] = useState('orderDetail');
@@ -492,6 +496,18 @@ export default function App() {
   const canAccessReadyToServe = hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
   const canAccessReports = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
   const canAccessTables = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
+  const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
+    .some((permission) => permissionState.hasPermission(permission));
+  const canAccessAdmin = permissionState.permissions.some((permission) => [
+    'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit',
+    'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view',
+  ].includes(permission));
+  useEffect(() => {
+    if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen('welcome');
+    }
+  }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
 
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
@@ -569,12 +585,16 @@ export default function App() {
           onOpenReports={() => setCurrentScreen('reports')}
           onOpenTables={() => setCurrentScreen('tableManagement')}
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
+          onOpenProducts={() => setCurrentScreen('productManagement')}
+          onOpenAdmin={() => setCurrentScreen('admin')}
           canStartOrder={canStartOrder}
           canAccessKitchen={canAccessKitchen}
           canAccessReadyToServe={canAccessReadyToServe}
           canAccessReports={canAccessReports}
           canAccessTables={canAccessTables}
           canAccessUnpaidOrders={canAccessUnpaidOrders}
+          canManageProducts={canManageProducts}
+          canAccessAdmin={canAccessAdmin}
           lang={lang}
           setLang={setLang}
           installPrompt={installPrompt}
@@ -713,6 +733,19 @@ export default function App() {
           <UnpaidOrdersScreen onBack={() => setCurrentScreen('welcome')} onOpenOrder={handleOpenUnpaidOrder} lang={lang} />
         </Suspense>
       )}
+
+      {currentScreen === 'productManagement' && canManageProducts && (
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <ProductManagementScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} />
+        </Suspense>
+      )}
+
+      {currentScreen === 'admin' && canAccessAdmin && (
+        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
+          <AdminShell role={profile.role} permissions={permissionState.permissions} onBack={() => setCurrentScreen('welcome')} lang={lang} />
+        </Suspense>
+      )}
+      {currentScreen === 'admin' && permissionState.isLoading && <OperationalScreenLoader lang={lang} />}
 
       {currentScreen === 'orderDetail' && activeOrder?.id && (
         <OrderDetailScreen

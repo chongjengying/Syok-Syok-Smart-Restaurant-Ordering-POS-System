@@ -96,6 +96,36 @@ assert.match(roleRls, /public\.current_pos_role\(\)\s+in\s+\('ADMIN',\s*'MANAGER
 assert.match(roleRls, /staff_update_own_profile[\s\S]*id\s*=\s*auth\.uid\(\)/,
   'Non-admin staff profile writes must be limited to their own row.');
 
+const adminRbac = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260826140000_admin_rbac_and_priority_one.sql'),
+  'utf8',
+);
+assert.match(adminRbac, /create table if not exists public\.permissions/i,
+  'Granular permissions must be stored in PostgreSQL.');
+assert.match(adminRbac, /create table if not exists public\.role_permissions/i,
+  'Role permission assignments must be stored in PostgreSQL.');
+assert.match(adminRbac, /profile\.status\s*=\s*'ACTIVE'[\s\S]*permission\.code\s*=\s*p_permission/i,
+  'Permission checks must require an active profile and database assignment.');
+assert.match(adminRbac, /revoke insert, update, delete on public\.categories, public\.products from authenticated/i,
+  'Catalog mutations must be forced through audited RPCs.');
+assert.match(adminRbac, /LAST_ACTIVE_ADMIN_REQUIRED/i,
+  'The last active administrator must not be removable.');
+
+const adminPhaseB = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260826141000_admin_phase_b_reports_and_audit.sql'),
+  'utf8',
+);
+assert.match(adminPhaseB, /has_pos_permission\('payment\.refund'\)/i,
+  'Refunds must be protected by a granular database permission.');
+assert.match(adminPhaseB, /old_value[\s\S]*new_value/i,
+  'Authorization audits must retain old and new values.');
+
+const adminUsersFunction = await readFile(path.join(root, 'supabase', 'functions', 'admin-users', 'index.ts'), 'utf8');
+assert.match(adminUsersFunction, /auth\.admin\.inviteUserByEmail/i,
+  'Staff creation must use the server-side Auth Admin API.');
+assert.match(adminUsersFunction, /has_pos_permission/i,
+  'The Admin user boundary must verify database permissions.');
+
 const tableMoveRpc = await readFile(
   path.join(root, 'supabase', 'migrations', '20260812112000_bind_table_move_idempotency.sql'),
   'utf8',

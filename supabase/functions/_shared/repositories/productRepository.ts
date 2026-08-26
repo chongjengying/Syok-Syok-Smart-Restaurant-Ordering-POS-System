@@ -15,7 +15,7 @@ export class ProductRepository {
     let query = this.client
       .from('products')
       .select(
-        'id, product_code, category_id, product_name, description, unit, sell_price, status, is_available, image_url, categories(id, name)',
+        'id, product_code, category_id, product_name, description, unit, sell_price, status, is_available, image_path, categories(id, name)',
         { count: 'exact' },
       )
       .eq('status', true)
@@ -31,7 +31,7 @@ export class ProductRepository {
   findActiveById(productId: string) {
     return this.client
       .from('products')
-      .select('id, product_code, category_id, product_name, description, unit, sell_price, status, is_available, image_url, categories(id, name)')
+      .select('id, product_code, category_id, product_name, description, unit, sell_price, status, is_available, image_path, categories(id, name)')
       .eq('id', productId)
       .eq('status', true)
       .maybeSingle();

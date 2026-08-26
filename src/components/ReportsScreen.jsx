@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Eye, Loader2, PackageSearch, Printer, RefreshCw, TrendingUp, X } from 'lucide-react';
 import { useDailySalesReport } from '../hooks/useDailySalesReport';
 import { useProductSalesReport } from '../hooks/useProductSalesReport';
+import { useAdminReport } from '../hooks/useAdminReport';
 import { getOrder } from '../services/order.service';
 import { translate, translateStatus } from '../utils/i18n';
 
@@ -13,7 +14,7 @@ function today() {
   return `${year}-${month}-${day}`;
 }
 
-export default function ReportsScreen({ onBack, lang = 'en' }) {
+export default function ReportsScreen({ onBack, lang = 'en', embedded = false }) {
   const tr = (key) => translate(lang, key);
   const [reportType, setReportType] = useState('daily');
   const [dateFrom, setDateFrom] = useState(today());
@@ -25,6 +26,8 @@ export default function ReportsScreen({ onBack, lang = 'en' }) {
   const filters = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
   const dailyReport = useDailySalesReport(reportType === 'daily', filters);
   const productReport = useProductSalesReport(reportType === 'products', filters);
+  const extendedTypes = ['monthly','category','payment-method','staff','orders','cancellations','refunds','discounts'];
+  const extendedReport = useAdminReport(extendedTypes.includes(reportType), reportType, dateFrom, dateTo);
 
   const dailySummary = useMemo(() => {
     const orderIds = new Set();
@@ -47,7 +50,7 @@ export default function ReportsScreen({ onBack, lang = 'en' }) {
     sales: summary.sales + Number(row.gross_sales || 0),
   }), { quantity: 0, sales: 0 }), [productReport.rows]);
 
-  const activeReport = reportType === 'daily' ? dailyReport : productReport;
+  const activeReport = reportType === 'daily' ? dailyReport : reportType === 'products' ? productReport : extendedReport;
 
   const openTransaction = async (row) => {
     setSelectedRow(row);
@@ -64,17 +67,18 @@ export default function ReportsScreen({ onBack, lang = 'en' }) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#F5F6F8] text-[#121212]">
-      <header className="flex h-16 shrink-0 items-center justify-between bg-[#121212] px-6 text-white">
+    <div className={`flex ${embedded ? '' : 'h-full'} w-full flex-col ${embedded ? '' : 'overflow-hidden'} bg-[#F5F6F8] text-[#121212]`}>
+      {!embedded && <header className="flex h-16 shrink-0 items-center justify-between bg-[#121212] px-6 text-white">
         <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]"><ArrowLeft className="h-5 w-5" /> {tr('dashboard')}</button>
         <div className="flex items-center gap-2 font-black uppercase tracking-wider"><TrendingUp className="h-5 w-5 text-[#D4AF37]" /> {tr('salesReports')}</div>
         <button onClick={() => activeReport.refetch()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]"><RefreshCw className="h-4 w-4" /> {tr('refresh')}</button>
-      </header>
+      </header>}
 
-      <main className="flex-1 space-y-5 overflow-y-auto p-6">
-        <div className="grid max-w-xl grid-cols-2 gap-2 rounded-2xl bg-white p-2 shadow-sm">
-          <button onClick={() => setReportType('daily')} className={`rounded-xl px-4 py-3 text-sm font-black ${reportType === 'daily' ? 'bg-[#121212] text-[#D4AF37]' : 'text-gray-500'}`}>{tr('dailySalesSummary')}</button>
-          <button onClick={() => setReportType('products')} className={`rounded-xl px-4 py-3 text-sm font-black ${reportType === 'products' ? 'bg-[#121212] text-[#D4AF37]' : 'text-gray-500'}`}>{tr('productSalesReport')}</button>
+      {embedded && <div className="mb-5 flex items-center justify-between"><div><h1 className="text-2xl font-black">Reports</h1><p className="text-sm text-gray-500">Database-backed financial and product sales reports.</p></div><button onClick={() => activeReport.refetch()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div>}
+
+      <main className={`flex-1 space-y-5 ${embedded ? '' : 'overflow-y-auto p-6'}`}>
+        <div className="flex flex-wrap gap-2 rounded-2xl bg-white p-2 shadow-sm">
+          {[['daily',tr('dailySalesSummary')],['monthly','Monthly Sales'],['products',tr('productSalesReport')],['category','Category Sales'],['payment-method','Payment Methods'],['staff','Staff Sales'],['orders','Order Report'],['cancellations','Cancellations'],['refunds','Refunds'],['discounts','Discounts']].map(([id,label])=><button key={id} onClick={() => setReportType(id)} className={`rounded-xl px-4 py-3 text-sm font-black ${reportType === id ? 'bg-[#121212] text-[#D4AF37]' : 'text-gray-500'}`}>{label}</button>)}
         </div>
 
         <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-gray-200 bg-white p-4">
@@ -97,7 +101,7 @@ export default function ReportsScreen({ onBack, lang = 'en' }) {
               <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white"><table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">{tr('paidAt')}</th><th className="p-3">{tr('paymentNumber')}</th><th className="p-3">{tr('order')}</th><th className="p-3">{tr('method')}</th><th className="p-3">{tr('mode')}</th><th className="p-3 text-right">{tr('amount')}</th><th className="p-3 text-right">{tr('actions')}</th></tr></thead><tbody>{dailyReport.rows.map((row) => <tr key={row.payment_id} className="border-t border-gray-100"><td className="p-3">{new Date(row.paid_at).toLocaleString()}</td><td className="p-3 font-bold">{row.payment_number || '-'}</td><td className="p-3 font-bold">{row.order_number}</td><td className="p-3">{row.payment_method}</td><td className="p-3">{row.dining_mode}</td><td className="p-3 text-right font-black">RM {Number(row.amount_paid).toFixed(2)}</td><td className="p-3 text-right"><button onClick={() => void openTransaction(row)} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold hover:border-[#D4AF37]"><Eye className="h-4 w-4" /> {tr('view')}</button></td></tr>)}</tbody></table></div>
             )}
           </>
-        ) : (
+        ) : reportType === 'products' ? (
           <>
             <div className="grid gap-4 sm:grid-cols-3">
               <SummaryCard label={tr('productsSold')} value={productReport.rows.length} />
@@ -113,12 +117,20 @@ export default function ReportsScreen({ onBack, lang = 'en' }) {
               </div>
             )}
           </>
-        )}
+        ) : <GenericReport report={extendedReport} />}
       </main>
 
       {selectedRow && <TransactionModal row={selectedRow} order={selectedOrder} loading={isLoadingTransaction} error={transactionError} onClose={() => setSelectedRow(null)} lang={lang} />}
     </div>
   );
+}
+
+function GenericReport({ report }) {
+  if (report.error) return <ReportError message={report.error} />;
+  if (report.isLoading) return <ReportLoading label="Loading report…" />;
+  if (!report.rows.length) return <ReportEmpty label="No report data for this period." />;
+  const columns = Object.keys(report.rows[0]);
+  return <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white"><table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr>{columns.map(column=><th key={column} className="p-3">{column.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{report.rows.map((row,index)=><tr key={index} className="border-t">{columns.map(column=><td key={column} className="p-3">{typeof row[column]==='number' ? Number(row[column]).toFixed(2) : row[column]==null ? '-' : String(row[column])}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function SummaryCard({ label, value }) {

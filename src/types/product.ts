@@ -30,6 +30,8 @@ export interface ProductRecord {
   isAvailable?: boolean;
   /** Authoritative products.status value when returned by the transport. */
   status?: boolean;
+  imagePath?: string | null;
+  /** Legacy transport field retained while older Edge Functions are upgraded. */
   imageUrl?: string;
   optionGroups?: ProductOptionGroup[];
   [key: string]: unknown;
@@ -43,6 +45,35 @@ export interface Product extends Omit<ProductRecord, 'price' | 'description' | '
   isActive: boolean;
   isAvailable: boolean;
   imageUrl: string;
+  imagePath: string | null;
+}
+
+export interface ManagedProduct {
+  id: string;
+  code: string;
+  categoryId: string;
+  name: string;
+  description: string;
+  unit: string;
+  price: number;
+  cost: number;
+  isActive: boolean;
+  isAvailable: boolean;
+  imagePath: string | null;
+  imageUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductManagementInput {
+  categoryId: string;
+  name: string;
+  description?: string;
+  unit?: string;
+  price: number;
+  cost: number;
+  isActive: boolean;
+  isAvailable: boolean;
 }
 
 export interface ProductFilters {

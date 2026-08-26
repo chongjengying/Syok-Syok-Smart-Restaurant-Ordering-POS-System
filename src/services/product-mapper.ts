@@ -1,4 +1,5 @@
 import type { Product, ProductRecord } from '../types/product';
+import { getProductImageUrl } from './product-image.service';
 
 function normalizedProductStatus(product: ProductRecord): boolean {
   if (typeof product.status === 'boolean') return product.status;
@@ -13,13 +14,15 @@ export function mapProductRecord(product: ProductRecord): Product | null {
   const price = Number(product.price);
   if (!product.id || !product.name || !Number.isFinite(price) || price < 0) return null;
   const status = normalizedProductStatus(product);
+  const imagePath = typeof product.imagePath === 'string' && product.imagePath.trim() ? product.imagePath : null;
   return {
     ...product,
     code: typeof product.code === 'string' ? product.code : '',
     price,
     description: product.description || '',
     optionGroups: Array.isArray(product.optionGroups) ? product.optionGroups : [],
-    imageUrl: typeof product.imageUrl === 'string' ? product.imageUrl : '',
+    imagePath,
+    imageUrl: getProductImageUrl(imagePath),
     isActive: product.isActive ?? status,
     isAvailable: product.isAvailable ?? status,
   };

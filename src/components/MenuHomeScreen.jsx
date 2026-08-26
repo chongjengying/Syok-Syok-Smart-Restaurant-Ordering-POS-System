@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Search, ShoppingBag, ChefHat, ChevronRight, Plus, Edit3, LayoutDashboard } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Search, ShoppingBag, ChevronRight, Plus, Edit3, LayoutDashboard } from 'lucide-react';
 import { useCategories } from '../hooks/useCategories';
 import { useProducts } from '../hooks/useProducts';
 import { ProductEmptyState } from './products/ProductEmptyState';
@@ -9,14 +9,7 @@ import { translate, translations } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { calculateCartPreviewTotals, getCartItemCount, getCartItemPreviewTotal } from '../services/cart.service';
 import { formatMoney } from '../services/money.service';
-
-function ProductImage({ src, alt, fallbackLabel }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return <div className="flex h-full w-full items-center justify-center bg-[#121212] text-[#D4AF37]" aria-label={fallbackLabel}><ChefHat className="h-10 w-10" /></div>;
-  }
-  return <img src={src} alt={alt} onError={() => setFailed(true)} className="h-full w-full object-cover" loading="lazy" />;
-}
+import ProductImage from './products/ProductImage';
 
 export default function MenuHomeScreen({
   selectedCategory,
@@ -275,7 +268,7 @@ export default function MenuHomeScreen({
               >
                 {/* 1:1 Aspect Ratio Food Image with 16pt rounded corners */}
                 <div className="relative w-full h-[160px] rounded-xl overflow-hidden bg-gray-100 mb-3">
-                  <ProductImage src={dish.imageUrl} alt={dish.name} fallbackLabel={tr('productImageUnavailable')} />
+                  <ProductImage src={dish.imageUrl} alt={dish.name} fallbackLabel={tr('productImageUnavailable')} className="h-full w-full object-cover" />
                   {!dish.isAvailable && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/80 px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">{tr('soldOut')}</span>}
                 </div>
 

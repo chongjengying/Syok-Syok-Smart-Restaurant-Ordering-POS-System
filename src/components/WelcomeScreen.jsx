@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, TrendingUp, UtensilsCrossed, ReceiptText } from 'lucide-react';
+import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, TrendingUp, UtensilsCrossed, ReceiptText, PackageSearch, Settings } from 'lucide-react';
 import { LANGUAGE_LABELS, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 
@@ -10,12 +10,16 @@ export default function WelcomeScreen({
   onOpenReports,
   onOpenTables,
   onOpenUnpaidOrders,
+  onOpenProducts,
+  onOpenAdmin,
   canStartOrder,
   canAccessKitchen,
   canAccessReadyToServe,
   canAccessReports,
   canAccessTables,
   canAccessUnpaidOrders,
+  canManageProducts,
+  canAccessAdmin,
   lang,
   setLang,
   installPrompt,
@@ -106,7 +110,7 @@ export default function WelcomeScreen({
             </button>
           )}
 
-          {(canAccessKitchen || canAccessReadyToServe || canAccessReports || canAccessTables || canAccessUnpaidOrders) && (
+          {(canAccessKitchen || canAccessReadyToServe || canAccessReports || canAccessTables || canAccessUnpaidOrders || canManageProducts || canAccessAdmin) && (
             <div className="flex flex-wrap items-center justify-center gap-3">
               {canAccessUnpaidOrders && (
                 <button onClick={onOpenUnpaidOrders} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
@@ -131,6 +135,16 @@ export default function WelcomeScreen({
               {canAccessTables && (
                 <button onClick={onOpenTables} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
                   <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> {tr('tableOperations')}
+                </button>
+              )}
+              {canManageProducts && (
+                <button onClick={onOpenProducts} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
+                  <PackageSearch className="w-4 h-4 text-[#D4AF37]" /> Products
+                </button>
+              )}
+              {canAccessAdmin && (
+                <button onClick={onOpenAdmin} className="h-11 rounded-xl border border-[#D4AF37]/50 bg-black/70 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
+                  <Settings className="w-4 h-4 text-[#D4AF37]" /> Administration
                 </button>
               )}
             </div>

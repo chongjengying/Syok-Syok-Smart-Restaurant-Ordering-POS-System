@@ -14,6 +14,10 @@ export function createAuthSession(email, password) {
   return supabase.auth.signInWithPassword({ email, password });
 }
 
+export function recordSuccessfulLogin() {
+  return supabase.rpc('record_my_login');
+}
+
 export function destroyAuthSession() {
   return supabase.auth.signOut();
 }
