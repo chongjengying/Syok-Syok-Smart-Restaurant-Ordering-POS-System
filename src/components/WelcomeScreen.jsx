@@ -2,6 +2,7 @@ import React from 'react';
 import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, TrendingUp, UtensilsCrossed, ReceiptText, PackageSearch, Settings } from 'lucide-react';
 import { LANGUAGE_LABELS, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
+import { APP_VERSION } from '../config/appVersion';
 
 export default function WelcomeScreen({
   onStartOrder,
@@ -164,9 +165,9 @@ export default function WelcomeScreen({
       </div>
 
       {/* Footer Info */}
-      <div className="relative z-10 flex items-center justify-between text-xs text-gray-400 border-t border-white/10 pt-4">
-        <span>{tr('footerVersion')}</span>
-        <div className="flex items-center gap-4">
+      <div className="relative z-10 flex flex-col items-start gap-3 border-t border-white/10 pt-4 text-xs text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+        <span>{tr('footerVersion')} · {APP_VERSION}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             {tr('footerKitchenConnected')}
