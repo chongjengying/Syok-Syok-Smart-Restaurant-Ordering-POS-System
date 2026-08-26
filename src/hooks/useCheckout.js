@@ -16,6 +16,7 @@ function activeOrderView(order, tableLabel = '') {
     tableId: order.restaurant_table_id || order.table?.id || null,
     selectedTable: order.restaurant_tables?.table_number || order.table?.tableNumber || tableLabel,
     createdAt: order.created_at || order.createdAt,
+    draftVersion: Number(order.draft_version ?? order.draftVersion ?? 0),
     total: Number(order.total || 0),
   };
 }
@@ -61,9 +62,11 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
   const requestKey = useRef(null);
   const paymentRequest = useRef(null);
   const draftSaveQueue = useRef(Promise.resolve({ data: null, error: null }));
+  const draftVersion = useRef(0);
 
   const applyPersistedOrder = useCallback((order, fallbackTableLabel = '') => {
     const activeView = activeOrderView(order, fallbackTableLabel);
+    draftVersion.current = activeView.draftVersion;
     setDraftCart(draftCartView(order));
     setOrderHistory((order.items || []).filter((item) => item.itemStatus !== 'DRAFT'));
     setActiveOrder(activeView);
@@ -156,7 +159,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     if (!activeOrder?.id) return { data: null, error: new Error('Create an order context before adding products.') };
     const orderId = activeOrder.id;
     const operation = draftSaveQueue.current.catch(() => null).then(async () => {
-      const result = await saveOrderDraftItems(orderId, nextCart);
+      const result = await saveOrderDraftItems(orderId, nextCart, draftVersion.current);
       if (result.error) return result;
       const persisted = await getOrder(orderId);
       if (persisted.error) return persisted;
@@ -204,7 +207,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     }
     if (!activeOrder?.id) return { data: null, error: new Error('No active order context.') };
     await draftSaveQueue.current;
-    const saved = await saveOrderDraftItems(activeOrder.id, cart);
+    const saved = await saveOrderDraftItems(activeOrder.id, cart, draftVersion.current);
     if (saved.error) return saved;
     const result = await submitOrder(activeOrder.id, requestKey.current);
     if (result.error) {
@@ -231,7 +234,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
       if (draft.error) return draft;
       orderId = draft.data.id;
     }
-    const saved = await saveOrderDraftItems(orderId, cart);
+    const saved = await saveOrderDraftItems(orderId, cart, draftVersion.current);
     if (saved.error) return saved;
     const packagingResult = await saveTakeawayPackaging(orderId, packaging);
     if (packagingResult.error) return packagingResult;

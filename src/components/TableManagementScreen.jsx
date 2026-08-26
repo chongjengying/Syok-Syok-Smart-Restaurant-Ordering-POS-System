@@ -145,7 +145,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
               </div>
             )}
             <div className="mt-4 grid grid-cols-3 gap-2">
-              {destinations.map((table) => <button key={table.id} disabled={Boolean(updatingId)} onClick={async () => { if (!globalThis.confirm(tr('moveConfirm', { order: move.orderNumber, table: table.tableNumber }))) return; const result = await moveOrder(move.orderId, table.id); if (!result.error) setMove(null); }} className="rounded-xl border border-gray-200 p-3 text-sm font-black hover:border-[#D4AF37] disabled:opacity-50">{table.tableNumber}<span className="block text-[9px] text-gray-400">{translateStatus(lang, table.status)}</span></button>)}
+              {destinations.map((table) => <button key={table.id} disabled={Boolean(updatingId)} onClick={async () => { if (!globalThis.confirm(tr('moveConfirm', { order: move.orderNumber, table: table.tableNumber }))) return; const result = await moveOrder(move.orderId, table.id, move.sourceTableId); if (!result.error) setMove(null); }} className="rounded-xl border border-gray-200 p-3 text-sm font-black hover:border-[#D4AF37] disabled:opacity-50">{table.tableNumber}<span className="block text-[9px] text-gray-400">{translateStatus(lang, table.status)}</span></button>)}
             </div>
             {destinations.length === 0 && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{tr('noDestination')}</p>}
             <button onClick={() => setMove(null)} className="mt-5 w-full rounded-xl bg-gray-100 py-3 text-sm font-bold">{tr('cancel')}</button>

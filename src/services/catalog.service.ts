@@ -82,19 +82,21 @@ export function getAllProducts(
   options: RequestOptions = {},
 ): Promise<ApiResult<Product[]>> {
   const limit = 200;
-  const products: Product[] = [];
-  let offset = 0;
   const load = async (): Promise<ApiResult<Product[]>> => {
-    while (offset <= 10_000) {
-      const result = await getProducts({ ...filters, limit, offset }, options);
-      if (result.error || !result.data) return { data: null, error: result.error };
-      products.push(...result.data.products);
-      if (result.data.products.length < limit || (typeof result.data.pagination.total === 'number' && products.length >= result.data.pagination.total)) {
-        return { data: products, error: null };
-      }
-      offset += limit;
-    }
-    return { data: null, error: new Error('Product catalogue exceeds the supported page range.') };
+    const first = await getProducts({ ...filters, limit, offset: 0 }, options);
+    if (first.error || !first.data) return { data: null, error: first.error };
+    const total = first.data.pagination.total;
+    if (typeof total !== 'number' || total <= limit) return { data: first.data.products, error: null };
+    if (total > 10_200) return { data: null, error: new Error('Product catalogue exceeds the supported page range.') };
+
+    const offsets = Array.from({ length: Math.ceil(total / limit) - 1 }, (_, index) => (index + 1) * limit);
+    const pages = await Promise.all(offsets.map((offset) => getProducts({ ...filters, limit, offset }, options)));
+    const failed = pages.find((result) => result.error || !result.data);
+    if (failed) return { data: null, error: failed.error };
+    return {
+      data: [first, ...pages].flatMap((result) => result.data?.products || []),
+      error: null,
+    };
   };
   return load();
 }
@@ -104,22 +106,17 @@ export async function getAllAvailableProducts(
   options: RequestOptions = {},
 ): Promise<ApiResult<Product[]>> {
   const limit = 200;
-  const products: Product[] = [];
-  let offset = 0;
+  const first = await getAvailableProducts({ ...filters, limit, offset: 0 }, options);
+  if (first.error || !first.data) return { data: null, error: first.error };
+  const total = first.data.pagination.total;
+  if (typeof total !== 'number' || total <= limit) return { data: first.data.products, error: null };
+  if (total > 10_200) return { data: null, error: new Error('Product catalogue exceeds the supported page range.') };
 
-  while (offset <= 10_000) {
-    const result = await getAvailableProducts({ ...filters, limit, offset }, options);
-    if (result.error || !result.data) return { data: null, error: result.error };
-
-    products.push(...result.data.products);
-    const total = result.data.pagination.total;
-    if (result.data.products.length < limit || (typeof total === 'number' && products.length >= total)) {
-      return { data: products, error: null };
-    }
-    offset += limit;
-  }
-
-  return { data: null, error: new Error('Product catalogue exceeds the supported page range.') };
+  const offsets = Array.from({ length: Math.ceil(total / limit) - 1 }, (_, index) => (index + 1) * limit);
+  const pages = await Promise.all(offsets.map((offset) => getAvailableProducts({ ...filters, limit, offset }, options)));
+  const failed = pages.find((result) => result.error || !result.data);
+  if (failed) return { data: null, error: failed.error };
+  return { data: [first, ...pages].flatMap((result) => result.data?.products || []), error: null };
 }
 
 export async function getProductById(

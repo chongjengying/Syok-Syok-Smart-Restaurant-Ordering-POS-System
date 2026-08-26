@@ -5,6 +5,9 @@ export function useAuthSession() {
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
+    () => new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
+  );
 
   useEffect(() => {
     let active = true;
@@ -16,11 +19,12 @@ export function useAuthSession() {
       setIsLoading(false);
     });
 
-    const unsubscribe = onAuthStateChange((_event, nextSession) => {
+    const unsubscribe = onAuthStateChange((event, nextSession) => {
       if (!active) return;
       setSession(nextSession);
       setError(null);
       setIsLoading(false);
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
     });
 
     return () => {
@@ -35,5 +39,12 @@ export function useAuthSession() {
     return result;
   }, []);
 
-  return { session, isLoading, error, signOut: signOutSession };
+  return {
+    session,
+    isLoading,
+    error,
+    signOut: signOutSession,
+    isPasswordRecovery,
+    finishPasswordRecovery: () => setIsPasswordRecovery(false),
+  };
 }

@@ -14,6 +14,24 @@ export function createAuthSession(email, password) {
   return supabase.auth.signInWithPassword({ email, password });
 }
 
+export function resendSignupConfirmation(email) {
+  return supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: window.location.origin },
+  });
+}
+
+export function requestPasswordRecovery(email) {
+  return supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+}
+
+export function replacePassword(password) {
+  return supabase.auth.updateUser({ password });
+}
+
 export function recordSuccessfulLogin() {
   return supabase.rpc('record_my_login');
 }
@@ -40,6 +58,22 @@ export function fetchProfile(userId) {
     .from('profiles')
     .select(profileColumns)
     .eq('id', userId)
+    .single();
+}
+
+export function fetchStaffProfiles() {
+  return supabase
+    .from('profiles')
+    .select(profileColumns)
+    .order('created_at', { ascending: false });
+}
+
+export function patchStaffAccess(userId, values) {
+  return supabase
+    .from('profiles')
+    .update(values)
+    .eq('id', userId)
+    .select(profileColumns)
     .single();
 }
 

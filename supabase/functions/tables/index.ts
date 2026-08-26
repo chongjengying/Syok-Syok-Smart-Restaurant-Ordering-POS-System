@@ -196,8 +196,11 @@ Deno.serve(async (request) => {
     const destinationTableId = typeof body.data?.destinationTableId === 'string'
       ? body.data.destinationTableId.trim()
       : '';
-    if (!orderId || !destinationTableId) {
-      return jsonResponse(400, { error: 'orderId and destinationTableId are required.' });
+    const expectedSourceTableId = typeof body.data?.expectedSourceTableId === 'string'
+      ? body.data.expectedSourceTableId.trim()
+      : '';
+    if (!orderId || !destinationTableId || !expectedSourceTableId) {
+      return jsonResponse(400, { error: 'orderId, destinationTableId and expectedSourceTableId are required.' });
     }
     const operationKey = typeof body.data?.operationKey === 'string'
       ? body.data.operationKey.trim().slice(0, 128)
@@ -207,6 +210,7 @@ Deno.serve(async (request) => {
       p_order_id: orderId,
       p_destination_table_id: destinationTableId,
       p_operation_key: operationKey,
+      p_expected_source_table_id: expectedSourceTableId,
     });
     if (error) {
       const message = error.message || 'Unable to move the order.';

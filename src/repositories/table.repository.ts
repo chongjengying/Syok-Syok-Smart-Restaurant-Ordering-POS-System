@@ -65,11 +65,11 @@ export function restoreTable(tableId: string, operationKey: string) {
   }) as Promise<ApiResult<RestaurantTableRecord>>;
 }
 
-export function moveOrder(orderId: string, destinationTableId: string, operationKey: string) {
+export function moveOrder(orderId: string, destinationTableId: string, expectedSourceTableId: string, operationKey: string) {
   return apiRequest('tables', {
     method: 'POST',
     path: 'move-order',
-    body: { orderId, destinationTableId, operationKey },
+    body: { orderId, destinationTableId, expectedSourceTableId, operationKey },
   }) as Promise<ApiResult<unknown>>;
 }
 

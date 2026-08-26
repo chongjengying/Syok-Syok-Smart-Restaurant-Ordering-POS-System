@@ -5,8 +5,13 @@ import {
   fetchAuthSession,
   fetchAuthUser,
   fetchProfile,
+  fetchStaffProfiles,
   patchAuthMetadata,
+  replacePassword,
+  requestPasswordRecovery,
+  resendSignupConfirmation,
   patchProfile,
+  patchStaffAccess,
   recordSuccessfulLogin,
   subscribeToAuthState,
 } from './authRepository';
@@ -57,6 +62,40 @@ export async function signIn(email, password) {
   return result;
 }
 
+export function resendConfirmation(email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return validationError('Email is required.');
+  return resendSignupConfirmation(normalizedEmail);
+}
+
+export function sendPasswordReset(email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return validationError('Email is required.');
+  return requestPasswordRecovery(normalizedEmail);
+}
+
+export function updatePassword(password) {
+  if (password.length < 8) return validationError('Password must be at least 8 characters long.');
+  return replacePassword(password);
+}
+
+export function resendConfirmation(email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return validationError('Email is required.');
+  return resendSignupConfirmation(normalizedEmail);
+}
+
+export function sendPasswordReset(email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return validationError('Email is required.');
+  return requestPasswordRecovery(normalizedEmail);
+}
+
+export function updatePassword(password) {
+  if (password.length < 8) return validationError('Password must be at least 8 characters long.');
+  return replacePassword(password);
+}
+
 export async function signOut() {
   const { error } = await destroyAuthSession();
   return { error };
@@ -84,6 +123,19 @@ export async function getProfile() {
   const { data, error } = await fetchProfile(userResult.data.id);
   if (error) return { data: null, error };
   return { data: mapProfile(data, userResult.data), error: null };
+}
+
+export function listStaffProfiles() {
+  return fetchStaffProfiles();
+}
+
+export function updateStaffAccess(userId, role, status) {
+  const allowedRoles = ['ADMIN', 'MANAGER', 'WAITER', 'CASHIER', 'KITCHEN'];
+  const allowedStatuses = ['ACTIVE', 'INACTIVE', 'LOCKED'];
+  if (!userId) return validationError('Staff account is required.');
+  if (!allowedRoles.includes(role)) return validationError('Select a valid staff role.');
+  if (!allowedStatuses.includes(status)) return validationError('Select a valid account status.');
+  return patchStaffAccess(userId, { role_name: role, status });
 }
 
 export async function updateProfile(formData) {

@@ -25,8 +25,8 @@ export function insertOrderDraft(input: { diningMode: string; tableId: string | 
   return apiRequest('orders', { method: 'POST', body: { ...input, draft: true } }) as Promise<ApiResult<{ id: string; payment_id: string }>>;
 }
 
-export function replaceOrderDraftItems(orderId: string, items: PersistedOrderInput['items']) {
-  return apiRequest('orders', { method: 'POST', path: `${orderId}/draft-items`, body: { items } }) as Promise<ApiResult<OrderRecord>>;
+export function replaceOrderDraftItems(orderId: string, items: PersistedOrderInput['items'], expectedVersion: number) {
+  return apiRequest('orders', { method: 'POST', path: `${orderId}/draft-items`, body: { items, expectedVersion } }) as Promise<ApiResult<OrderRecord>>;
 }
 
 export function submitOrderDraft(orderId: string, idempotencyKey: string) {

@@ -40,7 +40,7 @@ function OperationalScreenLoader({ lang }) {
 
 export default function App() {
   // Auth State
-  const { session, isLoading: authLoading, signOut } = useAuthSession();
+  const { session, isLoading: authLoading, signOut, isPasswordRecovery, finishPasswordRecovery } = useAuthSession();
   const {
     profile,
     isLoading: profileLoading,
@@ -508,6 +508,7 @@ export default function App() {
       setCurrentScreen('welcome');
     }
   }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
+  const canAccessStaffAccounts = profile?.role === 'ADMIN';
 
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
@@ -526,7 +527,7 @@ export default function App() {
   }
 
   // Not authenticated → show Login Screen (inside IpadShell for consistent framing)
-  if (!session) {
+  if (!session || isPasswordRecovery) {
     return (
       <IpadShell
         deviceMode={deviceMode}
@@ -535,7 +536,12 @@ export default function App() {
         lang={lang}
         setLang={setLang}
       >
-        <AuthScreen lang={lang} setLang={setLang} />
+        <AuthScreen
+          lang={lang}
+          setLang={setLang}
+          passwordRecovery={isPasswordRecovery}
+          onPasswordRecovered={finishPasswordRecovery}
+        />
       </IpadShell>
     );
   }
@@ -552,8 +558,10 @@ export default function App() {
         <div className="w-full h-full bg-[#121212] text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
           <h1 className="text-2xl font-black text-[#D4AF37]">{tr('terminalUnavailable')}</h1>
           <p className="max-w-md text-sm text-gray-400">
-            {profile?.status && profile.status !== 'ACTIVE'
-              ? `This staff account is ${profile.status.toLowerCase()}. Ask an administrator to restore access.`
+            {profile?.status === 'INACTIVE'
+              ? tr('staffPendingActivation')
+              : profile?.status && profile.status !== 'ACTIVE'
+                ? tr('staffAccessDisabled', { status: profile.status.toLowerCase() })
               : profileError || 'A valid staff profile could not be loaded.'}
           </p>
           <button onClick={handleLogout} className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-black text-[#121212]">
@@ -585,9 +593,6 @@ export default function App() {
           onOpenReports={() => setCurrentScreen('reports')}
           onOpenTables={() => setCurrentScreen('tableManagement')}
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
-          onOpenProducts={() => setCurrentScreen('productManagement')}
-          onOpenAdmin={() => setCurrentScreen('admin')}
-          canStartOrder={canStartOrder}
           canAccessKitchen={canAccessKitchen}
           canAccessReadyToServe={canAccessReadyToServe}
           canAccessReports={canAccessReports}
@@ -595,6 +600,7 @@ export default function App() {
           canAccessUnpaidOrders={canAccessUnpaidOrders}
           canManageProducts={canManageProducts}
           canAccessAdmin={canAccessAdmin}
+          canAccessStaffAccounts={canAccessStaffAccounts}
           lang={lang}
           setLang={setLang}
           installPrompt={installPrompt}
@@ -733,19 +739,6 @@ export default function App() {
           <UnpaidOrdersScreen onBack={() => setCurrentScreen('welcome')} onOpenOrder={handleOpenUnpaidOrder} lang={lang} />
         </Suspense>
       )}
-
-      {currentScreen === 'productManagement' && canManageProducts && (
-        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
-          <ProductManagementScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} />
-        </Suspense>
-      )}
-
-      {currentScreen === 'admin' && canAccessAdmin && (
-        <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
-          <AdminShell role={profile.role} permissions={permissionState.permissions} onBack={() => setCurrentScreen('welcome')} lang={lang} />
-        </Suspense>
-      )}
-      {currentScreen === 'admin' && permissionState.isLoading && <OperationalScreenLoader lang={lang} />}
 
       {currentScreen === 'orderDetail' && activeOrder?.id && (
         <OrderDetailScreen

@@ -220,20 +220,14 @@ Deno.serve(async (request) => {
       }
       const { data, error } = await supabase
         .from('orders')
-        .select('*, restaurant_tables(table_number, table_name, area), order_item_batches(*), order_items(*, products(id, product_name), order_item_options(*))')
+        .select('*, restaurant_tables(table_number, table_name, area), order_item_batches!inner(*), order_items!inner(*, products(id, product_name), order_item_options(*))')
         .in('payment_status', ['UNPAID', 'PAID'])
         .in('status', ['CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'])
+        .in('order_item_batches.status', ['PENDING', 'PREPARING', 'READY'])
+        .in('order_items.item_status', ['SUBMITTED', 'PREPARING', 'READY'])
         .order('created_at');
       if (error) return jsonResponse(500, { error: 'Unable to load the kitchen queue.' });
-      return jsonResponse(200, {
-        data: (data || []).map((order) => ({
-          ...order,
-          order_item_batches: (order.order_item_batches || []).filter((batch) =>
-            ['PENDING', 'PREPARING', 'READY'].includes(batch.status)),
-          order_items: (order.order_items || []).filter((item) =>
-            ['SUBMITTED', 'PREPARING', 'READY'].includes(item.item_status)),
-        })).filter((order) => order.order_items.length > 0 && order.order_item_batches.length > 0),
-      });
+      return jsonResponse(200, { data: data || [] });
     }
     const [orderResult, historyResult] = await Promise.all([
       supabase
@@ -368,7 +362,15 @@ Deno.serve(async (request) => {
       const items = Array.isArray((body as Record<string, unknown>)?.items)
         ? (body as Record<string, unknown>).items
         : [];
-      const { data, error } = await supabase.rpc('replace_pos_draft_items', { p_order_id: orderId, p_items: items });
+      const expectedVersion = Number((body as Record<string, unknown>)?.expectedVersion);
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
+        return jsonResponse(400, { error: 'A valid expectedVersion is required.', code: 'DRAFT_VERSION_REQUIRED' });
+      }
+      const { data, error } = await supabase.rpc('replace_pos_draft_items', {
+        p_order_id: orderId,
+        p_items: items,
+        p_expected_version: expectedVersion,
+      });
       if (error) {
         const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'DRAFT_SAVE_FAILED';
         return jsonResponse(code === 'ORDER_NOT_FOUND' ? 404 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });

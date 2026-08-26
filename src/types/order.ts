@@ -38,6 +38,7 @@ export interface OrderItemBatchRecord {
   batch_no: number;
   status: 'PENDING' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
   created_at: string;
+  draft_version?: number;
   started_at?: string | null;
   ready_at?: string | null;
   served_at?: string | null;
@@ -115,6 +116,7 @@ export interface Order {
   paymentStatus: PaymentStatus;
   diningMode: DiningMode;
   createdAt: string;
+  draftVersion: number;
   subtotal: number;
   tax: number;
   serviceCharge: number;

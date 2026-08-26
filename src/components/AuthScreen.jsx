@@ -1,31 +1,48 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
-import { signUp, signIn } from '../features/auth/authService';
+import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
 import { soundFx } from '../utils/audio';
 import { translate } from '../utils/i18n';
 
-export default function AuthScreen({ lang = 'en', setLang }) {
+export default function AuthScreen({ lang = 'en', setLang, passwordRecovery = false, onPasswordRecovered }) {
   const tr = (key) => translate(lang, key);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [focusedField, setFocusedField] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
 
-    if (!email.trim() || !password.trim()) {
+    if (isForgotPassword) {
+      if (!email.trim()) {
+        setError(tr('emailRequired'));
+        return;
+      }
+      setIsLoading(true);
+      const { error: resetError } = await sendPasswordReset(email);
+      setIsLoading(false);
+      if (resetError) setError(resetError.message);
+      else setNotice(tr('passwordResetSent'));
+      return;
+    }
+
+    if (!passwordRecovery && (!email.trim() || !password.trim())) {
       setError(tr('loginRequired'));
       soundFx.playRemove();
       return;
     }
 
-    if (isSignUp && !fullName.trim()) {
+    if (!passwordRecovery && isSignUp && !fullName.trim()) {
       setError(tr('nameRequired'));
       soundFx.playRemove();
       return;
@@ -37,11 +54,24 @@ export default function AuthScreen({ lang = 'en', setLang }) {
       return;
     }
 
+    if ((isSignUp || passwordRecovery) && password !== confirmPassword) {
+      setError(tr('passwordMismatch'));
+      return;
+    }
+
     setIsLoading(true);
     soundFx.playTap();
 
     try {
-      if (isSignUp) {
+      if (passwordRecovery) {
+        const { error: authError } = await updatePassword(password);
+        if (authError) setError(authError.message);
+        else {
+          setNotice(tr('passwordUpdated'));
+          window.history.replaceState({}, document.title, window.location.pathname);
+          onPasswordRecovered?.();
+        }
+      } else if (isSignUp) {
         const { data, error: authError } = await signUp(
           email.trim(),
           password,
@@ -54,7 +84,7 @@ export default function AuthScreen({ lang = 'en', setLang }) {
         } else {
           soundFx.playSuccess();
           if (!data?.session) {
-            setError(tr('accountCreated'));
+            setNotice(tr('accountCreated'));
           }
         }
       } else {
@@ -169,15 +199,15 @@ export default function AuthScreen({ lang = 'en', setLang }) {
             </div>
 
             <h1 className="text-[20px] font-bold text-white tracking-tight">
-              {isSignUp ? tr('signupTitle') : tr('loginTitle')}
+              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : tr('loginTitle')}
             </h1>
             <p className="text-gray-500 text-xs mt-1.5 font-medium">
-              {isSignUp ? tr('signupSubtitle') : tr('loginSubtitle')}
+              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : tr('loginSubtitle')}
             </p>
           </div>
 
           {/* Tab Selection */}
-          <div className="flex border-b border-white/[0.08] mb-6">
+          {!passwordRecovery && !isForgotPassword && <div className="flex border-b border-white/[0.08] mb-6">
             <button
               type="button"
               onClick={() => {
@@ -210,12 +240,12 @@ export default function AuthScreen({ lang = 'en', setLang }) {
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#D4AF37]" />
               )}
             </button>
-          </div>
+          </div>}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Full Name Field (Sign Up Only) */}
-            {isSignUp && (
+            {isSignUp && !passwordRecovery && !isForgotPassword && (
               <div className="relative group">
                 <div
                   className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
@@ -247,7 +277,7 @@ export default function AuthScreen({ lang = 'en', setLang }) {
             )}
 
             {/* Email Field */}
-            <div className="relative group">
+            {!passwordRecovery && <div className="relative group">
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'email'
@@ -274,10 +304,10 @@ export default function AuthScreen({ lang = 'en', setLang }) {
                   className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
                 />
               </div>
-            </div>
+            </div>}
 
             {/* Password Field */}
-            <div className="relative group">
+            {!isForgotPassword && <div className="relative group">
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'password'
@@ -315,7 +345,24 @@ export default function AuthScreen({ lang = 'en', setLang }) {
                   }
                 </button>
               </div>
-            </div>
+            </div>}
+
+            {(isSignUp || passwordRecovery) && !isForgotPassword && (
+              <div className="relative group">
+                <div className="flex h-[52px] items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-4">
+                  <Lock className="h-[18px] w-[18px] shrink-0 text-gray-500" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(event) => { setConfirmPassword(event.target.value); setError(''); }}
+                    placeholder={tr('confirmPassword')}
+                    autoComplete="new-password"
+                    required
+                    className="flex-1 bg-transparent text-[14px] font-medium text-white outline-none placeholder:text-gray-600"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Alert Message */}
             {error && (
@@ -329,6 +376,12 @@ export default function AuthScreen({ lang = 'en', setLang }) {
               >
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>{error}</span>
+              </div>
+            )}
+            {notice && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3.5 text-[13px] font-medium leading-relaxed text-emerald-400">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{notice}</span>
               </div>
             )}
 
@@ -345,15 +398,31 @@ export default function AuthScreen({ lang = 'en', setLang }) {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{isSignUp ? tr('creatingAccount') : tr('signingIn')}</span>
+                  <span>{isForgotPassword ? tr('sending') : passwordRecovery ? tr('saving') : isSignUp ? tr('creatingAccount') : tr('signingIn')}</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-5 h-5" />
-                  <span>{isSignUp ? tr('register') : tr('signIn')}</span>
+                  <span>{isForgotPassword ? tr('sendResetLink') : passwordRecovery ? tr('updatePassword') : isSignUp ? tr('register') : tr('signIn')}</span>
                 </>
               )}
             </button>
+
+            {!passwordRecovery && !isSignUp && (
+              <button type="button" onClick={() => { setIsForgotPassword(!isForgotPassword); setError(''); setNotice(''); }} className="w-full text-xs font-semibold text-[#D4AF37] hover:text-[#E7C75A]">
+                {isForgotPassword ? tr('backToSignIn') : tr('forgotPassword')}
+              </button>
+            )}
+
+            {!passwordRecovery && isSignUp && (
+              <button type="button" onClick={async () => {
+                setError(''); setNotice('');
+                const { error: resendError } = await resendConfirmation(email);
+                if (resendError) setError(resendError.message); else setNotice(tr('confirmationResent'));
+              }} className="w-full text-xs font-semibold text-gray-400 hover:text-[#D4AF37]">
+                {tr('resendConfirmation')}
+              </button>
+            )}
           </form>
 
           {/* Footer Secured Badge */}

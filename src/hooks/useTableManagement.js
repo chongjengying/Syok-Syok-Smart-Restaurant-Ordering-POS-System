@@ -39,7 +39,10 @@ export function useTableManagement(enabled, { includeInactive = false } = {}) {
     startCleaning: (tableId) => execute(tableId, () => startTableCleaning(tableId)),
     setOutOfService: (tableId, reason) => execute(tableId, () => setTableOutOfService(tableId, reason)),
     restore: (tableId) => execute(tableId, () => restoreRestaurantTable(tableId)),
-    moveOrder: (orderId, destinationTableId) => execute(orderId, () => moveOrderToTable(orderId, destinationTableId)),
+    moveOrder: (orderId, destinationTableId, expectedSourceTableId) => execute(
+      orderId,
+      () => moveOrderToTable(orderId, destinationTableId, expectedSourceTableId),
+    ),
     create: (input) => execute('new-table', () => createTable(input)),
     edit: (tableId, input) => execute(tableId, () => updateTable(tableId, input)),
   };

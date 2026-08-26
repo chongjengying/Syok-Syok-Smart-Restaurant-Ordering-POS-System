@@ -122,12 +122,13 @@ export async function restoreRestaurantTable(tableId: string, operationKey = cry
 export function moveOrderToTable(
   orderId: string,
   destinationTableId: string,
+  expectedSourceTableId: string,
   operationKey = crypto.randomUUID(),
 ) {
-  if (!orderId || !destinationTableId) {
-    return Promise.resolve({ data: null, error: new Error('Order and destination table are required.') });
+  if (!orderId || !destinationTableId || !expectedSourceTableId) {
+    return Promise.resolve({ data: null, error: new Error('Order, source table and destination table are required.') });
   }
-  return moveOrder(orderId, destinationTableId, operationKey);
+  return moveOrder(orderId, destinationTableId, expectedSourceTableId, operationKey);
 }
 
 export const deleteTable = removeTable;

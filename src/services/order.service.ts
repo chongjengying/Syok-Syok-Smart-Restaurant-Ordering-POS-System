@@ -108,10 +108,10 @@ export function createOrderDraft(diningMode: 'dine-in' | 'takeaway', tableId: st
   return insertOrderDraft({ diningMode, tableId: diningMode === 'dine-in' ? tableId : null, idempotencyKey });
 }
 
-export function saveOrderDraftItems(orderId: string, cart: CreateOrderInput['cart']) {
+export function saveOrderDraftItems(orderId: string, cart: CreateOrderInput['cart'], expectedVersion: number) {
   try {
     const items = cart.length ? buildOrderItems(cart) : [];
-    return replaceOrderDraftItems(orderId, items);
+    return replaceOrderDraftItems(orderId, items, expectedVersion);
   } catch (error) {
     return Promise.resolve({ data: null, error: error instanceof Error ? error : new Error('Unable to save draft items.') });
   }
@@ -152,6 +152,7 @@ export function mapOrder(order: OrderRecord): Order {
     paymentStatus: order.payment_status,
     diningMode: order.dining_mode,
     createdAt: order.created_at,
+    draftVersion: Number(order.draft_version || 0),
     subtotal: Number(order.subtotal || 0),
     tax: Number(order.tax || 0),
     serviceCharge: Number(order.service_charge || 0),
