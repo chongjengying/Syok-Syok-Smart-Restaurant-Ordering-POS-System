@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';import {formatConfiguredCurrency,validateLogoFile,validateSystemSettings} from '../src/utils/systemSettings.validation.js';import {translate} from '../src/utils/i18n.js';
+import {buildSettingsSectionRequest,isSettingsSectionDirty,reconcileSavedSettingsDraft,resetSettingsSection} from '../src/utils/systemSettings.sections.js';
+import {formatMoney} from '../src/services/money.service.ts';
 const base={restaurantInfo:{restaurantName:'Syok Syok',branchCode:'JB01',email:'admin@example.com'},taxRate:6,serviceChargeRate:10,currencyCode:'MYR',timezone:'Asia/Kuala_Lumpur',defaultLanguage:'en',enabledLanguages:['en','zh','ms'],receiptConfig:{copies:1},printers:[],stations:[]};
 assert.deepEqual(validateSystemSettings(base),[]);assert.match(validateSystemSettings({...base,taxRate:-1})[0],/Tax rate/);assert.match(validateSystemSettings({...base,serviceChargeRate:101})[0],/Service charge/);assert.match(validateSystemSettings({...base,currencyCode:'RM'})[0],/Currency/);assert.match(validateSystemSettings({...base,defaultLanguage:'zh',enabledLanguages:['en']})[0],/Default language/);
 assert.match(validateSystemSettings({...base,stations:[{categoryIds:['cat-1']},{categoryIds:['cat-1']}]})[0],/only be assigned/);
 assert.match(validateSystemSettings({...base,printers:[{name:'Kitchen',connectionType:'NETWORK',ipAddress:'',port:''}]})[0],/valid IP/);
 assert.equal(validateLogoFile({type:'image/png',size:1024}),'');assert.match(validateLogoFile({type:'image/svg+xml',size:1024}),/PNG/);assert.match(validateLogoFile({type:'image/png',size:6*1024*1024}),/5 MB/);
 assert.match(formatConfiguredCurrency(12.5,{currencyCode:'MYR',decimalPlaces:2}),/12\.50/);assert.match(formatConfiguredCurrency(12.5,{currencyCode:'USD',decimalPlaces:2}),/12\.50/);assert.equal(translate('zh','missingSystemAdministrationKey'),'missingSystemAdministrationKey');assert.equal(translate('unsupported','done'),translate('en','done'));
+assert.equal(formatMoney(12.5,'MYR',2,'RMX'),'RMX 12.50');assert.match(formatMoney(12.5,'USD',2),/12\.50/);
+const saved={revision:4,canEdit:true,restaurantInfo:{restaurantName:'Saved'},receiptConfig:{receiptFooter:'Saved'},categories:[{id:'1'}]};const draft={...structuredClone(saved),restaurantInfo:{restaurantName:'Draft'},receiptConfig:{receiptFooter:'Unsaved'}};
+assert.equal(isSettingsSectionDirty(saved,draft,['restaurantInfo']),true);assert.equal(isSettingsSectionDirty(saved,draft,['categories']),false);
+const request=buildSettingsSectionRequest(saved,draft,['restaurantInfo']);assert.equal(request.restaurantInfo.restaurantName,'Draft');assert.equal(request.receiptConfig.receiptFooter,'Saved');
+const reconciled=reconcileSavedSettingsDraft(draft,{...request,revision:5,categories:[{id:'2'}]},['restaurantInfo']);assert.equal(reconciled.revision,5);assert.equal(reconciled.receiptConfig.receiptFooter,'Unsaved');assert.equal(reconciled.categories[0].id,'2');
+const reset=resetSettingsSection(draft,saved,['restaurantInfo']);assert.equal(reset.restaurantInfo.restaurantName,'Saved');assert.equal(reset.receiptConfig.receiptFooter,'Unsaved');
 console.log('PASS System Administration validation, logo, currency, routing, and language tests.');

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, CreditCard, Loader2, Plus, Printer, RotateCcw, X, Receipt } from 'lucide-react';
 import { translate, translations, translateStatus } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
@@ -26,8 +26,14 @@ export default function OrderStatusScreen({
   const displaySettings = usePosDisplaySettings();
   const restaurantInfo = displaySettings?.restaurantInfo || {};
   const receiptConfig = displaySettings?.receiptConfig || {};
-  const formatMoney = (value) => formatConfiguredMoney(value, order?.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2));
+  const formatMoney = (value) => formatConfiguredMoney(value, order?.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2), String(displaySettings?.currencySymbol || ''));
   const receiptItems = useMemo(() => order?.items || [], [order?.items]);
+  const receiptPayment = useMemo(() => [...(order?.payments || [])].reverse().find((payment) => ['PAID','REFUNDED'].includes(payment.status)) || order?.payments?.at(-1), [order?.payments]);
+  const receiptStaffName = receiptPayment?.cashierName || order?.staffName || '';
+  const receiptPaymentMethod = receiptPayment?.paymentMethod || '';
+  const receiptCopies = Math.min(9, Math.max(1, Number(receiptConfig.copies) || 1));
+  const receiptPaperWidth = String(receiptConfig.paperSize) === '58mm' ? '58mm' : '80mm';
+  const autoPrintPending = useRef(false);
   const orderStatus = order?.status || orderData.status || 'CONFIRMED';
   const kitchenProgress = useMemo(() => deriveOrderKitchenProgress(receiptItems), [receiptItems]);
   const orderRounds = useMemo(() => groupOrderRounds(receiptItems), [receiptItems]);
@@ -55,10 +61,33 @@ export default function OrderStatusScreen({
     ? new Date(order.createdAt).toLocaleString()
     : new Date().toLocaleString();
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     soundFx.playTap();
+    const source = document.getElementById('printable-receipt');
+    if (!source) return;
+    const printBatch = document.createElement('div');
+    printBatch.id = 'printable-receipt-batch';
+    printBatch.style.setProperty('--receipt-paper-width', receiptPaperWidth);
+    for (let index = 0; index < receiptCopies; index += 1) {
+      const copy = source.cloneNode(true);
+      copy.removeAttribute('id');
+      copy.classList.add('printable-receipt-copy');
+      printBatch.append(copy);
+    }
+    document.body.append(printBatch);
+    document.body.classList.add('printing-receipt-batch');
+    const cleanup = () => { printBatch.remove(); document.body.classList.remove('printing-receipt-batch'); };
+    window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
-  };
+    window.setTimeout(cleanup, 1000);
+  }, [receiptCopies, receiptPaperWidth]);
+
+  useEffect(() => {
+    if (!showThermalReceipt || !autoPrintPending.current) return undefined;
+    autoPrintPending.current = false;
+    const timer = window.setTimeout(handlePrint, 150);
+    return () => window.clearTimeout(timer);
+  }, [handlePrint, showThermalReceipt]);
 
   return (
     <div className="w-full h-full flex flex-col bg-[#121212] text-white p-8 overflow-y-auto relative">
@@ -242,6 +271,7 @@ export default function OrderStatusScreen({
           <button
             onClick={() => {
               soundFx.playTap();
+              autoPrintPending.current = receiptConfig.autoPrint === true;
               setShowThermalReceipt(true);
             }}
             className="flex-1 h-[56px] rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm border border-white/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
@@ -293,7 +323,7 @@ export default function OrderStatusScreen({
       {/* Printable Thermal Paper Receipt Preview Modal */}
       {showThermalReceipt && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white text-black w-[360px] rounded-2xl p-6 shadow-2xl relative border border-gray-300 font-mono text-xs">
+          <div style={{width:receiptPaperWidth==='58mm'?'280px':'360px'}} className="bg-white text-black max-h-[92vh] overflow-y-auto rounded-2xl p-6 shadow-2xl relative border border-gray-300 font-mono text-xs">
             {/* Close Modal Button */}
             <button
               onClick={() => setShowThermalReceipt(false)}
@@ -306,12 +336,14 @@ export default function OrderStatusScreen({
             <div id="printable-receipt" className="space-y-3">
               <div className="text-center pb-3 border-b border-dashed border-gray-400">
                 {receiptConfig.showLogo && displaySettings?.logoUrl && <img src={displaySettings.logoUrl} alt="Restaurant logo" className="mx-auto mb-2 h-12 max-w-32 object-contain" onError={e=>{e.currentTarget.style.display='none';}}/>}
-                <h2 className="font-extrabold text-base">{restaurantInfo.restaurantName || 'Restaurant'}</h2>
+                {receiptConfig.showRestaurantName!==false&&<h2 className="font-extrabold text-base">{restaurantInfo.restaurantName || 'Restaurant'}</h2>}
                 {receiptConfig.receiptHeader && <p className="text-[10px] text-gray-600">{receiptConfig.receiptHeader}</p>}
-                {receiptConfig.showAddress && <p className="text-[10px] text-gray-600">{[restaurantInfo.addressLine1,restaurantInfo.city,restaurantInfo.postcode].filter(Boolean).join(', ')}</p>}
-                {receiptConfig.showPhone && restaurantInfo.phoneNumber && <p className="text-[10px] text-gray-600">Tel: {restaurantInfo.phoneNumber}</p>}
+                {receiptConfig.showAddress!==false && <p className="text-[10px] text-gray-600">{[restaurantInfo.addressLine1,restaurantInfo.addressLine2,restaurantInfo.city,restaurantInfo.state,restaurantInfo.postcode,restaurantInfo.country].filter(Boolean).join(', ')}</p>}
+                {receiptConfig.showPhone!==false && restaurantInfo.phoneNumber && <p className="text-[10px] text-gray-600">Tel: {restaurantInfo.phoneNumber}</p>}
+                {receiptConfig.showTaxNumber!==false && restaurantInfo.taxRegistrationNumber && <p className="text-[10px] text-gray-600">Tax No: {restaurantInfo.taxRegistrationNumber}</p>}
                 <p className="text-[10px] text-gray-600">{receiptTimestamp}</p>
               </div>
+              {(receiptConfig.showStaffName!==false||receiptConfig.showPaymentMethod!==false)&&<div className="space-y-1 text-[10px] text-gray-600">{receiptConfig.showStaffName!==false&&receiptStaffName&&<div className="flex justify-between"><span>Staff</span><strong>{receiptStaffName}</strong></div>}{receiptConfig.showPaymentMethod!==false&&receiptPaymentMethod&&<div className="flex justify-between"><span>Payment</span><strong>{receiptPaymentMethod}</strong></div>}</div>}
 
               <div className="flex justify-between font-bold text-sm">
                 <span>{receiptConfig.showOrderNumber!==false?`ORDER: ${order?.orderNumber || orderData.orderId}`:''}</span>
@@ -381,7 +413,7 @@ export default function OrderStatusScreen({
               className="w-full mt-4 py-3 bg-[#121212] text-[#D4AF37] font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow"
             >
               <Printer className="w-4 h-4" />
-              <span>{tr('printThermal')}</span>
+              <span>{tr('printThermal')}{receiptCopies>1?` × ${receiptCopies}`:''}</span>
             </button>
           </div>
         </div>

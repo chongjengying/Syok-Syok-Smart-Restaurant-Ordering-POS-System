@@ -11,7 +11,7 @@ export default function PaymentConfirmationScreen({ confirmation, onDone, lang =
   const { order, paymentMethod, receivedAmount, changeAmount, paymentReference } = confirmation;
   const { settings: qrSettings } = useManualQrPayment(paymentMethod === 'QR');
   const displaySettings = usePosDisplaySettings();
-  const money = (value) => formatMoney(value, order.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2));
+  const money = (value) => formatMoney(value, order.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2), String(displaySettings?.currencySymbol || ''));
   const fulfillmentContinues = order.items.some((item) =>
     ['SUBMITTED', 'PREPARING', 'READY'].includes(item.itemStatus),
   );

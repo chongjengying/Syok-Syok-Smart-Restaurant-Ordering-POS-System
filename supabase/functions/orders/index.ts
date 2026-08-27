@@ -236,7 +236,7 @@ Deno.serve(async (request) => {
     const [orderResult, historyResult] = await Promise.all([
       supabase
         .from('orders')
-        .select('*, restaurant_tables(id, table_number, table_name, area), order_item_batches(*), order_items(*, order_item_options(*)), payments(*)')
+        .select('*, staff:profiles!orders_user_id_fkey(name), restaurant_tables(id, table_number, table_name, area), order_item_batches(*), order_items(*, order_item_options(*)), payments(*, cashier:profiles!payments_user_id_fkey(name))')
         .eq('id', orderId)
         .maybeSingle(),
       supabase.from('order_status_history').select('*').eq('order_id', orderId).order('changed_at'),

@@ -166,6 +166,7 @@ export function mapOrder(order: OrderRecord): Order {
     discount: Number(order.discount || 0),
     total: Number(order.total || 0),
     takeawayPackaging: order.takeaway_packaging || [],
+    staffName: order.staff?.name || '',
     paymentId: payment?.id || null,
     paymentNumber: payment?.payment_number || null,
     payments: (order.payments || []).map((entry) => ({
@@ -178,6 +179,7 @@ export function mapOrder(order: OrderRecord): Order {
       splitType: entry.split_type || 'FULL',
       status: entry.status || '',
       paidAt: entry.paid_at || null,
+      cashierName: entry.cashier?.name || '',
     })),
     table: order.restaurant_tables ? {
       id: order.restaurant_tables.id,

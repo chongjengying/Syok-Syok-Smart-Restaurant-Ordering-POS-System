@@ -65,6 +65,7 @@ export interface OrderRecord {
   discount: number | string;
   total: number | string;
   takeaway_packaging?: string[];
+  staff?: { name?: string | null } | null;
   payments?: Array<{
     id: string;
     payment_number?: string;
@@ -76,6 +77,7 @@ export interface OrderRecord {
     status?: string;
     paid_at?: string | null;
     created_at?: string;
+    cashier?: { name?: string | null } | null;
   }>;
   restaurant_tables?: {
     id: string;
@@ -137,6 +139,7 @@ export interface Order {
   discount: number;
   total: number;
   takeawayPackaging: string[];
+  staffName: string;
   paymentId: string | null;
   paymentNumber: string | null;
   payments: Array<{
@@ -149,6 +152,7 @@ export interface Order {
     splitType: string;
     status: string;
     paidAt: string | null;
+    cashierName: string;
   }>;
   table: {
     id: string;

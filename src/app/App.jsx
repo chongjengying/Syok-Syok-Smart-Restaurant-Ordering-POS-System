@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import IpadShell from '../components/IpadShell';
 import WelcomeScreen from '../components/WelcomeScreen';
 import MenuHomeScreen from '../components/MenuHomeScreen';
@@ -25,6 +25,7 @@ import { changeCartItemQuantity, removeCartItem as removeCartEntry } from '../se
 import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessages';
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { getStoredLanguage, LANGUAGE_STORAGE_KEY, translate } from '../utils/i18n';
+import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -57,6 +58,9 @@ export default function App() {
   const [stayOnDashboard, setStayOnDashboard] = useState(false);
   const [deviceMode, setDeviceMode] = useState('11inch'); // '11inch' | '129inch' | 'fullscreen'
   const [lang, setLang] = useState(() => getStoredLanguage()); // 'en' | 'zh' | 'ms'
+  const hadStoredLanguageAtStartup = useRef(Boolean(globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY)));
+  const appliedSystemLanguage = useRef(false);
+  const displaySettings = usePosDisplaySettings(Boolean(session));
   const tr = (key, variables) => translate(lang, key, variables);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -161,6 +165,15 @@ export default function App() {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
     document.documentElement.dataset.language = lang;
   }, [lang]);
+
+  useEffect(() => {
+    if (!displaySettings) return;
+    const enabledLanguages = Array.isArray(displaySettings.enabledLanguages) ? displaySettings.enabledLanguages : ['en', 'zh', 'ms'];
+    const defaultLanguage = enabledLanguages.includes(displaySettings.defaultLanguage) ? displaySettings.defaultLanguage : enabledLanguages[0];
+    if (!defaultLanguage) return;
+    if ((!appliedSystemLanguage.current && !hadStoredLanguageAtStartup.current) || !enabledLanguages.includes(lang)) setLang(defaultLanguage);
+    appliedSystemLanguage.current = true;
+  }, [displaySettings, lang]);
 
   const handleInstallPwa = () => {
     if (installPrompt) {

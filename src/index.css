@@ -74,7 +74,7 @@
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt *, #printable-report-receipt, #printable-report-receipt * {
+  #printable-receipt, #printable-receipt *, #printable-receipt-batch, #printable-receipt-batch *, #printable-report-receipt, #printable-report-receipt * {
     visibility: visible;
   }
   #printable-receipt, #printable-report-receipt {
@@ -85,6 +85,29 @@
     margin: 0;
     padding: 10px;
     font-family: 'Courier New', Courier, monospace;
+  }
+  body.printing-receipt-batch #printable-receipt,
+  body.printing-receipt-batch #printable-receipt * {
+    visibility: hidden;
+  }
+  #printable-receipt-batch {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: var(--receipt-paper-width, 80mm);
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  .printable-receipt-copy {
+    width: var(--receipt-paper-width, 80mm);
+    box-sizing: border-box;
+    padding: 10px;
+    break-after: page;
+    page-break-after: always;
+  }
+  .printable-receipt-copy:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
   .no-print {
     display: none !important;
