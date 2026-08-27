@@ -149,7 +149,75 @@ begin
  insert into public.configurable_number_counters(entity_code,branch_code,period_key,last_value) values(code,branch,period,1) on conflict(entity_code,branch_code,period_key) do update set last_value=public.configurable_number_counters.last_value+1 returning last_value into next_value;if length(next_value::text)>n.sequence_padding then raise exception 'BUSINESS_NUMBER_EXHAUSTED';end if;date_part:=case n.date_format when 'YYMMDD' then to_char(business_date,'YYMMDD') when 'YYYY-MM' then to_char(business_date,'YYYY-MM') else to_char(business_date,'YYYYMMDD') end;return n.prefix||'-'||branch||'-'||date_part||'-'||lpad(next_value::text,n.sequence_padding,'0');
 end;$$;
 revoke all on function public.next_pos_business_number(text) from public,anon,authenticated;
+-- PostgreSQL prevents changing a column type while a view exposes that column.
+-- Rebuild the role-gated daily-sales boundary around the identifier expansion.
+drop function if exists public.get_daily_sales_report(date,date);
+drop view if exists public.daily_sales_report;
+
 alter table public.payments alter column payment_number type varchar(64);alter table public.receipts alter column receipt_number type varchar(64);alter table public.refunds alter column refund_number type varchar(64);alter table public.payments drop constraint if exists payments_payment_number_format_check;alter table public.receipts drop constraint if exists receipts_number_format_check;alter table public.refunds drop constraint if exists refunds_number_format_check;
+
+create view public.daily_sales_report
+with (security_invoker = true)
+as
+with paid_rows as (
+  select p.*, row_number() over (
+    partition by p.order_id order by coalesce(p.paid_at, p.created_at), p.id
+  ) as order_payment_position
+  from public.payments p where p.status = 'PAID'
+)
+select
+  coalesce(p.paid_at, p.created_at)::date as report_date,
+  p.order_id,
+  o.order_number,
+  o.user_id,
+  o.status as order_status,
+  o.dining_mode,
+  o.restaurant_table_id,
+  p.id as payment_id,
+  p.payment_method,
+  coalesce(p.provider, 'UNSPECIFIED') as provider,
+  p.transaction_reference,
+  case when p.order_payment_position = 1 then round(o.subtotal, 2) else 0::numeric end as subtotal,
+  case when p.order_payment_position = 1 then round(o.tax, 2) else 0::numeric end as tax,
+  case when p.order_payment_position = 1 then round(o.discount, 2) else 0::numeric end as discount,
+  round(p.amount, 2) as amount_paid,
+  round(o.total, 2) as order_total,
+  coalesce(p.paid_at, p.created_at) as paid_at,
+  case when p.order_payment_position = 1 then round(o.service_charge, 2) else 0::numeric end as service_charge,
+  p.payment_number
+from paid_rows p
+join public.orders o on o.id = p.order_id
+where public.current_pos_role() in ('ADMIN', 'MANAGER');
+
+revoke all on public.daily_sales_report from public, anon, authenticated;
+grant select on public.daily_sales_report to service_role;
+
+create function public.get_daily_sales_report(
+  p_date_from date default null,
+  p_date_to date default null
+)
+returns setof public.daily_sales_report
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'AUTHENTICATION_REQUIRED'; end if;
+  if public.current_pos_role() not in ('ADMIN', 'MANAGER') then
+    raise exception 'INSUFFICIENT_PERMISSION';
+  end if;
+  if p_date_from is not null and p_date_to is not null and p_date_from > p_date_to then
+    raise exception 'INVALID_DATE_RANGE';
+  end if;
+  return query
+  select report.* from public.daily_sales_report report
+  where (p_date_from is null or report.report_date >= p_date_from)
+    and (p_date_to is null or report.report_date <= p_date_to)
+  order by report.paid_at desc;
+end;
+$$;
+revoke all on function public.get_daily_sales_report(date,date) from public, anon;
+grant execute on function public.get_daily_sales_report(date,date) to authenticated;
 
 create or replace function public.get_kitchen_item_routes(p_order_id uuid) returns table(order_item_id uuid,station_id uuid,station_code text,station_name text,printer_id uuid,kds_device_key text) language plpgsql stable security definer set search_path=public as $$ begin if not public.can_read_pos_order(p_order_id) then raise exception 'INSUFFICIENT_PERMISSION';end if;return query select oi.id,ks.id,ks.code::text,ks.name::text,ks.printer_id,ks.kds_device_key from public.order_items oi join public.products p on p.id=oi.product_id left join public.kitchen_station_categories ksc on ksc.category_id=p.category_id left join public.kitchen_stations ks on ks.id=ksc.station_id and ks.enabled where oi.order_id=p_order_id;end;$$;revoke all on function public.get_kitchen_item_routes(uuid) from public,anon;grant execute on function public.get_kitchen_item_routes(uuid) to authenticated;
 
