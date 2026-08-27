@@ -16,6 +16,8 @@
     "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
     "test:security-contracts": "node scripts/test-security-contracts.mjs",
     "test:split-money": "node scripts/test-split-money.mjs",
+    "test:system-health": "node scripts/test-system-health.mjs && node scripts/test-system-health-contracts.mjs",
+    "test:system-administration": "node scripts/test-system-administration.mjs && node scripts/test-system-administration-contracts.mjs",
     "test:split-payment-local": "node scripts/smoke-split-payment-local.mjs",
     "test:concurrency-staging": "node scripts/smoke-concurrency-staging.mjs",
     "test:performance-staging": "node scripts/performance-staging.mjs",

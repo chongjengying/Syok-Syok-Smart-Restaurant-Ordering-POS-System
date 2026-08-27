@@ -103,6 +103,10 @@ Deno.serve(async (request) => {
     return jsonResponse(403, { error: 'An active staff profile is required.' });
   }
 
+  if (request.method === 'GET' && new URL(request.url).searchParams.get('health') === 'probe') {
+    return jsonResponse(200, { data: { status: 'ok' } });
+  }
+
   const pathParts = new URL(request.url).pathname.split('/').filter(Boolean);
   const functionIndex = pathParts.lastIndexOf('tables');
   const tableId = functionIndex >= 0 ? pathParts[functionIndex + 1] || null : null;

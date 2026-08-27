@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { calculateOverallHealth, classifyApiError, isInfrastructureFailure, statusFromBackupAge, statusFromKdsHeartbeat, statusFromLatency } from '../src/utils/healthStatus.js';
+
+const check=(status,critical=false)=>({status,critical});
+assert.equal(calculateOverallHealth([check('HEALTHY',true),check('HEALTHY')]),'HEALTHY');
+assert.equal(calculateOverallHealth([check('HEALTHY',true),check('DEGRADED')]),'DEGRADED');
+assert.equal(calculateOverallHealth([check('HEALTHY',true),check('WARNING')]),'WARNING');
+assert.equal(calculateOverallHealth([check('CRITICAL',true),check('HEALTHY')]),'CRITICAL');
+assert.equal(calculateOverallHealth([check('CRITICAL',false),check('HEALTHY',true)]),'WARNING');
+assert.equal(calculateOverallHealth([check('UNKNOWN')]),'UNKNOWN');
+assert.equal(statusFromLatency(499),'HEALTHY');
+assert.equal(statusFromLatency(500),'WARNING');
+assert.equal(statusFromLatency(1501),'DEGRADED');
+assert.equal(statusFromBackupAge(23.9),'HEALTHY');
+assert.equal(statusFromBackupAge(24),'WARNING');
+assert.equal(statusFromBackupAge(49),'CRITICAL');
+assert.equal(statusFromBackupAge(Number.NaN),'UNKNOWN');
+assert.equal(statusFromKdsHeartbeat(29),'HEALTHY');
+assert.equal(statusFromKdsHeartbeat(30),'WARNING');
+assert.equal(statusFromKdsHeartbeat(61),'CRITICAL');
+assert.equal(classifyApiError({status:400,code:'INVALID_ORDER'}),'VALIDATION_ERROR');
+assert.equal(classifyApiError({status:503,code:'PAYMENT_PROVIDER_UNAVAILABLE'}),'PAYMENT_PROVIDER_ERROR');
+assert.equal(classifyApiError({status:0,code:'REQUEST_TIMEOUT'}),'TIMEOUT');
+assert.equal(isInfrastructureFailure({status:400,errorType:'VALIDATION_ERROR'}),false);
+assert.equal(isInfrastructureFailure({status:500,errorType:'INTERNAL_ERROR'}),true);
+console.log('System health unit tests passed.');

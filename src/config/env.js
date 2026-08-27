@@ -31,4 +31,8 @@ export const env = Object.freeze({
   appEnv,
   supabaseUrl,
   supabaseKey,
+  appVersion: import.meta.env.VITE_APP_VERSION || '',
+  gitCommitSha: import.meta.env.VITE_GIT_COMMIT_SHA || '',
+  buildId: import.meta.env.VITE_BUILD_ID || '',
+  buildTimestamp: import.meta.env.VITE_BUILD_TIMESTAMP || '',
 });

@@ -1,7 +1,7 @@
 export function buildCorsHeaders(methods: string) {
   return {
     'Access-Control-Allow-Origin': Deno.env.get('CORS_ALLOWED_ORIGIN') || '*',
-    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, x-correlation-id',
     'Access-Control-Allow-Methods': methods,
   };
 }

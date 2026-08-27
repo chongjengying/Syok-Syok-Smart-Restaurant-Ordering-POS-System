@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, Banknote, BarChart3, CalendarDays, CheckCircle2, CircleX,
   Clock3, CreditCard, ExternalLink, QrCode, ReceiptText, RefreshCw, ShoppingBag,
-  Sparkles, Table2, TrendingUp, Utensils, WalletCards,
+  Settings, Sparkles, Table2, TrendingUp, Utensils, WalletCards,
 } from 'lucide-react';
 import { useAdminDashboard } from '../../hooks/useAdminDashboard';
 import { formatCurrency, formatDate, formatDateTime, formatNumber, formatTime, humanizeCode } from '../../utils/admin-dashboard-formatters';
 import DashboardFilters from './dashboard/DashboardFilters';
 import { DashboardSkeleton, EmptyState, ErrorState, MetricCard, Panel, StatusBadge } from './dashboard/DashboardPrimitives';
+import SystemHealthSummaryCard from '../system-health/SystemHealthSummaryCard';
 
 const paymentIcons={CASH:Banknote,QR:QrCode,CARD:CreditCard,EWALLET:WalletCards};
 
@@ -66,7 +67,7 @@ function StaffPerformance({ data }) { return <Panel title="Staff Performance" su
 
 function RecentActivity({ data, navigate }) { return <Panel title="Recent Activity" subtitle="Append-only audit history; dashboard access is read-only.">{data.recentActivities?.length?<div className="mt-4 space-y-2">{data.recentActivities.map(activity=><button key={activity.id} onClick={()=>navigate('audit',{search:activity.action})} className="flex w-full items-start gap-3 rounded-xl p-2 text-left hover:bg-slate-50"><span className="rounded-full bg-slate-100 p-2 text-slate-500"><Activity size={14}/></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{humanizeCode(activity.action)}</strong><span className="block truncate text-xs text-slate-400">{activity.actor_name} · {humanizeCode(activity.entity_type)} {activity.entity_id||''}</span></span><time className="text-[10px] text-slate-400">{formatTime(activity.created_at)}</time></button>)}</div>:<EmptyState/>}</Panel>; }
 
-export default function AdminDashboard({ onNavigate=()=>{} }) {
+export default function AdminDashboard({ onNavigate=()=>{}, systemHealth=null, canViewSystemAdministration=false }) {
   const state=useAdminDashboard();
   if(state.isLoading)return <DashboardSkeleton/>;
   if(state.error&&!state.data)return <ErrorState message={state.error} onRetry={state.refresh}/>;
@@ -77,6 +78,7 @@ export default function AdminDashboard({ onNavigate=()=>{} }) {
     <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">{data.businessName} · {data.branchName}</p><h1 className="mt-1 text-3xl font-black text-slate-950">Admin Dashboard</h1><p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500"><span className="flex items-center gap-1"><CalendarDays size={14}/>{formatDate(new Date())}</span><span>·</span><span>Last updated {state.lastUpdated?formatTime(state.lastUpdated):'—'}</span><span>· Malaysia time</span></p></div><button disabled={state.isRefreshing} onClick={state.refresh} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-bold shadow-sm disabled:opacity-60"><RefreshCw size={16} className={state.isRefreshing?'animate-spin':''}/>{state.isRefreshing?'Refreshing':'Refresh'}</button></header>
     <DashboardFilters state={state} data={data}/>
     {state.error&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{state.error} Showing the last successful snapshot from {state.lastUpdated?formatDateTime(state.lastUpdated):'an earlier refresh'}.</div>}
+    <div className="grid gap-4 lg:grid-cols-2">{canViewSystemAdministration&&<button onClick={()=>navigate('system-administration')} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md"><span className="flex items-center gap-4"><span className="rounded-xl bg-amber-100 p-3 text-amber-800"><Settings size={22}/></span><span><strong className="block text-sm font-black uppercase tracking-wide text-slate-800">System Administration</strong><small className="mt-1 block text-xs text-slate-500">Restaurant, tax, receipt, printer, KDS, numbering and regional settings.</small></span></span><ExternalLink size={16} className="text-slate-400"/></button>}<SystemHealthSummaryCard health={systemHealth} onOpen={()=>navigate('system-health')}/></div>
     {data.access?.reports?<><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5"><MetricCard label={salesLabel} value={formatCurrency(sales.netSales)} growth={growth} Icon={TrendingUp}/><MetricCard label="Gross Sales" value={formatCurrency(sales.grossSales)} helper={`${formatCurrency(sales.discounts)} discounts · ${formatCurrency(sales.refunds)} refunds`} Icon={BarChart3} tone="blue"/><MetricCard label="Total Orders" value={formatNumber(data.orders?.total)} helper="Created in selected period" Icon={ShoppingBag} tone="violet" onClick={()=>navigate('orders',{})}/><MetricCard label="Average Order Value" value={formatCurrency(sales.averageOrderValue)} helper={`${formatNumber(sales.settledOrders)} settled orders`} Icon={ReceiptText} tone="green"/><MetricCard label="Open Orders" value={formatNumber(data.orders?.open)} helper="Current state of orders created in period" Icon={Utensils} tone="red" onClick={()=>navigate('orders',{})}/></div><p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">Net sales: {formatCurrency(sales.grossSales)} gross − {formatCurrency(sales.discounts)} discounts − {formatCurrency(sales.refunds)} refunds + {formatCurrency(sales.tax)} tax + {formatCurrency(sales.serviceCharge)} service charge = <strong className="text-slate-900">{formatCurrency(sales.netSales)}</strong></p></>:<div className="rounded-xl border bg-white p-4 text-sm text-slate-500">Sales KPIs require <code>report.view</code>.</div>}
     <div className="grid gap-5 xl:grid-cols-3">{data.access?.reports&&<SalesPerformance data={data} state={state}/>} {data.access?.payments&&<PaymentOverview data={data} navigate={navigate}/>}</div>
     <div className="grid gap-5 xl:grid-cols-2">{data.access?.orders&&<OrderOverview data={data} navigate={navigate}/>}<LiveOperations data={data} navigate={navigate}/></div>

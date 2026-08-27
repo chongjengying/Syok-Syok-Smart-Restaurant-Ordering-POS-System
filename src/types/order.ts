@@ -55,6 +55,13 @@ export interface OrderRecord {
   subtotal: number | string;
   tax: number | string;
   service_charge: number | string;
+  tax_name?: string;
+  tax_rate?: number | string;
+  tax_mode?: 'INCLUSIVE' | 'EXCLUSIVE';
+  service_charge_name?: string;
+  service_charge_rate?: number | string;
+  currency_code?: string;
+  rounding?: number | string;
   discount: number | string;
   total: number | string;
   takeaway_packaging?: string[];
@@ -120,6 +127,13 @@ export interface Order {
   subtotal: number;
   tax: number;
   serviceCharge: number;
+  taxName: string;
+  taxRate: number;
+  taxMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  serviceChargeName: string;
+  serviceChargeRate: number;
+  currencyCode: string;
+  rounding: number;
   discount: number;
   total: number;
   takeawayPackaging: string[];

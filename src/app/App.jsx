@@ -500,7 +500,7 @@ export default function App() {
     .some((permission) => permissionState.hasPermission(permission));
   const canAccessAdmin = permissionState.permissions.some((permission) => [
     'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit',
-    'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view',
+    'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view', 'system.health.view', 'settings.view',
   ].includes(permission));
   useEffect(() => {
     if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {

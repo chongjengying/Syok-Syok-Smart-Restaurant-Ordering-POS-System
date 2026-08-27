@@ -1,6 +1,8 @@
 import { env } from '../../config/env';
 import { getApiErrorMessage } from '../../shared/errorMessages';
 import { supabase } from './client';
+import { classifyApiError, isInfrastructureFailure } from '../../utils/healthStatus';
+import { recordApiTelemetry } from '../../services/api-telemetry.service';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -26,6 +28,8 @@ export async function apiRequest(
   functionName,
   { method = 'GET', path = '', query, body, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {},
 ) {
+  const startedAt = performance.now();
+  const correlationId = `req_${crypto.randomUUID()}`;
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !sessionData.session) {
     const code = 'SESSION_EXPIRED';
@@ -53,6 +57,7 @@ export async function apiRequest(
         headers: {
           apikey: env.supabaseKey,
           Authorization: `Bearer ${sessionData.session.access_token}`,
+          'x-correlation-id': correlationId,
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -62,6 +67,8 @@ export async function apiRequest(
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
       const code = payload?.code || (response.status === 401 ? 'SESSION_EXPIRED' : response.status >= 500 ? 'SERVER_ERROR' : 'REQUEST_FAILED');
+      const errorType = classifyApiError({ status: response.status, code });
+      recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: response.status, errorType, durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: isInfrastructureFailure({ status: response.status, errorType }) });
       return {
         data: null,
         error: new ApiError(getApiErrorMessage({ code, status: response.status, serverMessage: payload?.error }), {
@@ -72,10 +79,12 @@ export async function apiRequest(
         }),
       };
     }
+    recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: response.status, errorType: null, durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: false });
     return { data: payload?.data ?? payload, error: null };
   } catch (error) {
     if (controller.signal.aborted) {
       const wasCancelled = signal?.aborted;
+      if (!wasCancelled) recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: 0, errorType: 'TIMEOUT', durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: true });
       return {
         data: null,
         error: new ApiError(wasCancelled ? 'Request was cancelled.' : getApiErrorMessage({ code: 'REQUEST_TIMEOUT' }), {
@@ -84,6 +93,7 @@ export async function apiRequest(
         }),
       };
     }
+    recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: 0, errorType: 'NETWORK_ERROR', durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: true });
     return {
       data: null,
       error: new ApiError(getApiErrorMessage({ code: 'NETWORK_ERROR', serverMessage: error?.message }), {

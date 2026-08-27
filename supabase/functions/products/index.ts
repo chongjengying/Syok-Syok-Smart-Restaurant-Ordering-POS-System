@@ -41,6 +41,7 @@ Deno.serve(async (request) => {
   if (!profile || profile.status !== 'ACTIVE') return jsonResponse(403, { error: 'An active staff profile is required.' });
 
   const url = new URL(request.url);
+  if (url.searchParams.get('health') === 'probe') return jsonResponse(200, { data: { status: 'ok' } });
   const pathParts = url.pathname.split('/').filter(Boolean);
   const functionIndex = pathParts.lastIndexOf('products');
   const resource = functionIndex >= 0 ? pathParts[functionIndex + 1] || null : null;

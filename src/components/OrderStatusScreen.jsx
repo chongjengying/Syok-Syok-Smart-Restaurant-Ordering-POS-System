@@ -4,7 +4,8 @@ import { translate, translations, translateStatus } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { useOrder } from '../hooks/useOrder';
 import { deriveOrderKitchenProgress, groupOrderRounds } from '../services/order-rounds.service';
-import { formatMoney } from '../services/money.service';
+import { formatMoney as formatConfiguredMoney } from '../services/money.service';
+import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
 
 export default function OrderStatusScreen({
   orderData,
@@ -22,6 +23,10 @@ export default function OrderStatusScreen({
   const tr = (key, variables) => translate(lang, key, variables);
   const [showThermalReceipt, setShowThermalReceipt] = useState(false);
   const { order, isLoading, error } = useOrder(orderData.id, Boolean(orderData.id));
+  const displaySettings = usePosDisplaySettings();
+  const restaurantInfo = displaySettings?.restaurantInfo || {};
+  const receiptConfig = displaySettings?.receiptConfig || {};
+  const formatMoney = (value) => formatConfiguredMoney(value, order?.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2));
   const receiptItems = useMemo(() => order?.items || [], [order?.items]);
   const orderStatus = order?.status || orderData.status || 'CONFIRMED';
   const kitchenProgress = useMemo(() => deriveOrderKitchenProgress(receiptItems), [receiptItems]);
@@ -300,15 +305,17 @@ export default function OrderStatusScreen({
             {/* Receipt Printable Container */}
             <div id="printable-receipt" className="space-y-3">
               <div className="text-center pb-3 border-b border-dashed border-gray-400">
-                <h2 className="font-extrabold text-base">FINE DINING POS</h2>
-                <p className="text-[10px] text-gray-600">Smart iPad Restaurant Order</p>
-                <p className="text-[10px] text-gray-600">Tel: +60 3-8888 9999</p>
+                {receiptConfig.showLogo && displaySettings?.logoUrl && <img src={displaySettings.logoUrl} alt="Restaurant logo" className="mx-auto mb-2 h-12 max-w-32 object-contain" onError={e=>{e.currentTarget.style.display='none';}}/>}
+                <h2 className="font-extrabold text-base">{restaurantInfo.restaurantName || 'Restaurant'}</h2>
+                {receiptConfig.receiptHeader && <p className="text-[10px] text-gray-600">{receiptConfig.receiptHeader}</p>}
+                {receiptConfig.showAddress && <p className="text-[10px] text-gray-600">{[restaurantInfo.addressLine1,restaurantInfo.city,restaurantInfo.postcode].filter(Boolean).join(', ')}</p>}
+                {receiptConfig.showPhone && restaurantInfo.phoneNumber && <p className="text-[10px] text-gray-600">Tel: {restaurantInfo.phoneNumber}</p>}
                 <p className="text-[10px] text-gray-600">{receiptTimestamp}</p>
               </div>
 
               <div className="flex justify-between font-bold text-sm">
-                <span>ORDER: {order?.orderNumber || orderData.orderId}</span>
-                <span>TABLE: {resolvedTableLabel || '-'}</span>
+                <span>{receiptConfig.showOrderNumber!==false?`ORDER: ${order?.orderNumber || orderData.orderId}`:''}</span>
+                <span>{receiptConfig.showTableNumber!==false?`TABLE: ${resolvedTableLabel || '-'}`:''}</span>
               </div>
 
               {/* Items List */}
@@ -324,7 +331,7 @@ export default function OrderStatusScreen({
                         • {option.groupName}: {option.name}{option.priceAdjustment > 0 ? ` (+${formatMoney(option.priceAdjustment)})` : ''}
                       </div>
                     ))}
-                    {item.specialRequest && (
+                    {receiptConfig.showItemNotes!==false && item.specialRequest && (
                       <div className="text-[10px] text-gray-600 ml-3 font-italic">* {item.specialRequest}</div>
                     )}
                   </div>
@@ -340,15 +347,15 @@ export default function OrderStatusScreen({
                   <span>{tr('subtotal')}:</span>
                   <span>{formatMoney(subtotal)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>SST (6%):</span>
+                {receiptConfig.showTax!==false && <div className="flex justify-between">
+                  <span>{order?.taxName || 'Tax'} ({order?.taxRate || 0}%):</span>
                   <span>{formatMoney(tax)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>{tr('serviceCharge')} (10%):</span>
+                </div>}
+                {receiptConfig.showServiceCharge!==false && <div className="flex justify-between">
+                  <span>{order?.serviceChargeName || tr('serviceCharge')} ({order?.serviceChargeRate || 0}%):</span>
                   <span>{formatMoney(serviceCharge)}</span>
-                </div>
-                {discount > 0 && (
+                </div>}
+                {receiptConfig.showDiscount!==false && discount > 0 && (
                   <div className="flex justify-between">
                     <span>{tr('discount')}:</span>
                     <span>-{formatMoney(discount)}</span>
@@ -362,7 +369,8 @@ export default function OrderStatusScreen({
 
               {/* Footer */}
               <div className="pt-4 text-center border-t border-dashed border-gray-400 space-y-1">
-                <p className="text-[10px] text-gray-600 pt-1">{tr('thankYou')}</p>
+                <p className="text-[10px] text-gray-600 pt-1">{receiptConfig.thankYouMessage || tr('thankYou')}</p>
+                {receiptConfig.receiptFooter && <p className="text-[10px] text-gray-600">{receiptConfig.receiptFooter}</p>}
                 <p className="text-[10px] text-gray-600">{tr('paymentStatus', { status: translateStatus(lang, order?.paymentStatus || orderData.paymentStatus || 'UNPAID') })}</p>
               </div>
             </div>

@@ -2,13 +2,16 @@ import React from 'react';
 import { CheckCircle2, Printer, ReceiptText } from 'lucide-react';
 import { translate } from '../utils/i18n';
 import { useManualQrPayment } from '../hooks/useManualQrPayment';
+import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
+import { formatMoney } from '../services/money.service';
 
-const money = (value) => `RM ${Number(value || 0).toFixed(2)}`;
 
 export default function PaymentConfirmationScreen({ confirmation, onDone, lang = 'en' }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const { order, paymentMethod, receivedAmount, changeAmount, paymentReference } = confirmation;
   const { settings: qrSettings } = useManualQrPayment(paymentMethod === 'QR');
+  const displaySettings = usePosDisplaySettings();
+  const money = (value) => formatMoney(value, order.currencyCode || displaySettings?.currencyCode || 'MYR', Number(displaySettings?.decimalPlaces ?? 2));
   const fulfillmentContinues = order.items.some((item) =>
     ['SUBMITTED', 'PREPARING', 'READY'].includes(item.itemStatus),
   );
