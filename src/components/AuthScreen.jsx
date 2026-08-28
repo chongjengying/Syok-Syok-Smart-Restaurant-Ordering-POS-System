@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
 import { soundFx } from '../utils/audio';
-import { translate } from '../utils/i18n';
+import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
-export default function AuthScreen({ lang = 'en', setLang, passwordRecovery = false, onPasswordRecovered }) {
+export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered }) {
   const tr = (key) => translate(lang, key);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -167,7 +167,7 @@ export default function AuthScreen({ lang = 'en', setLang, passwordRecovery = fa
           />
 
           <div className="absolute right-5 top-4 flex rounded-lg border border-white/10 bg-black/20 p-0.5">
-            {['en', 'zh', 'ms'].map((code) => (
+            {SUPPORTED_LANGUAGES.filter((code) => enabledLanguages.includes(code)).map((code) => (
               <button key={code} type="button" onClick={() => setLang?.(code)} className={`rounded-md px-2 py-1 text-[9px] font-black uppercase ${lang === code ? 'bg-[#D4AF37] text-black' : 'text-gray-400'}`}>
                 {code}
               </button>

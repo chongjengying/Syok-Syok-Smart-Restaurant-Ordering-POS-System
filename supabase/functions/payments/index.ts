@@ -5,6 +5,7 @@ import {
   type PaymentRequest,
 } from '../_shared/paymentProviders.ts';
 import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, OPTIONS');
 const methods = new Set(['CASH', 'CARD', 'QR', 'EWALLET']);
@@ -111,6 +112,9 @@ Deno.serve(async (request) => {
       code: 'INSUFFICIENT_PERMISSION',
     });
   }
+
+  const rateLimit=await consumeRateLimit(userData.user.id,'payment-mutation',30,60);
+  if(!rateLimit.allowed)return jsonResponse(rateLimit.error==='RATE_LIMIT_EXCEEDED'?429:503,{error:rateLimit.error==='RATE_LIMIT_EXCEEDED'?'Too many payment attempts. Try again shortly.':'Payment protection is temporarily unavailable.',code:rateLimit.error||'RATE_LIMIT_UNAVAILABLE'});
 
   let body: Record<string, unknown>;
   try {

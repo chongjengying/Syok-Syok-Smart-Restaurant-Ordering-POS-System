@@ -3,7 +3,7 @@ import { Wifi, Battery, Maximize2, User } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { env } from '../config/env';
 
-export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile, lang = 'en', setLang }) {
+export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
   const tr = (key) => translate(lang, key);
   const [time, setTime] = useState('');
 
@@ -69,7 +69,7 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
           <>
             <div className="h-4 w-px bg-white/20 mx-1" />
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 p-1">
-              {SUPPORTED_LANGUAGES.map((code) => (
+              {SUPPORTED_LANGUAGES.filter((code) => enabledLanguages.includes(code)).map((code) => (
                 <button
                   key={code}
                   type="button"

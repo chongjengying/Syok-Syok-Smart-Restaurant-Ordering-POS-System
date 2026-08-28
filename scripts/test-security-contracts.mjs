@@ -58,6 +58,12 @@ for (const file of migrationFiles) {
 const functions = await filesUnder(path.join(root, 'supabase', 'functions'), /index\.ts$/);
 for (const file of functions) {
   const source = await readFile(file, 'utf8');
+  if (path.basename(path.dirname(file)) === 'payment-webhooks') {
+    assert.match(source, /PAYMENT_WEBHOOK_SECRET/, 'Payment webhooks must require a server-side signing secret.');
+    assert.match(source, /HMAC[\s\S]*SHA-256/, 'Payment webhooks must verify an HMAC SHA-256 signature.');
+    assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/, 'Verified webhooks must persist through the server-only client.');
+    continue;
+  }
   assert.match(source, /Authorization/i, `${path.basename(path.dirname(file))} must require authorization.`);
   assert.match(source, /auth\.getUser\s*\(/, `${path.basename(path.dirname(file))} must validate the caller token.`);
   assert.match(source, /status\s*!==\s*'ACTIVE'/, `${path.basename(path.dirname(file))} must reject inactive profiles.`);

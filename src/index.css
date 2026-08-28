@@ -113,3 +113,12 @@
     display: none !important;
   }
 }
+@media (max-width: 768px) {
+  .admin-shell main table { min-width: 720px; }
+  .admin-shell main th { position: sticky; top: 0; z-index: 2; background: rgb(243 244 246); }
+  .admin-shell main td:first-child,
+  .admin-shell main th:first-child { position: sticky; left: 0; z-index: 1; background: white; box-shadow: 1px 0 rgb(229 231 235); }
+  .admin-shell main button,
+  .admin-shell main select,
+  .admin-shell main input { min-height: 44px; }
+}

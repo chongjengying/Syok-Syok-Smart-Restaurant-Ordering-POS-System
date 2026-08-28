@@ -94,10 +94,10 @@ export function mapKitchenTickets(order: OrderRecord): KitchenTicket[] {
     .filter((ticket) => ticket.items.length > 0);
 }
 
-export async function getKitchenQueue(options: RequestOptions = {}) {
+export async function getKitchenQueue(options: RequestOptions & { page?: number; pageSize?: number } = {}) {
   const result = await fetchOrders(options);
   if (result.error || !result.data) return { data: null, error: result.error };
-  return { data: result.data.flatMap(mapKitchenTickets), error: null };
+  return { data: { ...result.data, rows: result.data.rows.flatMap(mapKitchenTickets) }, error: null };
 }
 
 export function updateOrderStatus(orderId: string, status: string, notes = '') {

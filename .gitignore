@@ -13,6 +13,8 @@ node_modules/
 # Build output
 dist/
 dist-ssr/
+playwright-report/
+test-results/
 
 # Supabase CLI local runtime state and generated secrets
 supabase/.temp/

@@ -4,6 +4,7 @@ import { useProductManagement } from '../hooks/useProductManagement';
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { validateProductImage } from '../services/product-image.service';
 import ProductImage from './products/ProductImage';
+import VirtualizedProductGrid from './products/VirtualizedProductGrid';
 
 const emptyForm = { categoryId: '', name: '', description: '', unit: '', price: '', cost: '', isActive: true, isAvailable: true };
 
@@ -59,14 +60,14 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
     {manager.error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{manager.error}</div>}
     {manager.notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{manager.notice}</div>}
     <div className="mb-5 flex flex-wrap gap-3"><div className="relative min-w-64 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search code or product" className="w-full rounded-xl border bg-white py-2.5 pl-10"/></div><select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="rounded-xl border bg-white px-4"><option value="">All categories</option>{manager.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-    {manager.isLoading ? <p>Loading products…</p> : visibleProducts.length === 0 ? <p className="rounded-xl bg-white p-8 text-center text-gray-400">No products found.</p> : <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{visibleProducts.map(product => <article key={product.id} className="overflow-hidden rounded-2xl bg-white shadow">
+    {manager.isLoading ? <p>Loading products…</p> : visibleProducts.length === 0 ? <p className="rounded-xl bg-white p-8 text-center text-gray-400">No products found.</p> : <VirtualizedProductGrid items={visibleProducts} renderItem={product => <article key={product.id} className="overflow-hidden rounded-2xl bg-white shadow">
       <div className="h-44 bg-gray-100"><ProductImage src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" /></div>
       <div className="p-4"><div className="flex justify-between gap-3"><div><h2 className="font-black">{product.name}</h2><p className="text-xs text-gray-400">{product.code}</p></div><div className="text-right"><strong>RM {product.price.toFixed(2)}</strong><p className="text-[10px] text-gray-400">Cost RM {product.cost.toFixed(2)}</p></div></div>
       <p className={`mt-2 text-xs font-bold ${product.isAvailable ? 'text-emerald-600' : 'text-red-600'}`}>{product.isAvailable ? 'Available' : 'Sold Out'}</p>
       <p className="mt-1 text-[10px] text-gray-400">{product.isActive ? 'ACTIVE' : 'INACTIVE'} · Updated {product.updatedAt ? new Date(product.updatedAt).toLocaleDateString() : '-'}</p>
       <div className="mt-4 flex gap-2">{(canEdit||canManageImage)&&<button onClick={() => open(product)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#121212] p-2 text-sm font-bold text-white"><Pencil size={15}/> Edit / Replace</button>}
       {canDelete && product.imagePath && <button disabled={manager.isSaving} onClick={() => { if (window.confirm(`Delete the image for ${product.name}?`)) void manager.removeImage(product); }} aria-label="Delete product image" className="rounded-xl border border-red-200 p-2 text-red-600"><Trash2 size={17}/></button>}</div></div>
-    </article>)}</div>}
+    </article>}/>}
 
     {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
       <div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{editing.id ? 'Edit Product' : 'Add Product'}</h2><button type="button" onClick={close}><X/></button></div>

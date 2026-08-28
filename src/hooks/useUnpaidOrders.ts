@@ -4,22 +4,25 @@ import { subscribeToKitchenQueue } from '../services/kitchen.service';
 import type { Order } from '../types/order';
 import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
-export function useUnpaidOrders(enabled = true) {
+export function useUnpaidOrders(enabled = true, pageSize = 24) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!enabled) return;
     if (!silent) setIsLoading(true);
-    const result = await getUnpaidOrders();
+    const result = await getUnpaidOrders({ page, pageSize });
     if (result.error || !result.data) setError(result.error?.message || 'Unable to load unpaid orders.');
     else {
-      setOrders(result.data);
+      setOrders(result.data.rows);
+      setTotal(result.data.total);
       setError('');
     }
     if (!silent) setIsLoading(false);
-  }, [enabled]);
+  }, [enabled, page, pageSize]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -35,5 +38,5 @@ export function useUnpaidOrders(enabled = true) {
     );
   }, [enabled, refresh]);
 
-  return { orders, isLoading, error, refresh };
+  return { orders, isLoading, error, refresh, page, setPage, pageSize, total };
 }

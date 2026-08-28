@@ -24,7 +24,7 @@ import { clearProductCache } from '../services/product-cache.service';
 import { changeCartItemQuantity, removeCartItem as removeCartEntry } from '../services/cart.service';
 import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessages';
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
-import { getStoredLanguage, LANGUAGE_STORAGE_KEY, translate } from '../utils/i18n';
+import { getStoredLanguage, LANGUAGE_STORAGE_KEY, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
@@ -61,6 +61,10 @@ export default function App() {
   const hadStoredLanguageAtStartup = useRef(Boolean(globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY)));
   const appliedSystemLanguage = useRef(false);
   const displaySettings = usePosDisplaySettings(Boolean(session));
+  const configuredLanguages = Array.isArray(displaySettings?.enabledLanguages)
+    ? SUPPORTED_LANGUAGES.filter((code) => displaySettings.enabledLanguages.includes(code))
+    : [];
+  const enabledLanguages = configuredLanguages.length ? configuredLanguages : SUPPORTED_LANGUAGES;
   const tr = (key, variables) => translate(lang, key, variables);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -91,7 +95,7 @@ export default function App() {
     orders: unpaidOrders,
     isLoading: unpaidOrdersLoading,
     error: unpaidOrdersError,
-  } = useUnpaidOrders(Boolean(session) && currentScreen === 'tableSelection' && canAccessUnpaidOrders);
+  } = useUnpaidOrders(Boolean(session) && currentScreen === 'tableSelection' && canAccessUnpaidOrders, 100);
   const activeTakeawayOrders = unpaidOrders.filter((order) => order.diningMode === 'takeaway');
   const selectedTableLabel = tables.find((table) => table.id === selectedTable)?.tableNumber || '';
   const {
@@ -546,10 +550,12 @@ export default function App() {
         isOnline={isOnline}
         lang={lang}
         setLang={setLang}
+        enabledLanguages={enabledLanguages}
       >
         <AuthScreen
           lang={lang}
           setLang={setLang}
+          enabledLanguages={enabledLanguages}
           passwordRecovery={isPasswordRecovery}
           onPasswordRecovered={finishPasswordRecovery}
         />
@@ -565,6 +571,7 @@ export default function App() {
         isOnline={isOnline}
         lang={lang}
         setLang={setLang}
+        enabledLanguages={enabledLanguages}
       >
         <div className="w-full h-full bg-[#121212] text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
           <h1 className="text-2xl font-black text-[#D4AF37]">{tr('terminalUnavailable')}</h1>
@@ -591,6 +598,7 @@ export default function App() {
       isOnline={isOnline}
       lang={lang}
       setLang={setLang}
+      enabledLanguages={enabledLanguages}
       onLogout={handleLogout}
       userEmail={session?.user?.email}
       onOpenProfile={() => setIsProfileOpen(true)}
@@ -622,6 +630,7 @@ export default function App() {
           canAccessAdmin={canAccessAdmin}
           lang={lang}
           setLang={setLang}
+          enabledLanguages={enabledLanguages}
           installPrompt={installPrompt}
           handleInstallPwa={handleInstallPwa}
         />

@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
 
@@ -187,19 +188,27 @@ Deno.serve(async (request) => {
     }
     if (orderAction) return jsonResponse(404, { error: 'Order resource was not found.' });
     if (!orderId) {
-      const scope = new URL(request.url).searchParams.get('scope');
+      const searchParams = new URL(request.url).searchParams;
+      const scope = searchParams.get('scope');
+      const requestedPage = Number(searchParams.get('page') || 1);
+      const requestedPageSize = Number(searchParams.get('pageSize') || 25);
+      const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const pageSize = Number.isSafeInteger(requestedPageSize) ? Math.min(100, Math.max(1, requestedPageSize)) : 25;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
       if (scope === 'unpaid') {
         if (!['ADMIN', 'MANAGER', 'WAITER', 'CASHIER'].includes(callerProfile.role_name)) {
           return jsonResponse(403, { error: 'Front-of-house access is required.' });
         }
-        const { data, error } = await supabase
+        const { data, error, count } = await supabase
           .from('orders')
-          .select('*, restaurant_tables(id, table_number, table_name, area), order_item_batches(*), order_items(*, order_item_options(*)), payments(*)')
+          .select('*, restaurant_tables(id, table_number, table_name, area), order_item_batches(*), order_items(*, order_item_options(*)), payments(*)', { count: 'exact' })
           .in('payment_status', ['UNPAID', 'PARTIALLY_PAID'])
           .in('status', ['DRAFT', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED'])
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(from, to);
         if (error) return jsonResponse(500, { error: 'Unable to load unpaid orders.' });
-        return jsonResponse(200, { data });
+        return jsonResponse(200, { data: { rows: data || [], total: count || 0, page, pageSize } });
       }
       if (scope === 'ready-to-serve') {
         if (!['ADMIN', 'MANAGER', 'WAITER'].includes(callerProfile.role_name)) {
@@ -222,16 +231,17 @@ Deno.serve(async (request) => {
       if (!['ADMIN', 'MANAGER', 'KITCHEN', 'WAITER'].includes(callerProfile.role_name)) {
         return jsonResponse(403, { error: 'Kitchen or manager access is required.' });
       }
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('orders')
-        .select('*, restaurant_tables(table_number, table_name, area), order_item_batches!inner(*), order_items!inner(*, products(id, product_name), order_item_options(*))')
+        .select('*, restaurant_tables(table_number, table_name, area), order_item_batches!inner(*), order_items!inner(*, products(id, product_name), order_item_options(*))', { count: 'exact' })
         .in('payment_status', ['UNPAID', 'PAID'])
         .in('status', ['CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'])
         .in('order_item_batches.status', ['PENDING', 'PREPARING', 'READY'])
         .in('order_items.item_status', ['SUBMITTED', 'PREPARING', 'READY'])
-        .order('created_at');
+        .order('created_at')
+        .range(from, to);
       if (error) return jsonResponse(500, { error: 'Unable to load the kitchen queue.' });
-      return jsonResponse(200, { data: data || [] });
+      return jsonResponse(200, { data: { rows: data || [], total: count || 0, page, pageSize } });
     }
     const [orderResult, historyResult] = await Promise.all([
       supabase
@@ -247,6 +257,8 @@ Deno.serve(async (request) => {
   }
 
   let body: unknown;
+  const rateLimit=await consumeRateLimit(userData.user.id,'order-mutation',120,60);
+  if(!rateLimit.allowed)return jsonResponse(rateLimit.error==='RATE_LIMIT_EXCEEDED'?429:503,{error:rateLimit.error==='RATE_LIMIT_EXCEEDED'?'Too many order updates. Try again shortly.':'Order protection is temporarily unavailable.',code:rateLimit.error||'RATE_LIMIT_UNAVAILABLE'});
   try {
     body = await request.json();
   } catch {

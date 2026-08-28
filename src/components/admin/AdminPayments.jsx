@@ -1,18 +1,225 @@
-import React,{useState} from 'react';
-import {RefreshCw,Search,X} from 'lucide-react';
-import {useAdminOperations} from '../../hooks/useAdminOperations';
-import {refundOrder} from '../../services/payment.service';
+import React, { useState } from "react";
+import { RefreshCw, Search, X } from "lucide-react";
+import { useAdminOperations } from "../../hooks/useAdminOperations";
+import { refundOrder } from "../../services/payment.service";
+import AccessibleDialog from "./AccessibleDialog";
 
-export default function AdminPayments({canRefund=false}){
-  const s=useAdminOperations('payments');
-  const[selected,setSelected]=useState(null);const[reason,setReason]=useState('');const[busy,setBusy]=useState(false);const[actionError,setActionError]=useState('');
-  const refund=async()=>{if(reason.trim().length<3){setActionError('Refund reason must contain at least 3 characters.');return;}setBusy(true);const r=await refundOrder(selected.order_id,reason.trim(),crypto.randomUUID());setBusy(false);if(r.error){setActionError(r.error.message);return;}setSelected(null);await s.refresh();};
-  const page=Number(s.filters.page||1);
-  return <section className="space-y-5">
-    <div className="flex justify-between"><div><h1 className="text-2xl font-black">Payments</h1><p className="text-sm text-gray-500">Payment records are read-only; refunds use the secured refund flow.</p></div><button onClick={s.refresh} className="rounded-xl border bg-white p-3"><RefreshCw size={17}/></button></div>
-    <div className="flex flex-wrap gap-2"><div className="relative min-w-64 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={s.search} onChange={e=>s.setSearch(e.target.value)} placeholder="Payment, order, or cashier" className="w-full rounded-xl border bg-white py-2.5 pl-10"/></div><select value={s.filters.method||''} onChange={e=>s.setFilter('method',e.target.value)} className="rounded-xl border bg-white px-3"><option value="">All methods</option>{['CASH','QR','CARD','EWALLET'].map(v=><option key={v}>{v}</option>)}</select><select value={s.filters.status||''} onChange={e=>s.setFilter('status',e.target.value)} className="rounded-xl border bg-white px-3"><option value="">All statuses</option>{['PENDING','PROCESSING','PAID','FAILED','CANCELLED','REFUNDED'].map(v=><option key={v}>{v}</option>)}</select><input type="date" value={s.filters.dateFrom||''} onChange={e=>s.setFilter('dateFrom',e.target.value)} className="rounded-xl border px-3"/><input type="date" value={s.filters.dateTo||''} onChange={e=>s.setFilter('dateTo',e.target.value)} className="rounded-xl border px-3"/></div>
-    {s.error&&<p className="rounded-xl bg-red-50 p-3 text-red-700">{s.error}</p>}
-    {s.isLoading?<p>Loading payments…</p>:<div className="overflow-x-auto rounded-2xl bg-white"><table className="w-full text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">Payment</th><th className="p-3">Order</th><th className="p-3">Method</th><th className="p-3">Cashier</th><th className="p-3">Status</th><th className="p-3 text-right">Amount</th><th className="p-3">Time</th><th/></tr></thead><tbody>{s.rows.map(p=><tr key={p.id} className="border-t"><td className="p-3 font-bold">{p.payment_number}</td><td className="p-3">{p.order_number||p.order_id}</td><td className="p-3">{p.payment_method}</td><td className="p-3">{p.staff_name||p.user_id}</td><td className="p-3">{p.status}</td><td className="p-3 text-right font-black">RM {Number(p.amount).toFixed(2)}</td><td className="p-3 text-xs">{new Date(p.paid_at||p.created_at).toLocaleString()}</td><td>{canRefund&&p.status==='PAID'&&<button onClick={()=>{setSelected(p);setReason('');setActionError('')}} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600">Refund</button>}</td></tr>)}</tbody></table><div className="flex items-center justify-between border-t p-3 text-xs"><span>{s.total} records</span><div className="flex gap-2"><button disabled={page<=1} onClick={()=>s.setFilter('page',page-1)} className="rounded border px-3 py-1 disabled:opacity-40">Previous</button><span className="p-1">Page {page}</span><button disabled={page*25>=s.total} onClick={()=>s.setFilter('page',page+1)} className="rounded border px-3 py-1 disabled:opacity-40">Next</button></div></div></div>}
-    {selected&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6"><div className="flex justify-between"><h2 className="text-xl font-black">Refund {selected.payment_number}</h2><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-2 text-sm">This refunds the full order amount through the secured, idempotent refund RPC.</p><textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Required refund reason" className="mt-4 w-full rounded-xl border p-3"/>{actionError&&<p className="mt-2 text-sm text-red-600">{actionError}</p>}<button disabled={busy} onClick={refund} className="mt-4 w-full rounded-xl bg-red-600 p-3 font-black text-white">{busy?'Refunding…':'Confirm Refund'}</button></div></div>}
-  </section>;
+export default function AdminPayments({ canRefund = false }) {
+  const s = useAdminOperations("payments");
+  const [selected, setSelected] = useState(null);
+  const [reason, setReason] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const refund = async () => {
+    if (reason.trim().length < 3) {
+      setActionError("Refund reason must contain at least 3 characters.");
+      return;
+    }
+    if (confirmation.trim() !== selected.payment_number) {
+      setActionError("Type the payment number exactly to confirm this refund.");
+      return;
+    }
+    setBusy(true);
+    const r = await refundOrder(
+      selected.order_id,
+      reason.trim(),
+      crypto.randomUUID(),
+    );
+    setBusy(false);
+    if (r.error) {
+      setActionError(r.error.message);
+      return;
+    }
+    setSelected(null);
+    await s.refresh();
+  };
+  const page = Number(s.filters.page || 1);
+  return (
+    <section className="space-y-5">
+      <div className="flex justify-between">
+        <div>
+          <h1 className="text-2xl font-black">Payments</h1>
+          <p className="text-sm text-gray-500">
+            Payment records are read-only; refunds use the secured refund flow.
+          </p>
+        </div>
+        <button onClick={s.refresh} className="rounded-xl border bg-white p-3">
+          <RefreshCw size={17} />
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-64 flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            value={s.search}
+            onChange={(e) => s.setSearch(e.target.value)}
+            placeholder="Payment, order, or cashier"
+            className="w-full rounded-xl border bg-white py-2.5 pl-10"
+          />
+        </div>
+        <select
+          value={s.filters.method || ""}
+          onChange={(e) => s.setFilter("method", e.target.value)}
+          className="rounded-xl border bg-white px-3"
+        >
+          <option value="">All methods</option>
+          {["CASH", "QR", "CARD", "EWALLET"].map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+        <select
+          value={s.filters.status || ""}
+          onChange={(e) => s.setFilter("status", e.target.value)}
+          className="rounded-xl border bg-white px-3"
+        >
+          <option value="">All statuses</option>
+          {[
+            "PENDING",
+            "PROCESSING",
+            "PAID",
+            "FAILED",
+            "CANCELLED",
+            "REFUNDED",
+          ].map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={s.filters.dateFrom || ""}
+          onChange={(e) => s.setFilter("dateFrom", e.target.value)}
+          className="rounded-xl border px-3"
+        />
+        <input
+          type="date"
+          value={s.filters.dateTo || ""}
+          onChange={(e) => s.setFilter("dateTo", e.target.value)}
+          className="rounded-xl border px-3"
+        />
+      </div>
+      {s.error && (
+        <p className="rounded-xl bg-red-50 p-3 text-red-700">{s.error}</p>
+      )}
+      {s.isLoading ? (
+        <p>Loading payments…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th className="p-3">Payment</th>
+                <th className="p-3">Order</th>
+                <th className="p-3">Method</th>
+                <th className="p-3">Cashier</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Amount</th>
+                <th className="p-3">Time</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {s.rows.map((p) => (
+                <tr key={p.id} className="border-t">
+                  <td className="p-3 font-bold">{p.payment_number}</td>
+                  <td className="p-3">{p.order_number || p.order_id}</td>
+                  <td className="p-3">{p.payment_method}</td>
+                  <td className="p-3">{p.staff_name || p.user_id}</td>
+                  <td className="p-3">{p.status}</td>
+                  <td className="p-3 text-right font-black">
+                    RM {Number(p.amount).toFixed(2)}
+                  </td>
+                  <td className="p-3 text-xs">
+                    {new Date(p.paid_at || p.created_at).toLocaleString()}
+                  </td>
+                  <td>
+                    {canRefund && p.status === "PAID" && (
+                      <button
+                        onClick={() => {
+                          setSelected(p);
+                          setReason("");
+                          setConfirmation("");
+                          setActionError("");
+                        }}
+                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600"
+                      >
+                        Refund
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex items-center justify-between border-t p-3 text-xs">
+            <span>{s.total} records</span>
+            <div className="flex gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => s.setFilter("page", page - 1)}
+                className="rounded border px-3 py-1 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="p-1">Page {page}</span>
+              <button
+                disabled={page * 25 >= s.total}
+                onClick={() => s.setFilter("page", page + 1)}
+                className="rounded border px-3 py-1 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selected && (
+        <AccessibleDialog
+          title={`Refund ${selected.payment_number}`}
+          onClose={() => setSelected(null)}
+          className="max-w-md"
+        >
+            <div className="flex justify-between">
+              <h2 aria-hidden="true" className="text-xl font-black">
+                Refund {selected.payment_number}
+              </h2>
+              <button onClick={() => setSelected(null)} aria-label="Close">
+                <X />
+              </button>
+            </div>
+            <p className="mt-2 text-sm">
+              This refunds the full order amount through the secured, idempotent
+              refund RPC.
+            </p>
+            <textarea
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Required refund reason"
+              className="mt-4 w-full rounded-xl border p-3"
+            />
+            <label className="mt-3 block text-sm font-bold">
+              Type {selected.payment_number} to confirm
+              <input
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                className="mt-1 w-full rounded-xl border p-3 font-normal"
+              />
+            </label>
+            {actionError && (
+              <p role="alert" className="mt-2 text-sm text-red-600">
+                {actionError}
+              </p>
+            )}
+            <button
+              disabled={busy || confirmation.trim() !== selected.payment_number}
+              onClick={refund}
+              className="mt-4 w-full rounded-xl bg-red-600 p-3 font-black text-white disabled:opacity-40"
+            >
+              {busy ? "Refunding…" : "Confirm Refund"}
+            </button>
+        </AccessibleDialog>
+      )}
+    </section>
+  );
 }

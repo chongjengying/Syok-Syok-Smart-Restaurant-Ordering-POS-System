@@ -22,7 +22,7 @@ function formatElapsed(startedAt, now) {
 
 export default function KitchenScreen({ role, onBack, lang = 'en' }) {
   const tr = (key, variables) => translate(lang, key, variables);
-  const { orders, isLoading, error, refresh } = useKitchenOrders(true);
+  const { orders, isLoading, error, refresh, page, setPage, pageSize, total } = useKitchenOrders(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState('');
   const [now, setNow] = useState(() => Date.now());
@@ -165,6 +165,7 @@ export default function KitchenScreen({ role, onBack, lang = 'en' }) {
             })}
           </div>
         )}
+        {!isLoading && total > pageSize && <nav aria-label={tr('pagination')} className="mt-6 flex items-center justify-center gap-3"><button type="button" disabled={page<=1} onClick={()=>setPage(value=>Math.max(1,value-1))} className="rounded-xl border bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">{tr('previous')}</button><span aria-live="polite" className="text-sm font-bold">{tr('pageOf',{page,total:Math.ceil(total/pageSize)})}</span><button type="button" disabled={page*pageSize>=total} onClick={()=>setPage(value=>value+1)} className="rounded-xl border bg-white px-4 py-2 text-sm font-bold disabled:opacity-40">{tr('next')}</button></nav>}
       </main>
     </div>
   );

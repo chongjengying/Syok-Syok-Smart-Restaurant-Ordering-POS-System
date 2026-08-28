@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import {createClient} from 'npm:@supabase/supabase-js@2';
 import { buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
+import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const cors = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
 const json = (status: number, body: Record<string, unknown>) => respond(status, body, cors);
@@ -103,6 +105,9 @@ Deno.serve(async (request) => {
       },
     });
   }
+
+  const rateLimit=await consumeRateLimit(userResult.user.id,'admin-user-mutation',20,60);
+  if(!rateLimit.allowed)return json(rateLimit.error==='RATE_LIMIT_EXCEEDED'?429:503,{error:rateLimit.error==='RATE_LIMIT_EXCEEDED'?'Too many staff changes. Try again shortly.':'Administrative protection is temporarily unavailable.',code:rateLimit.error||'RATE_LIMIT_UNAVAILABLE'});
 
   const body = await bodyOf(request);
   if (!body) return json(400, { error: 'A valid JSON body is required.' });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, UtensilsCrossed, ReceiptText, Settings } from 'lucide-react';
-import { LANGUAGE_LABELS, translations, translate } from '../utils/i18n';
+import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { APP_VERSION } from '../config/appVersion';
 
@@ -23,6 +23,7 @@ export default function WelcomeScreen({
   canAccessUnpaidOrders,
   lang,
   setLang,
+  enabledLanguages = SUPPORTED_LANGUAGES,
   installPrompt,
   handleInstallPwa,
 }) {
@@ -60,7 +61,7 @@ export default function WelcomeScreen({
             { code: 'en', label: LANGUAGE_LABELS.en },
             { code: 'zh', label: LANGUAGE_LABELS.zh },
             { code: 'ms', label: LANGUAGE_LABELS.ms }
-          ].map((item) => (
+          ].filter((item) => enabledLanguages.includes(item.code)).map((item) => (
             <button
               key={item.code}
               onClick={() => {

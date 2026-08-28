@@ -64,16 +64,23 @@ export function createOrderBillSplit(orderId: string, input: { mode: 'EQUAL' | '
   return apiRequest('orders', { method: 'POST', path: `${orderId}/bills`, body: input }) as Promise<ApiResult<Record<string, unknown>>>;
 }
 
-export function fetchOrders({ signal }: RequestOptions = {}) {
-  return apiRequest('orders', { signal }) as Promise<ApiResult<OrderRecord[]>>;
+export interface OrderPage {
+  rows: OrderRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export function fetchOrders({ signal, page = 1, pageSize = 25 }: RequestOptions & { page?: number; pageSize?: number } = {}) {
+  return apiRequest('orders', { query: { page: String(page), pageSize: String(pageSize) }, signal }) as Promise<ApiResult<OrderPage>>;
 }
 
 export function fetchReadyToServeOrders({ signal }: RequestOptions = {}) {
   return apiRequest('orders', { query: { scope: 'ready-to-serve' }, signal }) as Promise<ApiResult<OrderRecord[]>>;
 }
 
-export function fetchUnpaidOrders({ signal }: RequestOptions = {}) {
-  return apiRequest('orders', { query: { scope: 'unpaid' }, signal }) as Promise<ApiResult<OrderRecord[]>>;
+export function fetchUnpaidOrders({ signal, page = 1, pageSize = 24 }: RequestOptions & { page?: number; pageSize?: number } = {}) {
+  return apiRequest('orders', { query: { scope: 'unpaid', page: String(page), pageSize: String(pageSize) }, signal }) as Promise<ApiResult<OrderPage>>;
 }
 
 export function patchOrderStatus(orderId: string, input: { status: string; notes?: string }) {

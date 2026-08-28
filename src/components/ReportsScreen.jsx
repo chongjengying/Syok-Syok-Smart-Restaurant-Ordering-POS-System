@@ -2,8 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { ArrowDownAZ, ArrowLeft, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Loader2, PackageSearch, RefreshCw, Search, TrendingUp } from 'lucide-react';
 import { REPORT_DEFINITIONS, REPORT_GROUPS } from '../features/reports/config/reportDefinitions';
 import { useReport } from '../features/reports/hooks/useReport';
-import { exportReportExcel } from '../features/reports/services/excelExportService';
-import { exportReportPdf } from '../features/reports/services/pdfExportService';
 import { formatReportValue } from '../features/reports/utils/reportFormatters';
 import { buildReportSummary } from '../features/reports/utils/reportSummary';
 import { fetchCompleteReportRows } from '../features/reports/services/reportService';
@@ -25,7 +23,7 @@ export default function ReportsScreen({ onBack, embedded = false }) {
   const definition = REPORT_DEFINITIONS[reportId];
   const summary = useMemo(() => state.report ? buildReportSummary(state.report.reportId, state.rows, state.report.summary) : [], [state.report, state.rows]);
   const applyPreset = value => { const [from, to] = presetRange(value); setDateFrom(from); setDateTo(to); };
-  const exportFile = async type => { if (!state.report) return; setExporting(type); setExportError(''); try { const query = { search: state.search, sortKey: state.sort.key, sortDirection: state.sort.direction }; const rows = await fetchCompleteReportRows(state.report, query); const exportReport = { ...state.report, appliedFilters: query }; if (type === 'pdf') await exportReportPdf(exportReport, rows); else await exportReportExcel(exportReport, rows); } catch (error) { console.error('Report export failed', error); setExportError(`Unable to export ${type.toUpperCase()}.`); } finally { setExporting(''); } };
+  const exportFile = async type => { if (!state.report) return; setExporting(type); setExportError(''); try { const query = { search: state.search, sortKey: state.sort.key, sortDirection: state.sort.direction }; const rows = await fetchCompleteReportRows(state.report, query); const exportReport = { ...state.report, appliedFilters: query }; if (type === 'pdf') { const {exportReportPdf}=await import('../features/reports/services/pdfExportService');await exportReportPdf(exportReport, rows); } else { const {exportReportExcel}=await import('../features/reports/services/excelExportService');await exportReportExcel(exportReport, rows); } } catch (error) { console.error('Report export failed', error); setExportError(`Unable to export ${type.toUpperCase()}.`); } finally { setExporting(''); } };
   return <div className={`${embedded ? '' : 'h-full overflow-y-auto bg-slate-50 p-3 sm:p-6'} text-slate-950`}>
     <header className="mb-4 flex flex-wrap items-start justify-between gap-3 sm:mb-5">{!embedded&&<button onClick={onBack} aria-label="Back" className="rounded-xl border bg-white p-3"><ArrowLeft/></button>}<div className="min-w-0 flex-1"><h1 className="flex items-center gap-2 text-xl font-black sm:text-2xl"><TrendingUp className="shrink-0 text-amber-600"/>Reports</h1><p className="text-xs text-slate-500 sm:text-sm">Generate, review, then export database-backed operational and financial reports.</p></div>{state.report&&<button onClick={()=>state.run(reportId,dateFrom,dateTo)} className="rounded-xl border bg-white p-3" title="Regenerate" aria-label="Regenerate report"><RefreshCw size={17}/></button>}</header>
     <div className="grid gap-4 xl:grid-cols-[260px_1fr] xl:gap-5">

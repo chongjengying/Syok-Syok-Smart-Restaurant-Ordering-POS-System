@@ -1,0 +1,7 @@
+import React,{useEffect,useRef} from 'react';
+
+export default function AccessibleDialog({title,onClose,children,className='max-w-2xl'}){
+ const panel=useRef(null);const previous=useRef(null);
+ useEffect(()=>{previous.current=document.activeElement;const node=panel.current;node?.focus();const keydown=e=>{if(e.key==='Escape')onClose();if(e.key!=='Tab'||!node)return;const focusable=[...node.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')];if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}};document.addEventListener('keydown',keydown);return()=>{document.removeEventListener('keydown',keydown);previous.current?.focus?.();};},[onClose]);
+ return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl outline-none ${className}`}><h2 id="admin-dialog-title" className="sr-only">{title}</h2>{children}</section></div>;
+}

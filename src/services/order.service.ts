@@ -198,10 +198,10 @@ export function mapOrder(order: OrderRecord): Order {
   };
 }
 
-export async function getUnpaidOrders(options: RequestOptions = {}): Promise<ApiResult<Order[]>> {
+export async function getUnpaidOrders(options: RequestOptions & { page?: number; pageSize?: number } = {}): Promise<ApiResult<{ rows: Order[]; total: number; page: number; pageSize: number }>> {
   const result = await fetchUnpaidOrders(options);
   if (result.error || !result.data) return { data: null, error: result.error };
-  return { data: result.data.map(mapOrder), error: null };
+  return { data: { ...result.data, rows: result.data.rows.map(mapOrder) }, error: null };
 }
 
 export function createOrder(input: CreateOrderInput): Promise<ApiResult<OrderRecord>> {
