@@ -23,7 +23,7 @@ alter table public.orders add column if not exists branch_id uuid references pub
 alter table public.payments add column if not exists branch_id uuid references public.branches(id) on delete restrict;
 alter table public.refunds add column if not exists branch_id uuid references public.branches(id) on delete restrict;
 update public.restaurant_tables set branch_id=(select id from public.branches where code='MAIN') where branch_id is null;
-update public.orders o set branch_id=coalesce((select branch_id from public.restaurant_tables t where t.id=o.table_id),(select branch_id from public.profiles p where p.id=o.user_id),(select id from public.branches where code='MAIN')) where branch_id is null;
+update public.orders o set branch_id=coalesce((select branch_id from public.restaurant_tables t where t.id=o.restaurant_table_id),(select branch_id from public.profiles p where p.id=o.user_id),(select id from public.branches where code='MAIN')) where branch_id is null;
 update public.payments p set branch_id=coalesce((select branch_id from public.orders o where o.id=p.order_id),(select id from public.branches where code='MAIN')) where branch_id is null;
 update public.refunds r set branch_id=coalesce((select branch_id from public.orders o where o.id=r.order_id),(select id from public.branches where code='MAIN')) where branch_id is null;
 alter table public.restaurant_tables alter column branch_id set not null;
