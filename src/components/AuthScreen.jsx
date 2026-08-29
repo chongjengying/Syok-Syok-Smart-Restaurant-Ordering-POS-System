@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
+import { APP_VERSION } from '../config/appVersion';
 import { soundFx } from '../utils/audio';
 import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
@@ -434,7 +435,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
         {/* Bottom Version Tag */}
         <p className="text-center mt-5 text-gray-700 text-[11px] font-medium tracking-wide">
-          {tr('fineDiningTerminal')}
+          {tr('fineDiningTerminal')} · {APP_VERSION}
         </p>
       </div>
 
