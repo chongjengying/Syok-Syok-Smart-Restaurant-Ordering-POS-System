@@ -26,6 +26,7 @@ import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessa
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { getStoredLanguage, LANGUAGE_STORAGE_KEY, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
+import { canAccessProtectedScreen, getRoleLanding, hasAdminWorkspaceAccess } from '../services/session-authorization.service';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -40,7 +41,7 @@ function OperationalScreenLoader({ lang }) {
 
 export default function App() {
   // Auth State
-  const { session, isLoading: authLoading, signOut, isPasswordRecovery, finishPasswordRecovery } = useAuthSession();
+  const { session, isLoading: authLoading, signOut, isPasswordRecovery, finishPasswordRecovery, notice: sessionNotice, clearNotice } = useAuthSession();
   const {
     profile,
     isLoading: profileLoading,
@@ -60,6 +61,7 @@ export default function App() {
   const [lang, setLang] = useState(() => getStoredLanguage()); // 'en' | 'zh' | 'ms'
   const hadStoredLanguageAtStartup = useRef(Boolean(globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY)));
   const appliedSystemLanguage = useRef(false);
+  const appliedRoleLanding = useRef(false);
   const displaySettings = usePosDisplaySettings(Boolean(session));
   const configuredLanguages = Array.isArray(displaySettings?.enabledLanguages)
     ? SUPPORTED_LANGUAGES.filter((code) => displaySettings.enabledLanguages.includes(code))
@@ -88,9 +90,9 @@ export default function App() {
   const [orderNotice, setOrderNotice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
-  const canStartOrder = hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
-  const canAccessUnpaidOrders = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
-  const canAccessPayments = hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
+  const canStartOrder = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canAccessUnpaidOrders = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
+  const canAccessPayments = permissionState.hasPermission('payment.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
   const {
     orders: unpaidOrders,
     isLoading: unpaidOrdersLoading,
@@ -509,22 +511,47 @@ export default function App() {
     setCurrentScreen(activeOrder.status === 'DRAFT' || draftCart.length > 0 ? 'menu' : 'orderStatus');
   }, [activeOrder, checkoutRestoring, currentScreen, draftCart.length, stayOnDashboard]);
 
-  const canAccessKitchen = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
-  const canAccessReadyToServe = hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
-  const canAccessReports = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
-  const canAccessTables = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
+  const canAccessKitchen = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
+  const canAccessReadyToServe = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
+  const canAccessReports = permissionState.hasPermission('report.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
+  const canAccessTables = permissionState.hasPermission('table.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
   const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
     .some((permission) => permissionState.hasPermission(permission));
-  const canAccessAdmin = permissionState.permissions.some((permission) => [
-    'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit',
-    'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view', 'system.health.view', 'settings.view',
-  ].includes(permission));
+  const canAccessAdmin = hasAdminWorkspaceAccess(permissionState.permissions);
   useEffect(() => {
     if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
       globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
       setCurrentScreen('welcome');
     }
   }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
+
+  useEffect(() => {
+    if (!session) {
+      appliedRoleLanding.current = false;
+      return;
+    }
+    if (!profile || profile.status !== 'ACTIVE' || profileLoading || permissionState.isLoading || appliedRoleLanding.current) return;
+    appliedRoleLanding.current = true;
+    const landing = getRoleLanding(profile.role);
+    if (landing === 'admin') {
+      globalThis.history?.replaceState(null, '', '#admin/dashboard');
+      setCurrentScreen('admin');
+    } else if (landing === 'kitchen') {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen('kitchen');
+    } else {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen('welcome');
+    }
+  }, [permissionState.isLoading, profile, profileLoading, session]);
+
+  useEffect(() => {
+    if (!session || profileLoading || permissionState.isLoading) return;
+    if (!canAccessProtectedScreen(currentScreen, profile?.role, permissionState.permissions)) {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen(profile?.role === 'KITCHEN' && canAccessKitchen ? 'kitchen' : 'welcome');
+    }
+  }, [canAccessAdmin, canAccessKitchen, canAccessPayments, canAccessReadyToServe, canAccessReports, canAccessTables, canAccessUnpaidOrders, canStartOrder, currentScreen, permissionState.isLoading, permissionState.permissions, profile, profileLoading, session]);
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
     return (
@@ -558,6 +585,8 @@ export default function App() {
           enabledLanguages={enabledLanguages}
           passwordRecovery={isPasswordRecovery}
           onPasswordRecovered={finishPasswordRecovery}
+          sessionNotice={sessionNotice}
+          onDismissSessionNotice={clearNotice}
         />
       </IpadShell>
     );

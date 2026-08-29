@@ -4,6 +4,7 @@ import {
   destroyAuthSession,
   fetchAuthSession,
   fetchAuthUser,
+  fetchMyStaffSession,
   fetchProfile,
   fetchStaffProfiles,
   patchAuthMetadata,
@@ -12,9 +13,49 @@ import {
   resendSignupConfirmation,
   patchProfile,
   patchStaffAccess,
+  probeAuthHealth,
   recordSuccessfulLogin,
   subscribeToAuthState,
 } from './authRepository';
+
+export const AUTH_ERROR_CODES = Object.freeze({
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  EMAIL_NOT_CONFIRMED: 'EMAIL_NOT_CONFIRMED',
+  ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  PROFILE_REQUIRED: 'PROFILE_REQUIRED',
+  SESSION_EXPIRED: 'SESSION_EXPIRED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  CONNECTION_FAILED: 'CONNECTION_FAILED',
+  UNKNOWN: 'UNKNOWN',
+});
+
+function authError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+export function mapAuthenticationError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  const status = Number(error?.status || 0);
+  if (!navigator.onLine || message.includes('fetch') || message.includes('network')) {
+    return authError(AUTH_ERROR_CODES.CONNECTION_FAILED, 'Unable to reach the POS service. Check the connection and try again.');
+  }
+  if (status === 429 || message.includes('rate limit') || message.includes('too many')) {
+    return authError(AUTH_ERROR_CODES.RATE_LIMITED, 'Too many sign-in attempts. Wait a moment and try again.');
+  }
+  if (message.includes('email not confirmed')) {
+    return authError(AUTH_ERROR_CODES.EMAIL_NOT_CONFIRMED, 'Confirm your email address before signing in.');
+  }
+  if (message.includes('invalid login credentials') || status === 400) {
+    return authError(AUTH_ERROR_CODES.INVALID_CREDENTIALS, 'The email or password is incorrect.');
+  }
+  if (status === 401 || message.includes('session') || message.includes('jwt')) {
+    return authError(AUTH_ERROR_CODES.SESSION_EXPIRED, 'Your session has expired. Sign in again to continue.');
+  }
+  return authError(AUTH_ERROR_CODES.UNKNOWN, 'Sign-in could not be completed. Please try again.');
+}
 
 function validationError(message) {
   return { data: null, error: new Error(message) };
@@ -26,7 +67,7 @@ function mapProfile(profile, authUser) {
     name: profile.name,
     username: profile.username || '',
     email: profile.email || authUser.email || '',
-    role: profile.role_name || profile.roles?.name || 'CASHIER',
+    role: profile.roles?.name || profile.role_name || '',
     phone: authUser.user_metadata?.phone || '',
     avatar_url: authUser.user_metadata?.avatar_url || '',
     status: profile.status,
@@ -42,41 +83,64 @@ async function currentUser() {
   return { data: data.user, error: null };
 }
 
-export function signUp(email, password, fullName) {
+export async function signUp(email, password, fullName) {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedName = fullName.trim();
   if (!normalizedName) return validationError('Full name is required.');
   if (!normalizedEmail) return validationError('Email is required.');
   if (password.length < 8) return validationError('Password must be at least 8 characters long.');
-  return createAuthAccount(normalizedEmail, password, normalizedName);
+  const result = await createAuthAccount(normalizedEmail, password, normalizedName);
+  return result.error ? { data: null, error: mapAuthenticationError(result.error) } : result;
 }
 
 export async function signIn(email, password) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) return validationError('Email and password are required.');
   const result = await createAuthSession(normalizedEmail, password);
-  if (!result.error) {
-    const audit = await recordSuccessfulLogin();
-    if (audit.error) console.error('Unable to record login audit', audit.error);
+  if (result.error) return { data: null, error: mapAuthenticationError(result.error) };
+
+  const staffResult = await fetchMyStaffSession();
+  const staff = staffResult.data;
+  if (staffResult.error) {
+    await destroyAuthSession();
+    return { data: null, error: mapAuthenticationError(staffResult.error) };
   }
-  return result;
+  if (!staff) {
+    await destroyAuthSession();
+    return { data: null, error: authError(AUTH_ERROR_CODES.PROFILE_REQUIRED, 'A staff profile is required. Contact a manager for access.') };
+  }
+  if (staff.status !== 'ACTIVE') {
+    await destroyAuthSession();
+    const locked = staff.status === 'LOCKED';
+    return { data: null, error: authError(
+      locked ? AUTH_ERROR_CODES.ACCOUNT_LOCKED : AUTH_ERROR_CODES.ACCOUNT_INACTIVE,
+      locked ? 'This staff account is locked. Contact an administrator.' : 'This staff account is inactive. Contact a manager for access.'
+    ) };
+  }
+
+  const audit = await recordSuccessfulLogin();
+  if (audit.error) console.warn('Login audit could not be recorded.');
+  return { data: { ...result.data, staff }, error: null };
 }
 
-export function resendConfirmation(email) {
+export async function resendConfirmation(email) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return validationError('Email is required.');
-  return resendSignupConfirmation(normalizedEmail);
+  const result = await resendSignupConfirmation(normalizedEmail);
+  return result.error ? { data: null, error: mapAuthenticationError(result.error) } : result;
 }
 
-export function sendPasswordReset(email) {
+export async function sendPasswordReset(email) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return validationError('Email is required.');
-  return requestPasswordRecovery(normalizedEmail);
+  const result = await requestPasswordRecovery(normalizedEmail);
+  return result.error ? { data: null, error: mapAuthenticationError(result.error) } : result;
 }
 
-export function updatePassword(password) {
+export async function updatePassword(password) {
   if (password.length < 8) return validationError('Password must be at least 8 characters long.');
-  return replacePassword(password);
+  const result = await replacePassword(password);
+  return result.error ? { data: null, error: mapAuthenticationError(result.error) } : result;
 }
 
 export async function signOut() {
@@ -90,8 +154,41 @@ export function getSession() {
   return fetchAuthSession();
 }
 
+export async function getValidatedSession() {
+  const sessionResult = await fetchAuthSession();
+  if (sessionResult.error) return { data: { session: null }, error: mapAuthenticationError(sessionResult.error) };
+  if (!sessionResult.data.session) return { data: { session: null }, error: null };
+  const userResult = await fetchAuthUser();
+  if (userResult.error || !userResult.data.user) {
+    await destroyAuthSession();
+    return { data: { session: null }, error: mapAuthenticationError(userResult.error) };
+  }
+  const staffResult = await fetchMyStaffSession();
+  if (staffResult.error) {
+    return { data: { session: null }, error: mapAuthenticationError(staffResult.error) };
+  }
+  if (!staffResult.data || staffResult.data.status !== 'ACTIVE') {
+    await destroyAuthSession();
+    const status = staffResult.data?.status;
+    return {
+      data: { session: null },
+      error: authError(
+        status === 'LOCKED' ? AUTH_ERROR_CODES.ACCOUNT_LOCKED : status === 'INACTIVE' ? AUTH_ERROR_CODES.ACCOUNT_INACTIVE : AUTH_ERROR_CODES.PROFILE_REQUIRED,
+        status === 'LOCKED' ? 'This staff account is locked. Contact an administrator.' : status === 'INACTIVE' ? 'This staff account is inactive. Contact a manager for access.' : 'A staff profile is required. Contact a manager for access.'
+      ),
+    };
+  }
+  return { data: { session: sessionResult.data.session, staff: staffResult.data }, error: null };
+}
+
 export function onAuthStateChange(onChange) {
   return subscribeToAuthState(onChange);
+}
+
+export async function checkAuthConnection(signal) {
+  if (!navigator.onLine) return { data: 'OFFLINE', error: null };
+  const result = await probeAuthHealth(signal);
+  return { data: result.data ? 'ONLINE' : 'UNAVAILABLE', error: result.error };
 }
 
 export async function getUserProfile() {
@@ -108,12 +205,17 @@ export async function getProfile() {
   return { data: mapProfile(data, userResult.data), error: null };
 }
 
+export async function getStaffSession() {
+  const { data, error } = await fetchMyStaffSession();
+  return { data, error: error ? mapAuthenticationError(error) : null };
+}
+
 export function listStaffProfiles() {
   return fetchStaffProfiles();
 }
 
 export function updateStaffAccess(userId, role, status) {
-  const allowedRoles = ['ADMIN', 'MANAGER', 'WAITER', 'CASHIER', 'KITCHEN'];
+  const allowedRoles = ['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN'];
   const allowedStatuses = ['ACTIVE', 'INACTIVE', 'LOCKED'];
   if (!userId) return validationError('Staff account is required.');
   if (!allowedRoles.includes(role)) return validationError('Select a valid staff role.');

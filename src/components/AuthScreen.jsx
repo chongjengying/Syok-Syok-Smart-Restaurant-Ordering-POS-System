@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
 import { APP_VERSION } from '../config/appVersion';
-import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { env } from '../config/env';
+import { useAuthConnection } from '../hooks/useAuthConnection';
 import { soundFx } from '../utils/audio';
 import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
-export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered }) {
+export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered, sessionNotice = '', onDismissSessionNotice }) {
   const tr = (key) => translate(lang, key);
-  const networkStatus = useNetworkStatus();
+  const { status: connectionStatus } = useAuthConnection();
+  const submitLock = useRef(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,17 +25,21 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLock.current || isLoading) return;
     setError('');
     setNotice('');
+    onDismissSessionNotice?.();
 
     if (isForgotPassword) {
       if (!email.trim()) {
         setError(tr('emailRequired'));
         return;
       }
+      submitLock.current = true;
       setIsLoading(true);
       const { error: resetError } = await sendPasswordReset(email);
       setIsLoading(false);
+      submitLock.current = false;
       if (resetError) setError(resetError.message);
       else setNotice(tr('passwordResetSent'));
       return;
@@ -62,6 +68,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       return;
     }
 
+    submitLock.current = true;
     setIsLoading(true);
     soundFx.playTap();
 
@@ -106,6 +113,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       soundFx.playRemove();
     } finally {
       setIsLoading(false);
+      submitLock.current = false;
     }
   };
 
@@ -281,7 +289,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
             {/* Email Field */}
             {!passwordRecovery && <div className="relative group">
-              {!isSignUp && !isForgotPassword && <label htmlFor="current-email" className="mb-2 block text-xs font-bold text-gray-300">Username / Email</label>}
+              {!isSignUp && !isForgotPassword && <label htmlFor="current-email" className="mb-2 block text-xs font-bold text-gray-300">Email address</label>}
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'email'
@@ -370,6 +378,12 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
             )}
 
             {/* Alert Message */}
+            {sessionNotice && !error && (
+              <div role="status" className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3.5 text-[13px] font-medium leading-relaxed text-amber-300">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{sessionNotice}</span>
+              </div>
+            )}
             {error && (
               <div
                 className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-[13px] leading-relaxed font-medium ${
@@ -388,13 +402,6 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{notice}</span>
               </div>
-            )}
-
-            {!passwordRecovery && !isSignUp && !isForgotPassword && (
-              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-medium text-gray-300">
-                <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-white/20 bg-white/5 accent-[#D4AF37]" />
-                <span>Keep me signed in</span>
-              </label>
             )}
 
             {/* Submit Button */}
@@ -438,12 +445,14 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
           </form>
 
           <div className="mt-6 border-t border-white/[0.08] pt-5 text-center">
-            <p className="text-[10px] font-black tracking-[0.22em] text-amber-400">STAGING ENVIRONMENT</p>
+            <p className={`text-[10px] font-black tracking-[0.22em] ${env.appEnv === 'production' ? 'text-red-400' : 'text-amber-400'}`}>
+              {env.appEnv === 'production' ? 'PRODUCTION ENVIRONMENT' : 'STAGING ENVIRONMENT'}
+            </p>
             <p className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400">
               <span>POS {APP_VERSION}</span>
               <span aria-hidden="true">•</span>
-              <span>{networkStatus === 'ONLINE' ? 'Online' : networkStatus === 'RECONNECTING' ? 'Reconnecting' : 'Offline'}</span>
-              <span className={`h-2 w-2 rounded-full ${networkStatus === 'ONLINE' ? 'bg-emerald-400' : networkStatus === 'RECONNECTING' ? 'bg-amber-400' : 'bg-red-400'}`} />
+              <span>{connectionStatus === 'ONLINE' ? 'Connected' : connectionStatus === 'CHECKING' ? 'Checking connection' : connectionStatus === 'OFFLINE' ? 'Offline' : 'Service unavailable'}</span>
+              <span className={`h-2 w-2 rounded-full ${connectionStatus === 'ONLINE' ? 'bg-emerald-400' : connectionStatus === 'CHECKING' ? 'bg-amber-400' : 'bg-red-400'}`} />
             </p>
           </div>
         </div>

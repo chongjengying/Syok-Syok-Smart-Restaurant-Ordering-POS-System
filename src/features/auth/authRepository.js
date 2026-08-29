@@ -1,4 +1,5 @@
 import { supabase } from '../../infrastructure/supabase/client';
+import { env } from '../../config/env';
 
 const profileColumns = 'id, name, username, email, role_name, status, created_at, updated_at, roles(name)';
 
@@ -12,6 +13,22 @@ export function createAuthAccount(email, password, fullName) {
 
 export function createAuthSession(email, password) {
   return supabase.auth.signInWithPassword({ email, password });
+}
+
+export function fetchMyStaffSession() {
+  return supabase.rpc('get_my_staff_session');
+}
+
+export async function probeAuthHealth(signal) {
+  try {
+    const response = await fetch(`${env.supabaseUrl}/auth/v1/health`, {
+      headers: { apikey: env.supabaseKey },
+      signal,
+    });
+    return { data: response.ok, error: response.ok ? null : new Error('AUTH_HEALTH_UNAVAILABLE') };
+  } catch (error) {
+    return { data: false, error };
+  }
 }
 
 export function resendSignupConfirmation(email) {
