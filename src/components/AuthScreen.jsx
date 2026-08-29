@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
 import { APP_VERSION } from '../config/appVersion';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { soundFx } from '../utils/audio';
 import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
 export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered }) {
   const tr = (key) => translate(lang, key);
+  const networkStatus = useNetworkStatus();
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -199,11 +201,11 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
               />
             </div>
 
-            <h1 className="text-[20px] font-bold text-white tracking-tight">
-              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : tr('loginTitle')}
+            <h1 className="text-[22px] font-black tracking-[0.12em] text-white">
+              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : 'SYOK SYOK POS'}
             </h1>
-            <p className="text-gray-500 text-xs mt-1.5 font-medium">
-              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : tr('loginSubtitle')}
+            <p className="mt-1.5 text-xs font-medium text-gray-400">
+              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : 'Restaurant Management'}
             </p>
           </div>
 
@@ -279,6 +281,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
             {/* Email Field */}
             {!passwordRecovery && <div className="relative group">
+              {!isSignUp && !isForgotPassword && <label htmlFor="current-email" className="mb-2 block text-xs font-bold text-gray-300">Username / Email</label>}
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'email'
@@ -299,7 +302,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  placeholder={tr('email')}
+                  placeholder={isSignUp ? tr('email') : 'staff@restaurant.com'}
                   autoComplete="username"
                   required
                   className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
@@ -309,6 +312,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
             {/* Password Field */}
             {!isForgotPassword && <div className="relative group">
+              {!isSignUp && !passwordRecovery && <label htmlFor="current-password" className="mb-2 block text-xs font-bold text-gray-300">Password</label>}
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'password'
@@ -386,6 +390,13 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
               </div>
             )}
 
+            {!passwordRecovery && !isSignUp && !isForgotPassword && (
+              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-medium text-gray-300">
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-white/20 bg-white/5 accent-[#D4AF37]" />
+                <span>Keep me signed in</span>
+              </label>
+            )}
+
             {/* Submit Button */}
             <button
               type="submit"
@@ -426,17 +437,16 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
             )}
           </form>
 
-          {/* Footer Secured Badge */}
-          <div className="flex items-center justify-center gap-2 mt-6 text-gray-600 text-[10px] font-medium">
-            <Lock className="w-3 h-3" />
-            <span>{tr('securedAuth')}</span>
+          <div className="mt-6 border-t border-white/[0.08] pt-5 text-center">
+            <p className="text-[10px] font-black tracking-[0.22em] text-amber-400">STAGING ENVIRONMENT</p>
+            <p className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400">
+              <span>POS {APP_VERSION}</span>
+              <span aria-hidden="true">•</span>
+              <span>{networkStatus === 'ONLINE' ? 'Online' : networkStatus === 'RECONNECTING' ? 'Reconnecting' : 'Offline'}</span>
+              <span className={`h-2 w-2 rounded-full ${networkStatus === 'ONLINE' ? 'bg-emerald-400' : networkStatus === 'RECONNECTING' ? 'bg-amber-400' : 'bg-red-400'}`} />
+            </p>
           </div>
         </div>
-
-        {/* Bottom Version Tag */}
-        <p className="text-center mt-5 text-gray-700 text-[11px] font-medium tracking-wide">
-          {tr('fineDiningTerminal')} · {APP_VERSION}
-        </p>
       </div>
 
       {/* Keyframe Animations */}
