@@ -95,6 +95,10 @@ export function reopenPersistedOrder(orderId: string, reason: string, deviceCont
   return apiRequest('orders', { method: 'POST', path: `${orderId}/reopen`, body: { reason, deviceContext } }) as Promise<ApiResult<Record<string, unknown>>>;
 }
 
+export function approveOrderVoid(orderId: string, input: { managerId: string; pin: string; reason: string }) {
+  return apiRequest('orders', { method: 'PATCH', path: `${orderId}/void`, body: input }) as Promise<ApiResult<OrderRecord>>;
+}
+
 export function startPersistedKitchenOrder(orderId: string) {
   return apiRequest('orders', { method: 'POST', path: `${orderId}/start`, body: {} }) as Promise<ApiResult<OrderRecord>>;
 }

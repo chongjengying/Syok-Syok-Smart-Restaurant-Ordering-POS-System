@@ -13,6 +13,7 @@
     "deploy:staging": "npm run build:staging && npx wrangler pages deploy dist --branch staging",
     "deploy:worker:staging": "npm run build:staging && npx wrangler deploy --config wrangler.toml --env staging",
     "lint": "oxlint src",
+    "test:login-flow": "node scripts/test-login-flow.mjs",
     "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
     "test:security-contracts": "node scripts/test-security-contracts.mjs",
     "test:split-money": "node scripts/test-split-money.mjs",
@@ -28,7 +29,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
     "@tanstack/react-virtual": "^3.14.10",
-    "exceljs": "^4.4.0",
+    "exceljs": "^3.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.28.0",
@@ -43,7 +44,13 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
+    "supabase": "^2.117.0-beta.6",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.0"
+  },
+  "allowScripts": {
+    "core-js@3.50.0": true,
+    "fsevents@2.3.3": true,
+    "fsevents@2.3.2": true
   }
 }

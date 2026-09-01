@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, Battery, Maximize2, User } from 'lucide-react';
+import { Wifi, Battery, Maximize2, User, UsersRound } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { env } from '../config/env';
 
-export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
+export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, onSwitchStaff, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
   const tr = (key) => translate(lang, key);
   const [time, setTime] = useState('');
 
@@ -128,6 +128,17 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                 <span className="text-[10px] text-gray-400 font-medium truncate max-w-[160px]">
                   {userEmail}
                 </span>
+                {onSwitchStaff && (
+                  <button
+                    type="button"
+                    onClick={onSwitchStaff}
+                    className="flex items-center gap-1 rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-semibold text-[#D4AF37] transition-colors hover:bg-[#D4AF37]/25 hover:text-[#FFF0B3]"
+                    title="Switch to another staff account using a PIN"
+                  >
+                    <UsersRound className="h-3.5 w-3.5" />
+                    Switch Staff
+                  </button>
+                )}
                 <button
                   onClick={onLogout}
                   className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-[#FFF0B3] transition-colors cursor-pointer font-semibold bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-full"

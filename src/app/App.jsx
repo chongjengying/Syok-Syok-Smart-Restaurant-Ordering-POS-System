@@ -26,6 +26,10 @@ import { getPriceChangeMessage, getUserErrorMessage } from '../shared/errorMessa
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { getStoredLanguage, LANGUAGE_STORAGE_KEY, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { usePosDisplaySettings } from '../hooks/usePosDisplaySettings';
+import { canAccessProtectedScreen, getRoleLanding, hasAdminWorkspaceAccess } from '../services/session-authorization.service';
+import { useStaffHandoff } from '../hooks/useStaffHandoff';
+import StaffSelectorScreen from '../components/StaffSelectorScreen';
+import StaffAccessStatusScreen from '../components/StaffAccessStatusScreen';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -40,13 +44,15 @@ function OperationalScreenLoader({ lang }) {
 
 export default function App() {
   // Auth State
-  const { session, isLoading: authLoading, signOut, isPasswordRecovery, finishPasswordRecovery } = useAuthSession();
+  const { session, isLoading: authLoading, refreshSession, signOut, isPasswordRecovery, finishPasswordRecovery, notice: sessionNotice, clearNotice } = useAuthSession();
   const {
     profile,
     isLoading: profileLoading,
     error: profileError,
-  } = useProfile(Boolean(session));
-  const permissionState = usePermissions(Boolean(session));
+  } = useProfile(session?.user?.id || '');
+  const permissionState = usePermissions(session?.user?.id || '');
+  const [operatorReady, setOperatorReady] = useState(false);
+  const staffHandoff = useStaffHandoff(Boolean(session) && !operatorReady, session?.user?.id || '');
 
   // Navigation includes order list → detail → payment → confirmation.
   const [currentScreen, setCurrentScreen] = useState(() => globalThis.location?.hash?.startsWith('#admin/') ? 'admin' : 'welcome');
@@ -60,6 +66,8 @@ export default function App() {
   const [lang, setLang] = useState(() => getStoredLanguage()); // 'en' | 'zh' | 'ms'
   const hadStoredLanguageAtStartup = useRef(Boolean(globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY)));
   const appliedSystemLanguage = useRef(false);
+  const appliedRoleLanding = useRef(false);
+  const landingSessionId = useRef('');
   const displaySettings = usePosDisplaySettings(Boolean(session));
   const configuredLanguages = Array.isArray(displaySettings?.enabledLanguages)
     ? SUPPORTED_LANGUAGES.filter((code) => displaySettings.enabledLanguages.includes(code))
@@ -88,9 +96,9 @@ export default function App() {
   const [orderNotice, setOrderNotice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
-  const canStartOrder = hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
-  const canAccessUnpaidOrders = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
-  const canAccessPayments = hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
+  const canStartOrder = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canAccessUnpaidOrders = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
+  const canAccessPayments = permissionState.hasPermission('payment.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
   const {
     orders: unpaidOrders,
     isLoading: unpaidOrdersLoading,
@@ -142,6 +150,18 @@ export default function App() {
     clearProductCache();
     resetCheckout();
     return { error: null };
+  };
+
+  const handleSwitchStaff = async () => {
+    await discardDraft();
+    setIsProfileOpen(false);
+    globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+    setCurrentScreen('welcome');
+    clearCart();
+    clearProductCache();
+    resetCheckout();
+    appliedRoleLanding.current = false;
+    setOperatorReady(false);
   };
 
   // Listen for PWA Install Prompt & Network Online/Offline
@@ -411,17 +431,6 @@ export default function App() {
   };
 
   const handlePayment = async (paymentDetails) => {
-    if (paymentDetails.alreadyPaid) {
-      setPaymentConfirmation({
-        order: activeOrder,
-        paymentMethod: paymentDetails.paymentMethod,
-        receivedAmount: paymentDetails.receivedAmount,
-        changeAmount: paymentDetails.changeAmount,
-        paymentReference: paymentDetails.paymentReference,
-      });
-      setCurrentScreen('paymentConfirmation');
-      return { error: null };
-    }
     const result = await submitPayment(paymentDetails);
     if (result.error) return result;
     setPaymentConfirmation({
@@ -520,35 +529,67 @@ export default function App() {
     setCurrentScreen(activeOrder.status === 'DRAFT' || draftCart.length > 0 ? 'menu' : 'orderStatus');
   }, [activeOrder, checkoutRestoring, currentScreen, draftCart.length, stayOnDashboard]);
 
-  const canAccessKitchen = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
-  const canAccessReadyToServe = hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
-  const canAccessReports = hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
-  const canAccessTables = hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
+  const canAccessKitchen = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
+  const canAccessReadyToServe = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
+  const canAccessReports = permissionState.hasPermission('report.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
+  const canAccessTables = permissionState.hasPermission('table.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
   const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
     .some((permission) => permissionState.hasPermission(permission));
-  const canAccessAdmin = permissionState.permissions.some((permission) => [
-    'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit', 'voucher.view',
-    'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view', 'system.health.view', 'settings.view',
-  ].includes(permission));
+  const canAccessAdmin = hasAdminWorkspaceAccess(permissionState.permissions);
   useEffect(() => {
     if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
       globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
       setCurrentScreen('welcome');
     }
   }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
+
+  useEffect(() => {
+    if (!session) {
+      appliedRoleLanding.current = false;
+      landingSessionId.current = '';
+      setOperatorReady(false);
+      return;
+    }
+    if (landingSessionId.current !== session.user.id) {
+      appliedRoleLanding.current = false;
+      landingSessionId.current = session.user.id;
+    }
+    if (!operatorReady) return;
+    if (!profile || profile.status !== 'ACTIVE' || profileLoading || permissionState.isLoading || appliedRoleLanding.current) return;
+    appliedRoleLanding.current = true;
+    const landing = getRoleLanding(profile.role);
+    if (landing === 'admin') {
+      globalThis.history?.replaceState(null, '', '#admin/dashboard');
+      setCurrentScreen('admin');
+    } else if (landing === 'kitchen') {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen('kitchen');
+    } else {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen('welcome');
+    }
+  }, [operatorReady, permissionState.isLoading, profile, profileLoading, session]);
+
+  useEffect(() => {
+    if (!session || profileLoading || permissionState.isLoading) return;
+    if (!canAccessProtectedScreen(currentScreen, profile?.role, permissionState.permissions)) {
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      setCurrentScreen(profile?.role === 'KITCHEN' && canAccessKitchen ? 'kitchen' : 'welcome');
+    }
+  }, [canAccessAdmin, canAccessKitchen, canAccessPayments, canAccessReadyToServe, canAccessReports, canAccessTables, canAccessUnpaidOrders, canStartOrder, currentScreen, permissionState.isLoading, permissionState.permissions, profile, profileLoading, session]);
   // Show a full-screen loading state while checking session
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
     return (
-      <div className="min-h-screen bg-[#0A0A0C] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div
-            className="w-12 h-12 rounded-full border-[3px] border-[#D4AF37]/20 border-t-[#D4AF37]"
-            style={{ animation: 'spin 0.8s linear infinite' }}
-          />
-          <span className="text-gray-500 text-sm font-medium tracking-wide">{tr('loadingTerminal')}</span>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
+      <IpadShell
+        deviceMode={deviceMode}
+        setDeviceMode={setDeviceMode}
+        isOnline={isOnline}
+        lang={lang}
+        setLang={setLang}
+        enabledLanguages={enabledLanguages}
+      >
+        <StaffAccessStatusScreen isOnline={isOnline} mode={checkoutRestoring ? 'restoring' : 'checking'} />
+      </IpadShell>
     );
   }
 
@@ -569,6 +610,9 @@ export default function App() {
           enabledLanguages={enabledLanguages}
           passwordRecovery={isPasswordRecovery}
           onPasswordRecovered={finishPasswordRecovery}
+          onSignedIn={refreshSession}
+          sessionNotice={sessionNotice}
+          onDismissSessionNotice={clearNotice}
         />
       </IpadShell>
     );
@@ -601,6 +645,50 @@ export default function App() {
     );
   }
 
+  if (!operatorReady) {
+    return (
+      <IpadShell deviceMode={deviceMode} setDeviceMode={setDeviceMode} isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}>
+        <StaffSelectorScreen
+          staff={staffHandoff.staff}
+          selectedStaff={staffHandoff.selected}
+          isLoading={staffHandoff.isLoading}
+          isSubmitting={staffHandoff.isSubmitting}
+          error={staffHandoff.error}
+          isOnline={isOnline}
+          onSelect={staffHandoff.select}
+          onCancel={staffHandoff.cancel}
+          onRetry={staffHandoff.refresh}
+          onLogout={handleLogout}
+          onSubmit={async (pin) => {
+            const result = await staffHandoff.submitPin(pin);
+            if (result.ok) {
+              await refreshSession();
+              setOperatorReady(!result.pinResetRequired);
+            }
+            return result.ok;
+          }}
+          onSetupPin={async (pin) => {
+            const ok = await staffHandoff.setupPin(pin);
+            if (ok) {
+              await refreshSession();
+              setOperatorReady(true);
+            }
+            return ok;
+          }}
+          currentUserId={session.user.id}
+          pinResetRequired={staffHandoff.pinResetRequired}
+          canConfigurePins={profile.role === 'ADMIN'}
+          onConfigurePins={() => {
+            appliedRoleLanding.current = true;
+            globalThis.history?.replaceState(null, '', '#admin/users');
+            setCurrentScreen('admin');
+            setOperatorReady(true);
+          }}
+        />
+      </IpadShell>
+    );
+  }
+
   // Authenticated → show POS App
   return (
     <IpadShell
@@ -611,6 +699,7 @@ export default function App() {
       setLang={setLang}
       enabledLanguages={enabledLanguages}
       onLogout={handleLogout}
+      onSwitchStaff={handleSwitchStaff}
       userEmail={session?.user?.email}
       onOpenProfile={() => setIsProfileOpen(true)}
     >

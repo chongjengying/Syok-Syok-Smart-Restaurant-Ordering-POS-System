@@ -117,7 +117,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
                     {table.status === 'OCCUPIED' && !order && (
                       <button disabled={busy} onClick={() => runStartCleaning(table.id)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> {tr('startCleaning')}</button>
                     )}
-                    {order && role !== 'CASHIER' && (
+                    {order && (
                       <button disabled={busy} onClick={() => setMove({ orderId: order.id, sourceTableId: table.id, orderNumber: order.orderNumber })} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50 flex items-center gap-1"><MoveRight className="w-3.5 h-3.5" /> {tr('move')}</button>
                     )}
                     {['ADMIN', 'MANAGER'].includes(role) && ['AVAILABLE', 'CLEANING'].includes(table.status) && (

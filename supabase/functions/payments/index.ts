@@ -129,7 +129,7 @@ Deno.serve(async (request) => {
     )) } } });
   }
 
-  if (!['ADMIN', 'MANAGER', 'CASHIER'].includes(callerProfile.role_name)) {
+  if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
     return jsonResponse(403, {
       error: 'Cashier, manager or administrator access is required.',
       code: 'INSUFFICIENT_PERMISSION',

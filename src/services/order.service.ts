@@ -1,5 +1,6 @@
 import {
   appendOrderItems as appendPersistedOrderItems,
+  approveOrderVoid,
   cancelPersistedOrder,
   createOrderBillSplit as createPersistedOrderBillSplit,
   fetchOrder,
@@ -232,6 +233,13 @@ export function reopenOrder(orderId: string, reason = '') {
   const normalized = String(reason).trim();
   if (!orderId || normalized.length < 3) return Promise.resolve({ data: null, error: new Error('Order ID and reopen reason are required.') });
   return reopenPersistedOrder(orderId, normalized.slice(0, 500), { source: 'admin-orders' });
+}
+
+export function voidOrderWithManagerApproval(orderId: string, managerId: string, pin: string, reason: string) {
+  if (!orderId || !managerId) return Promise.resolve({ data: null, error: new Error('Select a manager to approve this void.') });
+  if (!/^\d{6}$/.test(pin)) return Promise.resolve({ data: null, error: new Error('Enter the manager’s 6-digit PIN.') });
+  if (reason.trim().length < 3) return Promise.resolve({ data: null, error: new Error('Enter a void reason.') });
+  return approveOrderVoid(orderId, { managerId, pin, reason: reason.trim().slice(0, 500) });
 }
 
 export function subscribeToOrder(

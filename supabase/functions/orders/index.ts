@@ -150,6 +150,7 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !supabaseAnonKey) {
     return jsonResponse(500, { error: 'Server configuration is incomplete.' });
   }
@@ -197,7 +198,7 @@ Deno.serve(async (request) => {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
       if (scope === 'unpaid') {
-        if (!['ADMIN', 'MANAGER', 'WAITER', 'CASHIER'].includes(callerProfile.role_name)) {
+        if (!['ADMIN', 'MANAGER', 'WAITER'].includes(callerProfile.role_name)) {
           return jsonResponse(403, { error: 'Front-of-house access is required.' });
         }
         const { data, error, count } = await supabase
@@ -286,9 +287,37 @@ Deno.serve(async (request) => {
   }
 
   if (request.method === 'PATCH') {
-    if (!orderId || orderAction) return jsonResponse(400, { error: 'An order ID is required.' });
+    if (!orderId || (orderAction && orderAction !== 'void')) return jsonResponse(400, { error: 'An order ID is required.' });
     if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonResponse(400, { error: 'Request body must be a JSON object.' });
     const candidate = body as Record<string, unknown>;
+    if (orderAction === 'void') {
+      const managerId = typeof candidate.managerId === 'string' ? candidate.managerId : '';
+      const pin = typeof candidate.pin === 'string' ? candidate.pin : '';
+      const reason = typeof candidate.reason === 'string' ? candidate.reason.trim() : '';
+      if (!serviceRoleKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
+      if (!/^[0-9a-f-]{36}$/i.test(managerId) || !/^\d{6}$/.test(pin) || reason.length < 3) {
+        return jsonResponse(400, { error: 'Select a manager, enter their six-digit PIN, and provide a reason.', code: 'INVALID_VOID_APPROVAL' });
+      }
+      const limit = await consumeRateLimit(`${userData.user.id}:${managerId}`, 'manager-void-approval', 8, 300);
+      if (!limit.allowed) return jsonResponse(limit.error === 'RATE_LIMIT_EXCEEDED' ? 429 : 503, { error: limit.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many PIN attempts. Try again later.' : 'Approval is temporarily unavailable.', code: limit.error || 'RATE_LIMIT_UNAVAILABLE' });
+      const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: verification, error: verificationError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: managerId, p_pin: pin });
+      if (verificationError) return jsonResponse(500, { error: 'PIN verification is temporarily unavailable.', code: 'SERVER_ERROR' });
+      if (!verification?.ok) {
+        const locked = verification?.code === 'PIN_LOCKED';
+        return jsonResponse(locked ? 423 : 401, { error: locked ? 'This PIN is temporarily locked. Try again in five minutes.' : 'The manager PIN is incorrect.', code: locked ? 'PIN_LOCKED' : 'INVALID_PIN' });
+      }
+      const { data: approval, error: approvalError } = await admin.rpc('approve_order_void', {
+        p_order_id: orderId, p_requested_by: userData.user.id, p_manager_id: managerId,
+        p_reason: reason.slice(0, 500),
+      });
+      if (approvalError) {
+        const code = approvalError.message.match(/[A-Z][A-Z_]+/)?.[0] || 'VOID_FAILED';
+        const statusCode = code === 'ORDER_NOT_FOUND' ? 404 : 409;
+        return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data: approval });
+    }
     const status = typeof candidate.status === 'string' ? candidate.status.toUpperCase() : '';
     if (!allowedOrderStatuses.has(status)) return jsonResponse(400, { error: 'Order status is invalid.' });
     if (status === 'CANCELLED') return jsonResponse(409, { error: 'Use the protected cancellation action.', code: 'DEDICATED_CANCELLATION_REQUIRED' });

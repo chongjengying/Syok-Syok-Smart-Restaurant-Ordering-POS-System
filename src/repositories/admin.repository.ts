@@ -49,6 +49,9 @@ export function inviteAdminUser(input: Record<string, unknown>) {
 export function updateAdminUser(input: Record<string, unknown>) {
   return apiRequest('admin-users', { method: 'PATCH', body: input }) as Promise<ApiResult<Record<string, unknown>>>;
 }
+export const requireStaffPinSetup = (userId: string) => supabase.rpc('require_staff_pin_setup', {
+  p_user_id: userId,
+}) as unknown as Promise<ApiResult<{ temporaryPin: string }>>;
 
 export function fetchAuditLogs(search = '', limit = 100) {
   let query = supabase.from('audit_logs').select('id,actor_id,action,entity_type,entity_id,reason,metadata,old_value,new_value,request_id,created_at').order('created_at', { ascending: false }).limit(limit);

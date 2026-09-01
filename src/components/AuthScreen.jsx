@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ChefHat, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { resendConfirmation, sendPasswordReset, signUp, signIn, updatePassword } from '../features/auth/authService';
+import { APP_VERSION } from '../config/appVersion';
+import { env } from '../config/env';
+import { useAuthConnection } from '../hooks/useAuthConnection';
 import { soundFx } from '../utils/audio';
 import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
-export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered }) {
+export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered, onSignedIn, sessionNotice = '', onDismissSessionNotice }) {
   const tr = (key) => translate(lang, key);
+  const { status: connectionStatus } = useAuthConnection();
+  const submitLock = useRef(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -20,17 +25,21 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLock.current || isLoading) return;
     setError('');
     setNotice('');
+    onDismissSessionNotice?.();
 
     if (isForgotPassword) {
       if (!email.trim()) {
         setError(tr('emailRequired'));
         return;
       }
+      submitLock.current = true;
       setIsLoading(true);
       const { error: resetError } = await sendPasswordReset(email);
       setIsLoading(false);
+      submitLock.current = false;
       if (resetError) setError(resetError.message);
       else setNotice(tr('passwordResetSent'));
       return;
@@ -59,6 +68,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       return;
     }
 
+    submitLock.current = true;
     setIsLoading(true);
     soundFx.playTap();
 
@@ -94,6 +104,12 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
           setError(authError.message);
           soundFx.playRemove();
         } else {
+          const sessionResult = await onSignedIn?.();
+          if (sessionResult?.error || !sessionResult?.data?.session) {
+            setError(sessionResult?.error?.message || tr('unexpectedRetry'));
+            soundFx.playRemove();
+            return;
+          }
           soundFx.playSuccess();
         }
       }
@@ -103,13 +119,14 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       soundFx.playRemove();
     } finally {
       setIsLoading(false);
+      submitLock.current = false;
     }
   };
 
   return (
-    <div className="auth-screen relative w-full h-full flex items-center justify-center overflow-hidden bg-[#111214]">
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-[#0A0A0F]">
       {/* Animated Background Gradient Orbs */}
-      <div className="auth-decoration absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
           style={{
@@ -141,7 +158,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
       {/* Subtle Grid Pattern Overlay */}
       <div
-        className="auth-decoration absolute inset-0 opacity-[0.03] pointer-events-none"
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{
           backgroundImage: `linear-gradient(rgba(212,175,55,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,0.3) 1px, transparent 1px)`,
           backgroundSize: '60px 60px',
@@ -151,7 +168,13 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       {/* Auth Card */}
       <div className="relative z-10 w-full max-w-[440px] mx-auto px-4">
         {/* Card Container with Glass Effect */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#18191C] p-8 shadow-xl sm:p-10">
+        <div
+          className="rounded-[28px] border border-white/[0.08] p-8 sm:p-10 relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(26,26,30,0.95) 0%, rgba(18,18,22,0.98) 100%)',
+            boxShadow: '0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(212,175,55,0.05), inset 0 1px 0 rgba(255,255,255,0.03)',
+          }}
+        >
           {/* Top Gold Accent Line */}
           <div
             className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-24 rounded-full"
@@ -171,18 +194,32 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
           {/* Header: Logo & Branding */}
           <div className="flex flex-col items-center mb-6">
             {/* Animated Logo Ring */}
-            <div className="relative mb-4 h-[72px] w-[72px] rounded-xl border border-[#D4AF37]/40 bg-[#222327] p-[3px]">
+            <div
+              className="w-[88px] h-[88px] rounded-full p-[3px] mb-4 relative"
+              style={{
+                background: 'conic-gradient(from 0deg, #D4AF37, #B8952B, #8B6914, #D4AF37)',
+                animation: 'spinGlow 6s linear infinite',
+              }}
+            >
               <div className="w-full h-full rounded-full bg-[#121216] flex flex-col items-center justify-center">
                 <ChefHat className="w-8 h-8 text-[#D4AF37] mb-0.5" />
                 <span className="text-[7px] tracking-[3px] text-[#D4AF37] font-bold uppercase">POS</span>
               </div>
+              {/* Outer glow pulse */}
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  boxShadow: '0 0 30px rgba(212,175,55,0.15)',
+                  animation: 'pulseGlow 3s ease-in-out infinite',
+                }}
+              />
             </div>
 
-            <h1 className="text-[20px] font-bold text-white tracking-tight">
-              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : tr('loginTitle')}
+            <h1 className="text-[22px] font-black tracking-[0.12em] text-white">
+              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : 'SYOK SYOK POS'}
             </h1>
-            <p className="text-gray-500 text-xs mt-1.5 font-medium">
-              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : tr('loginSubtitle')}
+            <p className="mt-1.5 text-xs font-medium text-gray-400">
+              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : 'Restaurant Management'}
             </p>
           </div>
 
@@ -258,6 +295,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
             {/* Email Field */}
             {!passwordRecovery && <div className="relative group">
+              {!isSignUp && !isForgotPassword && <label htmlFor="current-email" className="mb-2 block text-xs font-bold text-gray-300">Email address</label>}
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'email'
@@ -278,7 +316,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  placeholder={tr('email')}
+                  placeholder={isSignUp ? tr('email') : 'staff@restaurant.com'}
                   autoComplete="username"
                   required
                   className="flex-1 bg-transparent text-white text-[14px] font-medium placeholder:text-gray-600 outline-none caret-[#D4AF37]"
@@ -288,6 +326,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
             {/* Password Field */}
             {!isForgotPassword && <div className="relative group">
+              {!isSignUp && !passwordRecovery && <label htmlFor="current-password" className="mb-2 block text-xs font-bold text-gray-300">Password</label>}
               <div
                 className={`flex items-center gap-3 rounded-2xl border px-4 h-[52px] transition-all duration-300 ${
                   focusedField === 'password'
@@ -345,6 +384,12 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
             )}
 
             {/* Alert Message */}
+            {sessionNotice && !error && (
+              <div role="status" className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3.5 text-[13px] font-medium leading-relaxed text-amber-300">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{sessionNotice}</span>
+              </div>
+            )}
             {error && (
               <div
                 className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-[13px] leading-relaxed font-medium ${
@@ -405,17 +450,18 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
             )}
           </form>
 
-          {/* Footer Secured Badge */}
-          <div className="flex items-center justify-center gap-2 mt-6 text-gray-600 text-[10px] font-medium">
-            <Lock className="w-3 h-3" />
-            <span>{tr('securedAuth')}</span>
+          <div className="mt-6 border-t border-white/[0.08] pt-5 text-center">
+            <p className={`text-[10px] font-black tracking-[0.22em] ${env.appEnv === 'production' ? 'text-red-400' : 'text-amber-400'}`}>
+              {env.appEnv === 'production' ? 'PRODUCTION ENVIRONMENT' : 'STAGING ENVIRONMENT'}
+            </p>
+            <p className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400">
+              <span>POS {APP_VERSION}</span>
+              <span aria-hidden="true">•</span>
+              <span>{connectionStatus === 'ONLINE' ? 'Connected' : connectionStatus === 'CHECKING' ? 'Checking connection' : connectionStatus === 'OFFLINE' ? 'Offline' : 'Service unavailable'}</span>
+              <span className={`h-2 w-2 rounded-full ${connectionStatus === 'ONLINE' ? 'bg-emerald-400' : connectionStatus === 'CHECKING' ? 'bg-amber-400' : 'bg-red-400'}`} />
+            </p>
           </div>
         </div>
-
-        {/* Bottom Version Tag */}
-        <p className="text-center mt-5 text-gray-700 text-[11px] font-medium tracking-wide">
-          {tr('fineDiningTerminal')}
-        </p>
       </div>
 
       {/* Keyframe Animations */}

@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { RefreshCw, Search, X } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Check, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
 import { useAdminOperations } from "../../hooks/useAdminOperations";
-import { cancelOrder, getOrder } from "../../services/order.service";
+import { getOrder, voidOrderWithManagerApproval } from "../../services/order.service";
+import { listSelectableStaff } from "../../features/auth/authService";
 export default function AdminOrders({ canManage = false }) {
   const s = useAdminOperations("orders");
   const [selected, setSelected] = useState(null);
@@ -9,6 +10,47 @@ export default function AdminOrders({ canManage = false }) {
   const [detailError, setDetailError] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [managers, setManagers] = useState([]);
+  const [managerId, setManagerId] = useState("");
+  const [managerSearch, setManagerSearch] = useState("");
+  const [recentManagerIds, setRecentManagerIds] = useState([]);
+  const [pin, setPin] = useState("");
+  const pinRef = useRef(null);
+  const selectedManager = useMemo(
+    () => managers.find((manager) => manager.id === managerId) || null,
+    [managerId, managers],
+  );
+  const recentManagers = useMemo(
+    () =>
+      recentManagerIds
+        .map((id) => managers.find((manager) => manager.id === id))
+        .filter(Boolean),
+    [managers, recentManagerIds],
+  );
+  const filteredManagers = useMemo(() => {
+    const q = managerSearch.trim().toLowerCase();
+    if (!q) return managers;
+    return managers.filter((manager) =>
+      `${manager.name} ${manager.role}`.toLowerCase().includes(q),
+    );
+  }, [managerSearch, managers]);
+  useEffect(() => {
+    if (!approvalOpen) return;
+    void listSelectableStaff().then((result) => {
+      setManagers((result.data || []).filter((staff) => ["MANAGER", "ADMIN"].includes(staff.role)));
+      if (result.error) setDetailError(result.error.message);
+    });
+  }, [approvalOpen]);
+  useEffect(() => {
+    if (!approvalOpen) return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("recentVoidManagers") || "[]");
+      if (Array.isArray(saved)) setRecentManagerIds(saved.slice(0, 3));
+    } catch {
+      setRecentManagerIds([]);
+    }
+  }, [approvalOpen]);
   const open = async (row) => {
     setSelected(row);
     setDetail(null);
@@ -17,20 +59,50 @@ export default function AdminOrders({ canManage = false }) {
     setDetail(r.data);
     setDetailError(r.error?.message || "");
   };
-  const cancel = async () => {
+  const requestCancellation = () => {
     if (reason.trim().length < 3) {
       setDetailError("Cancellation reason must contain at least 3 characters.");
       return;
     }
+    setDetailError("");
+    setManagerId("");
+    setManagerSearch("");
+    setPin("");
+    setApprovalOpen(true);
+  };
+  const selectManager = (manager) => {
+    setManagerId(manager.id);
+    setManagerSearch("");
+    setDetailError("");
+    window.setTimeout(() => pinRef.current?.focus(), 0);
+  };
+  const cancel = async () => {
+    if (!managerId || pin.length !== 6) {
+      setDetailError("Select a manager and enter their six-digit PIN.");
+      return;
+    }
     setBusy(true);
-    const r = await cancelOrder(selected.id, reason.trim());
+    setDetailError("");
+    const r = await voidOrderWithManagerApproval(selected.id, managerId, pin, reason);
     setBusy(false);
     if (r.error) {
       setDetailError(r.error.message);
       return;
     }
+    const nextRecentManagerIds = [managerId, ...recentManagerIds.filter((id) => id !== managerId)].slice(0, 3);
+    setRecentManagerIds(nextRecentManagerIds);
+    window.localStorage.setItem("recentVoidManagers", JSON.stringify(nextRecentManagerIds));
+    setApprovalOpen(false);
     setSelected(null);
+    setReason("");
     await s.refresh();
+  };
+  const closeOrder = () => {
+    if (busy) return;
+    setApprovalOpen(false);
+    setSelected(null);
+    setReason("");
+    setDetailError("");
   };
   return (
     <section className="space-y-5">
@@ -165,7 +237,7 @@ export default function AdminOrders({ canManage = false }) {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6">
             <div className="flex justify-between">
               <h2 className="text-xl font-black">{selected.order_number}</h2>
-              <button onClick={() => setSelected(null)}>
+              <button onClick={closeOrder} aria-label="Close order details">
                 <X />
               </button>
             </div>
@@ -236,10 +308,10 @@ export default function AdminOrders({ canManage = false }) {
                         </label>
                         <button
                           disabled={busy}
-                          onClick={cancel}
+                          onClick={requestCancellation}
                           className="mt-2 rounded-xl bg-red-600 px-4 py-2 font-bold text-white"
                         >
-                          {busy ? "Cancelling…" : "Cancel Order"}
+                          Void Order
                         </button>
                       </div>
                     )}
@@ -247,6 +319,100 @@ export default function AdminOrders({ canManage = false }) {
               )
             )}
           </div>
+        </div>
+      )}
+      {approvalOpen && selected && detail && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="void-approval-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-3">
+                <span className="rounded-full bg-amber-100 p-2 text-amber-700"><ShieldCheck size={22} /></span>
+                <div><h2 id="void-approval-title" className="text-xl font-black">Manager Approval Required</h2><p className="mt-1 text-sm text-gray-500">A manager must authorize this action.</p></div>
+              </div>
+              <button disabled={busy} onClick={() => setApprovalOpen(false)} aria-label="Close approval"><X /></button>
+            </div>
+            <dl className="my-6 grid grid-cols-2 gap-4 rounded-xl bg-gray-50 p-4">
+              <div><dt className="text-xs font-bold uppercase text-gray-400">Action</dt><dd className="mt-1 font-black">Void Order {selected.order_number}</dd></div>
+              <div><dt className="text-xs font-bold uppercase text-gray-400">Amount</dt><dd className="mt-1 font-black">RM {detail.total.toFixed(2)}</dd></div>
+            </dl>
+            <div className="space-y-3">
+              <div className="flex items-end justify-between gap-3">
+                <label className="flex-1 text-sm font-bold" htmlFor="manager-search">
+                  Manager
+                  <span className="relative mt-1 block">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      id="manager-search"
+                      value={managerSearch}
+                      onChange={(event) => {
+                        setManagerSearch(event.target.value);
+                        setDetailError("");
+                      }}
+                      placeholder={selectedManager ? selectedManager.name : "Search manager"}
+                      className="w-full rounded-xl border bg-white py-3 pl-10 pr-3 font-normal outline-none ring-[#D4AF37]/30 transition focus:border-[#D4AF37] focus:ring-4"
+                    />
+                  </span>
+                </label>
+                {selectedManager && (
+                  <button
+                    type="button"
+                    onClick={() => selectManager(selectedManager)}
+                    className="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-black text-emerald-700 sm:block"
+                  >
+                    Selected<br />{selectedManager.name}
+                  </button>
+                )}
+              </div>
+              {recentManagers.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-black uppercase tracking-wide text-gray-400">Recently used</p>
+                  <div className="flex flex-wrap gap-2">
+                    {recentManagers.map((manager) => (
+                      <button
+                        key={manager.id}
+                        type="button"
+                        onClick={() => selectManager(manager)}
+                        className={`rounded-full border px-3 py-1.5 text-sm font-bold transition ${manager.id === managerId ? "border-[#D4AF37] bg-[#D4AF37] text-black" : "border-gray-200 bg-white text-gray-700 hover:border-[#D4AF37]/70"}`}
+                      >
+                        {manager.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+                {filteredManagers.length ? (
+                  filteredManagers.map((manager) => (
+                    <button
+                      key={manager.id}
+                      type="button"
+                      onClick={() => selectManager(manager)}
+                      className={`flex w-full items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-b-0 transition hover:bg-amber-50 ${manager.id === managerId ? "bg-amber-50" : ""}`}
+                    >
+                      <span>
+                        <strong className="block text-sm text-gray-950">{manager.name}</strong>
+                        <small className="mt-0.5 block text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{manager.role}</small>
+                      </span>
+                      {manager.id === managerId && <Check className="h-5 w-5 text-[#D4AF37]" />}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-4 py-6 text-center text-sm font-bold text-gray-400">No manager found.</p>
+                )}
+              </div>
+            </div>
+            <label className="mt-5 block text-sm font-bold">Manager PIN
+              <input ref={pinRef} autoFocus inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "").slice(0, 6)); setDetailError(""); }} className="sr-only" aria-label="Six-digit manager PIN" />
+              <button type="button" onClick={() => pinRef.current?.focus()} className="mt-3 flex w-full justify-center gap-4 rounded-xl border bg-gray-50 p-4 ring-[#D4AF37]/30 transition focus-visible:outline-none focus-visible:ring-4" aria-label={`${pin.length} of 4 PIN digits entered`}>
+                {[0, 1, 2, 3, 4, 5].map((index) => <i key={index} className={`h-3 w-3 rounded-full border ${index < pin.length ? "border-[#D4AF37] bg-[#D4AF37]" : "border-gray-400"}`} />)}
+              </button>
+            </label>
+            {detailError && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{detailError}</p>}
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button disabled={busy} onClick={() => { setApprovalOpen(false); setPin(""); setDetailError(""); }} className="rounded-xl border px-4 py-3 font-bold disabled:opacity-50">Cancel</button>
+              <button disabled={busy || !managerId || pin.length !== 6} onClick={() => void cancel()} className="rounded-xl bg-red-600 px-4 py-3 font-black text-white disabled:opacity-40">{busy ? "Approving…" : "Approve"}</button>
+            </div>
+          </section>
         </div>
       )}
     </section>
