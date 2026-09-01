@@ -411,6 +411,17 @@ export default function App() {
   };
 
   const handlePayment = async (paymentDetails) => {
+    if (paymentDetails.alreadyPaid) {
+      setPaymentConfirmation({
+        order: activeOrder,
+        paymentMethod: paymentDetails.paymentMethod,
+        receivedAmount: paymentDetails.receivedAmount,
+        changeAmount: paymentDetails.changeAmount,
+        paymentReference: paymentDetails.paymentReference,
+      });
+      setCurrentScreen('paymentConfirmation');
+      return { error: null };
+    }
     const result = await submitPayment(paymentDetails);
     if (result.error) return result;
     setPaymentConfirmation({
@@ -516,7 +527,7 @@ export default function App() {
   const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
     .some((permission) => permissionState.hasPermission(permission));
   const canAccessAdmin = permissionState.permissions.some((permission) => [
-    'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit',
+    'dashboard.view', 'product.create', 'product.edit', 'category.create', 'category.edit', 'voucher.view',
     'user.view', 'role.view', 'order.manage', 'payment.refund', 'table.manage', 'report.view', 'audit.view', 'system.health.view', 'settings.view',
   ].includes(permission));
   useEffect(() => {

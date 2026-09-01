@@ -31,7 +31,7 @@ export function getPresetDateRange(preset: DashboardPreset) {
 
 export function createDefaultDashboardFilters(): DashboardFilters {
   return {
-    preset: 'today', ...getPresetDateRange('today'), diningMode: '', paymentMethod: '', staffId: '', branchId: '',
+    preset: 'today', ...getPresetDateRange('today'), diningMode: '', paymentMethod: '', paymentProviderId: '', staffId: '', branchId: '',
     granularity: 'day', metric: 'revenue',
   };
 }

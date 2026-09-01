@@ -43,6 +43,16 @@ Deno.serve(async (request) => {
   const paymentAction = functionIndex >= 0 ? pathParts[functionIndex + 1] || null : null;
 
   if (request.method === 'GET') {
+    if (paymentAction === 'receipt') {
+      const orderId = new URL(request.url).searchParams.get('orderId')?.trim() || '';
+      if (!orderId) return jsonResponse(400, { error: 'orderId is required.', code: 'ORDER_ID_REQUIRED' });
+      const { data, error } = await supabase.rpc('get_pos_receipt', { p_order_id: orderId });
+      if (error) {
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'RECEIPT_LOAD_FAILED';
+        return jsonResponse(code === 'RECEIPT_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data });
+    }
     if (paymentAction === 'summary') {
       const orderId = new URL(request.url).searchParams.get('orderId')?.trim() || '';
       if (!orderId) return jsonResponse(400, { error: 'orderId is required.', code: 'ORDER_ID_REQUIRED' });
@@ -51,6 +61,15 @@ Deno.serve(async (request) => {
         const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_SUMMARY_FAILED';
         const statusCode = code === 'ORDER_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409;
         return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data });
+    }
+
+    if (paymentAction === 'providers') {
+      const { data, error } = await supabase.rpc('list_payment_providers');
+      if (error) {
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_PROVIDERS_FAILED';
+        return jsonResponse(code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
       }
       return jsonResponse(200, { data });
     }
@@ -103,7 +122,11 @@ Deno.serve(async (request) => {
     }
 
     if (paymentAction) return jsonResponse(404, { error: 'Payment resource was not found.' });
-    return jsonResponse(200, { data: { methods: getPaymentCapabilities() } });
+    const { data: providerRows } = await supabase.rpc('list_payment_providers');
+    const providers = Array.isArray(providerRows) ? providerRows.filter((provider) => provider.enabled) : [];
+    return jsonResponse(200, { data: { methods: getPaymentCapabilities().map((capability) => (
+      ['QR', 'EWALLET'].includes(capability.method) ? { ...capability, available: providers.length > 0, providers } : capability
+    )) } } });
   }
 
   if (!['ADMIN', 'MANAGER', 'CASHIER'].includes(callerProfile.role_name)) {
@@ -147,6 +170,43 @@ Deno.serve(async (request) => {
     return jsonResponse(200, { data });
   }
 
+  if (paymentAction === 'providers') {
+    const providers = Array.isArray(body.providers) ? body.providers : [];
+    const { data, error } = await supabase.rpc('update_payment_providers', { p_providers: providers });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_PROVIDERS_SAVE_FAILED';
+      return jsonResponse(['INSUFFICIENT_PERMISSION'].includes(code) ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
+  if (paymentAction === 'void') {
+    const paymentId = typeof body.paymentId === 'string' ? body.paymentId.trim() : '';
+    const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+    const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    const deviceContext = body.deviceContext && typeof body.deviceContext === 'object' && !Array.isArray(body.deviceContext) ? body.deviceContext : {};
+    if (!paymentId || reason.length < 3 || !idempotencyKey) return jsonResponse(400, { error: 'paymentId, reason and idempotencyKey are required.', code: 'VOID_DETAILS_REQUIRED' });
+    const { data, error } = await supabase.rpc('void_pos_payment', { p_payment_id: paymentId, p_reason: reason, p_idempotency_key: idempotencyKey, p_device_context: deviceContext });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_VOID_FAILED';
+      return jsonResponse(code === 'PAYMENT_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
+  if (paymentAction === 'receipt' && pathParts[functionIndex + 2] === 'reprint') {
+    const receiptId = typeof body.receiptId === 'string' ? body.receiptId.trim() : '';
+    const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+    const deviceContext = body.deviceContext && typeof body.deviceContext === 'object' && !Array.isArray(body.deviceContext) ? body.deviceContext : {};
+    if (!receiptId || reason.length < 3) return jsonResponse(400, { error: 'receiptId and reason are required.', code: 'REPRINT_DETAILS_REQUIRED' });
+    const { data, error } = await supabase.rpc('reprint_pos_receipt', { p_receipt_id: receiptId, p_reason: reason, p_device_context: deviceContext });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'RECEIPT_REPRINT_FAILED';
+      return jsonResponse(code === 'RECEIPT_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
   const splitType = typeof body.splitType === 'string' ? body.splitType.trim().toUpperCase() : '';
   if (splitType) {
     const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
@@ -159,10 +219,13 @@ Deno.serve(async (request) => {
     const itemAllocations = Array.isArray(body.itemAllocations) ? body.itemAllocations : [];
     const billId = typeof body.billId === 'string' && body.billId.trim() ? body.billId.trim() : null;
     const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    const providerId = typeof body.providerId === 'string' ? body.providerId.trim().toUpperCase() : '';
+    const paymentReference = typeof body.paymentReference === 'string' ? body.paymentReference.trim().slice(0, 150) : '';
     if (!orderId || !['FULL', 'EQUAL', 'AMOUNT', 'ITEM'].includes(splitType)) {
       return jsonResponse(400, { error: 'Split payment details are invalid.', code: 'INVALID_SPLIT_PAYMENT' });
     }
     if (!methods.has(method)) return jsonResponse(400, { error: 'paymentMethod is invalid.', code: 'INVALID_PAYMENT_METHOD' });
+    if (['QR', 'EWALLET'].includes(method) && !providerId) return jsonResponse(400, { error: 'providerId is required.', code: 'PAYMENT_PROVIDER_REQUIRED' });
     if (!idempotencyKey || idempotencyKey.length > 128) {
       return jsonResponse(400, { error: 'idempotencyKey is invalid.', code: 'IDEMPOTENCY_KEY_REQUIRED' });
     }
@@ -192,20 +255,10 @@ Deno.serve(async (request) => {
       return jsonResponse(400, { error: 'Select an equal split.', code: 'EQUAL_SPLIT_BILL_REQUIRED' });
     }
 
-    const provider = createPaymentProvider(method as PaymentRequest['method']);
-    const providerResult = await provider.process({
-      orderId,
-      amount: amount ? Number(amount) : 0,
-      method: method as PaymentRequest['method'],
-      idempotencyKey,
-    });
-    if (!providerResult.confirmed) {
-      return jsonResponse(503, {
-        error: providerResult.error || 'Payment provider did not confirm the transaction.',
-        code: 'PAYMENT_PROVIDER_UNAVAILABLE',
-        retryable: providerResult.retryable || false,
-      });
-    }
+    const providerResult = ['QR', 'EWALLET'].includes(method)
+      ? { confirmed: true, provider: providerId, transactionReference: paymentReference || null }
+      : await createPaymentProvider(method as PaymentRequest['method']).process({ orderId, amount: amount ? Number(amount) : 0, method: method as PaymentRequest['method'], idempotencyKey });
+    if (!providerResult.confirmed) return jsonResponse(503, { error: providerResult.error || 'Payment provider did not confirm the transaction.', code: 'PAYMENT_PROVIDER_UNAVAILABLE', retryable: providerResult.retryable || false });
 
     const { data, error } = await supabase.rpc('process_pos_split_payment', {
       p_order_id: orderId,
@@ -218,6 +271,7 @@ Deno.serve(async (request) => {
       p_idempotency_key: idempotencyKey,
       p_provider: providerResult.provider,
       p_transaction_reference: providerResult.transactionReference,
+      p_provider_id: ['QR', 'EWALLET'].includes(method) ? providerId : null,
     });
     if (error) {
       const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'SPLIT_PAYMENT_FAILED';

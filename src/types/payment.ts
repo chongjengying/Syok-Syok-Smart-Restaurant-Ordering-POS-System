@@ -5,6 +5,15 @@ export interface PaymentCapability {
   method: PaymentMethod;
   available: boolean;
   mode: 'manual' | 'unavailable';
+  providers?: PaymentProvider[];
+}
+
+export interface PaymentProvider {
+  id: string;
+  providerId: string;
+  displayName: string;
+  enabled: boolean;
+  sortOrder: number;
 }
 
 export interface DailySalesFilters {
@@ -42,6 +51,9 @@ export interface PaymentHistoryEntry {
   status: 'PAID';
   paidAt: string;
   cashier: string | null;
+  providerId?: string | null;
+  providerName?: string | null;
+  optionalReferenceNo?: string | null;
   paidTotalAfter: number | string;
   remainingAfter: number | string;
 }
@@ -73,6 +85,8 @@ export interface SplitPaymentInput {
   paymentMethod: PaymentMethod;
   amount?: string | null;
   receivedAmount?: string | null;
+  providerId?: string | null;
+  paymentReference?: string | null;
   itemAllocations?: Array<{ orderItemId: string; quantity: number }>;
   billId?: string | null;
   idempotencyKey: string;

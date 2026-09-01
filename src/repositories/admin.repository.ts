@@ -9,6 +9,7 @@ export const fetchAdminDashboard = (filters: DashboardFilters) => supabase.rpc('
   p_date_to: filters.dateTo,
   p_dining_mode: filters.diningMode || null,
   p_payment_method: filters.paymentMethod || null,
+  p_payment_provider_id: filters.paymentProviderId || null,
   p_staff_id: filters.staffId || null,
   p_branch_id: filters.branchId || null,
   p_granularity: filters.granularity.toUpperCase(),
@@ -66,6 +67,7 @@ export function fetchAdminOrders(filters: Record<string, unknown> = {}) {
 export function fetchAdminPayments(filters: Record<string, unknown> = {}) {
   return supabase.rpc('list_admin_payments', {
     p_search: filters.search || null, p_method: filters.method || null, p_status: filters.status || null,
+    p_provider_id: filters.provider || null,
     p_date_from: filters.dateFrom || null, p_date_to: filters.dateTo || null, p_limit: 25,
     p_offset: (Number(filters.page || 1) - 1) * 25,
   }) as unknown as Promise<ApiResult<Record<string, unknown>>>;

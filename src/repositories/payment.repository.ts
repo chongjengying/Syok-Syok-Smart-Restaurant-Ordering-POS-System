@@ -1,6 +1,6 @@
 import { apiRequest } from '../infrastructure/supabase/functionsClient';
 import type { ApiResult, RequestOptions } from '../types/api';
-import type { DailySalesFilters, DailySalesRow, PaymentCapability, PaymentMethod, PaymentSummary, ProductSalesRow, SplitPaymentInput } from '../types/payment';
+import type { DailySalesFilters, DailySalesRow, PaymentCapability, PaymentMethod, PaymentProvider, PaymentSummary, ProductSalesRow, SplitPaymentInput } from '../types/payment';
 
 export function fetchPaymentCapabilities({ signal }: RequestOptions = {}) {
   return apiRequest('payments', { signal }) as Promise<ApiResult<{ methods: PaymentCapability[] }>>;
@@ -16,6 +16,14 @@ export function fetchProductSalesReport(query: DailySalesFilters, { signal }: Re
 
 export function fetchPaymentSummary(orderId: string, { signal }: RequestOptions = {}) {
   return apiRequest('payments', { path: 'summary', query: { orderId }, signal }) as Promise<ApiResult<PaymentSummary>>;
+}
+
+export function fetchPaymentProviders({ signal }: RequestOptions = {}) {
+  return apiRequest('payments', { path: 'providers', signal }) as Promise<ApiResult<PaymentProvider[]>>;
+}
+
+export function savePaymentProviders(providers: Array<Partial<PaymentProvider>>) {
+  return apiRequest('payments', { path: 'providers', method: 'POST', body: { providers } }) as Promise<ApiResult<PaymentProvider[]>>;
 }
 
 export function submitPayment(
@@ -51,4 +59,16 @@ export function submitRefund(orderId: string, reason: string, idempotencyKey: st
     method: 'POST',
     body: { orderId, reason, idempotencyKey },
   }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function submitPaymentVoid(paymentId: string, reason: string, idempotencyKey: string) {
+  return apiRequest('payments', { path: 'void', method: 'POST', body: { paymentId, reason, idempotencyKey, deviceContext: { source: 'admin-payments' } } }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function fetchReceipt(orderId: string, { signal }: RequestOptions = {}) {
+  return apiRequest('payments', { path: 'receipt', query: { orderId }, signal }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function submitReceiptReprint(receiptId: string, reason: string) {
+  return apiRequest('payments', { path: 'receipt/reprint', method: 'POST', body: { receiptId, reason, deviceContext: { source: 'admin-payments' } } }) as Promise<ApiResult<Record<string, unknown>>>;
 }

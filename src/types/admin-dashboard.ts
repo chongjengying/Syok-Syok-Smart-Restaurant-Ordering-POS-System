@@ -6,6 +6,7 @@ export interface DashboardFilters {
   dateTo: string;
   diningMode: string;
   paymentMethod: string;
+  paymentProviderId: string;
   staffId: string;
   branchId: string;
   granularity: DashboardGranularity;
@@ -43,5 +44,5 @@ export interface DashboardData {
   alerts: Array<Record<string, unknown>>;
   staffPerformance: Array<Record<string, unknown>>;
   recentActivities: Array<Record<string, unknown>>;
-  filterOptions: { branches: Array<Record<string, unknown>>; staff: Array<Record<string, unknown>> };
+  filterOptions: { branches: Array<Record<string, unknown>>; staff: Array<Record<string, unknown>>; paymentProviders?: Array<Record<string, unknown>> };
 }

@@ -23,6 +23,8 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   const [amountInput, setAmountInput] = useState('');
   const [itemQuantities, setItemQuantities] = useState({});
   const [selectedMethod, setSelectedMethod] = useState('CASH');
+  const [providerId, setProviderId] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
   const [receivedInput, setReceivedInput] = useState('');
   const [confirmation, setConfirmation] = useState(null);
   const [receiptPayment, setReceiptPayment] = useState(null);
@@ -52,6 +54,9 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   const remainingCents = parseMoneyToCents(summary?.remainingAmount ?? '') ?? 0;
   const paidCents = parseMoneyToCents(summary?.paidAmount ?? '') ?? 0;
   const selectedBill = bills.find((bill) => bill.id === selectedBillId) || null;
+  const selectedCapability = capabilities.find((capability) => capability.method === selectedMethod);
+  const selectedProviders = selectedCapability?.providers || [];
+  const selectedProvider = selectedProviders.find((provider) => provider.providerId === providerId);
   const equalPreview = useMemo(() => {
     return splitCentsEqually(remainingCents, equalCount);
   }, [equalCount, remainingCents]);
@@ -62,6 +67,12 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   );
 
   const resetRequest = () => { requestKey.current = null; setConfirmation(null); setError(''); };
+
+  useEffect(() => {
+    if (!selectedProviders.some((provider) => provider.providerId === providerId)) {
+      setProviderId(selectedProviders[0]?.providerId || '');
+    }
+  }, [providerId, selectedProviders]);
 
   const selectMode = (nextMode) => {
     setMode(nextMode);
@@ -111,6 +122,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
       ? (receivedInput ? parseMoneyToCents(receivedInput) : amountCents)
       : amountCents;
     if (receivedCents == null || receivedCents < amountCents) { setError(tr('receivedInsufficient')); return; }
+    if (['QR', 'EWALLET'].includes(selectedMethod) && !selectedProvider) { setError('Select a QR / E-wallet provider.'); return; }
     requestKey.current ||= crypto.randomUUID();
     setConfirmation({
       splitType: mode,
@@ -118,6 +130,9 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
       amount: formatCents(amountCents),
       receivedAmount: formatCents(receivedCents),
       changeAmount: formatCents(receivedCents - amountCents),
+      providerId: selectedProvider?.providerId || null,
+      providerName: selectedProvider?.displayName || null,
+      paymentReference: paymentReference.trim() || null,
       remainingBefore: formatCents(remainingCents),
       remainingAfter: formatCents(remainingCents - amountCents),
       itemAllocations,
@@ -135,6 +150,8 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
         paymentMethod: confirmation.paymentMethod,
         amount: confirmation.amount,
         receivedAmount: confirmation.receivedAmount,
+        providerId: confirmation.providerId,
+        paymentReference: confirmation.paymentReference,
         itemAllocations: confirmation.itemAllocations,
         billId: confirmation.billId,
         idempotencyKey: requestKey.current,
@@ -150,6 +167,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
       requestKey.current = null;
       setAmountInput('');
       setReceivedInput('');
+      setPaymentReference('');
       setItemQuantities({});
       setSelectedBillId('');
     } catch (requestError) {
@@ -226,6 +244,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
                 <h2 className="font-black">{tr('choosePayment')}</h2>
                 {loadingMethods ? <Loader2 className="mt-5 animate-spin" /> : <div className="mt-4 grid grid-cols-2 gap-2">{capabilities.map((capability) => <button key={capability.method} disabled={!capability.available || busy} onClick={() => { setSelectedMethod(capability.method); resetRequest(); }} className={`rounded-xl border-2 p-3 text-sm font-black disabled:opacity-35 ${selectedMethod === capability.method ? 'border-[#D4AF37] bg-[#121212] text-white' : 'border-gray-200'}`}>{capability.method}{!capability.available && <span className="block text-[9px] text-red-500">{tr('paymentMethodUnavailable')}</span>}</button>)}</div>}
                 {selectedMethod === 'CASH' && <label className="mt-5 block text-sm font-bold">{tr('cashReceived')}<div className="mt-2 flex rounded-xl border px-3"><span className="py-3">RM</span><input value={receivedInput} onChange={(event) => { setReceivedInput(event.target.value); resetRequest(); }} inputMode="decimal" className="w-full p-3 outline-none" placeholder={tr('exactAmountDefault')} /></div></label>}
+                {['QR', 'EWALLET'].includes(selectedMethod) && <div className="mt-5 space-y-3"><label className="block text-sm font-bold">Provider<select value={providerId} onChange={(event) => { setProviderId(event.target.value); resetRequest(); }} className="mt-2 w-full rounded-xl border bg-white p-3"><option value="">Select provider</option>{selectedProviders.map((provider) => <option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>)}</select></label><label className="block text-sm font-bold">Reference <span className="font-normal">(optional)</span><input value={paymentReference} onChange={(event) => { setPaymentReference(event.target.value); resetRequest(); }} maxLength={150} className="mt-2 w-full rounded-xl border p-3 font-normal" /></label></div>}
                 <button disabled={busy || !selectedMethod} onClick={prepareConfirmation} className="mt-6 w-full rounded-xl bg-emerald-500 p-4 font-black disabled:bg-gray-300">{tr('reviewPayment')}</button>
                 {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
               </section>
@@ -249,7 +268,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between"><span>{tr('order')}</span><strong>{order.orderNumber}</strong></div>
               <div className="flex justify-between"><span>{tr('splitType')}</span><strong>{confirmation.splitType}</strong></div>
-              <div className="flex justify-between"><span>{tr('paymentMethod')}</span><strong>{confirmation.paymentMethod}</strong></div>
+              <div className="flex justify-between"><span>{tr('paymentMethod')}</span><strong>{confirmation.providerName || confirmation.paymentMethod}</strong></div>
               <div className="flex justify-between text-lg"><span>{tr('amount')}</span><strong>{formatMoney(confirmation.amount)}</strong></div>
               <div className="flex justify-between"><span>{tr('remainingBefore')}</span><strong>{formatMoney(confirmation.remainingBefore)}</strong></div>
               <div className="flex justify-between"><span>{tr('remainingAfter')}</span><strong>{formatMoney(confirmation.remainingAfter)}</strong></div>
@@ -269,6 +288,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
               <div className="flex justify-between"><span>{tr('order')}</span><strong>{summary.orderNumber}</strong></div>
               <div className="flex justify-between"><span>{tr('paymentNumber')}</span><strong>{receiptPayment.paymentNumber}</strong></div>
               <div className="flex justify-between"><span>{tr('paymentMethod')}</span><strong>{receiptPayment.paymentMethod}</strong></div>
+              {receiptPayment.providerName && <div className="flex justify-between"><span>Provider</span><strong>{receiptPayment.providerName}</strong></div>}
               <div className="flex justify-between"><span>{tr('splitType')}</span><strong>{receiptPayment.splitType}</strong></div>
               <div className="flex justify-between"><span>{tr('cashier')}</span><strong>{receiptPayment.cashier || '-'}</strong></div>
               <div className="flex justify-between"><span>{tr('dateTime')}</span><strong>{new Date(receiptPayment.paidAt).toLocaleString()}</strong></div>

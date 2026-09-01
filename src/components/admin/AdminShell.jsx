@@ -5,6 +5,7 @@ import {
   Boxes,
   ChartNoAxesCombined,
   ClipboardList,
+  CreditCard,
   FolderTree,
   LayoutDashboard,
   Logs,
@@ -18,6 +19,7 @@ import {
   UtensilsCrossed,
   X,
   QrCode,
+  FileText,
 } from "lucide-react";
 import AdminDashboard from "./AdminDashboard";
 import ProductManagementScreen from "../ProductManagementScreen";
@@ -30,6 +32,7 @@ import AuditLogs from "./AuditLogs";
 import TableManagementScreen from "../TableManagementScreen";
 import ReportsScreen from "../ReportsScreen";
 import QrPaymentSettings from "./QrPaymentSettings";
+import PaymentProviders from "./PaymentProviders";
 import SystemHealthPage from "../../pages/admin/SystemHealthPage";
 import OperationalIndicator from "../system-health/OperationalIndicator";
 import { useSystemHealth } from "../../hooks/useSystemHealth";
@@ -37,6 +40,8 @@ import SystemAdministrationPage from "../../pages/admin/SystemAdministrationPage
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { translate } from "../../utils/i18n";
 import InventoryManagementPage from "../../pages/admin/InventoryManagementPage";
+import EinvoiceOverview from "./EinvoiceOverview";
+import VoucherManagement from "./VoucherManagement";
 
 const groups = [
   ["", [["dashboard", "Dashboard", "dashboard.view", LayoutDashboard]]],
@@ -62,6 +67,8 @@ const groups = [
       ["users", "Users", "user.view", Users],
       ["roles", "Roles & Permissions", "role.view", ShieldCheck],
       ["reports", "Reports", "report.view", TrendingUp],
+      ["vouchers", "Vouchers & Promotions", "voucher.view", ReceiptText],
+      ["einvoice", "e-Invoice", "einvoice.view", FileText],
     ],
   ],
   [
@@ -76,6 +83,7 @@ const groups = [
       ["system-health", "System Health", "system.health.view", Activity],
       ["audit", "Audit Logs", "audit.view", Logs],
       ["qr-settings", "DuitNow QR", "settings.manage", QrCode],
+      ["payment-providers", "Payment Providers", "settings.manage", CreditCard],
     ],
   ],
 ];
@@ -220,8 +228,11 @@ export default function AdminShell({ role, permissions, onBack, lang }) {
     reports: <ReportsScreen embedded lang={lang} />,
     audit: <AuditLogs />,
     "qr-settings": <QrPaymentSettings />,
+    "payment-providers": <PaymentProviders />,
     "system-health": <SystemHealthPage state={healthState} />,
     "system-administration": <SystemAdministrationPage lang={lang} />,
+    einvoice: <EinvoiceOverview />,
+    vouchers: <VoucherManagement />,
   }[section];
 
   const sidebar = (

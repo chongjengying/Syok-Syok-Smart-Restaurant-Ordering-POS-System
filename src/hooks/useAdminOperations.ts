@@ -9,6 +9,7 @@ const filterKeys = [
   "status",
   "paymentStatus",
   "method",
+  "provider",
   "diningMode",
   "dateFrom",
   "dateTo",

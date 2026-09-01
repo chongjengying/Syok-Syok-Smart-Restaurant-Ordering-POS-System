@@ -87,6 +87,14 @@ export function patchOrderStatus(orderId: string, input: { status: string; notes
   return apiRequest('orders', { method: 'PATCH', path: orderId, body: input }) as Promise<ApiResult<OrderRecord>>;
 }
 
+export function cancelPersistedOrder(orderId: string, reason: string, deviceContext: Record<string, unknown> = {}) {
+  return apiRequest('orders', { method: 'POST', path: `${orderId}/cancel`, body: { reason, deviceContext } }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
+export function reopenPersistedOrder(orderId: string, reason: string, deviceContext: Record<string, unknown> = {}) {
+  return apiRequest('orders', { method: 'POST', path: `${orderId}/reopen`, body: { reason, deviceContext } }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
 export function startPersistedKitchenOrder(orderId: string) {
   return apiRequest('orders', { method: 'POST', path: `${orderId}/start`, body: {} }) as Promise<ApiResult<OrderRecord>>;
 }

@@ -265,12 +265,33 @@ Deno.serve(async (request) => {
     return jsonResponse(400, { error: 'Request body must be valid JSON.' });
   }
 
+  if (request.method === 'POST' && orderId && ['cancel', 'reopen'].includes(orderAction || '')) {
+    const candidate = body as Record<string, unknown>;
+    const reason = typeof candidate.reason === 'string' ? candidate.reason.trim().slice(0, 500) : '';
+    const deviceContext = candidate.deviceContext && typeof candidate.deviceContext === 'object' && !Array.isArray(candidate.deviceContext)
+      ? candidate.deviceContext
+      : {};
+    if (reason.length < 3) return jsonResponse(400, { error: 'A reason of at least 3 characters is required.', code: 'REASON_REQUIRED' });
+    const rpcName = orderAction === 'cancel' ? 'cancel_pos_order' : 'reopen_pos_order';
+    const { data, error } = await supabase.rpc(rpcName, {
+      p_order_id: orderId, p_reason: reason, p_device_context: deviceContext,
+    });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'ORDER_LIFECYCLE_ACTION_FAILED';
+      const statusCode = code === 'ORDER_NOT_FOUND' ? 404
+        : ['INSUFFICIENT_PERMISSION', 'WAITER_CANCELLATION_NOT_ALLOWED'].includes(code) ? 403 : 409;
+      return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    return jsonResponse(200, { data });
+  }
+
   if (request.method === 'PATCH') {
     if (!orderId || orderAction) return jsonResponse(400, { error: 'An order ID is required.' });
     if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonResponse(400, { error: 'Request body must be a JSON object.' });
     const candidate = body as Record<string, unknown>;
     const status = typeof candidate.status === 'string' ? candidate.status.toUpperCase() : '';
     if (!allowedOrderStatuses.has(status)) return jsonResponse(400, { error: 'Order status is invalid.' });
+    if (status === 'CANCELLED') return jsonResponse(409, { error: 'Use the protected cancellation action.', code: 'DEDICATED_CANCELLATION_REQUIRED' });
     if (candidate.notes !== undefined && typeof candidate.notes !== 'string') return jsonResponse(400, { error: 'notes must be text.' });
     const { data, error } = await supabase.rpc('transition_pos_order', {
       p_order_id: orderId,

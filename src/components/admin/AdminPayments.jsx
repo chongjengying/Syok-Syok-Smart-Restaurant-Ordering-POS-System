@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { RefreshCw, Search, X } from "lucide-react";
 import { useAdminOperations } from "../../hooks/useAdminOperations";
+import { usePaymentProviders } from "../../hooks/usePaymentProviders";
 import { refundOrder } from "../../services/payment.service";
 import AccessibleDialog from "./AccessibleDialog";
 
 export default function AdminPayments({ canRefund = false }) {
   const s = useAdminOperations("payments");
+  const { providers } = usePaymentProviders(true);
   const [selected, setSelected] = useState(null);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -85,6 +87,16 @@ export default function AdminPayments({ canRefund = false }) {
             <option key={v}>{v}</option>
           ))}
         </select>
+        <select
+          value={s.filters.provider || ""}
+          onChange={(e) => s.setFilter("provider", e.target.value)}
+          className="rounded-xl border bg-white px-3"
+        >
+          <option value="">All providers</option>
+          {providers.map((provider) => (
+            <option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>
+          ))}
+        </select>
         <input
           type="date"
           value={s.filters.dateFrom || ""}
@@ -111,6 +123,7 @@ export default function AdminPayments({ canRefund = false }) {
                 <th className="p-3">Payment</th>
                 <th className="p-3">Order</th>
                 <th className="p-3">Method</th>
+                <th className="p-3">Provider</th>
                 <th className="p-3">Cashier</th>
                 <th className="p-3">Status</th>
                 <th className="p-3 text-right">Amount</th>
@@ -124,6 +137,7 @@ export default function AdminPayments({ canRefund = false }) {
                   <td className="p-3 font-bold">{p.payment_number}</td>
                   <td className="p-3">{p.order_number || p.order_id}</td>
                   <td className="p-3">{p.payment_method}</td>
+                  <td className="p-3">{p.provider_name || p.provider_id || p.provider || "-"}</td>
                   <td className="p-3">{p.staff_name || p.user_id}</td>
                   <td className="p-3">{p.status}</td>
                   <td className="p-3 text-right font-black">

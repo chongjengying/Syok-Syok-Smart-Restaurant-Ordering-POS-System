@@ -7,9 +7,10 @@ begin
  from_at:=p_date_from::timestamp at time zone 'Asia/Kuala_Lumpur';to_at:=(p_date_to+1)::timestamp at time zone 'Asia/Kuala_Lumpur';
  select coalesce(jsonb_agg(to_jsonb(item) order by item.payment_at desc),'[]'::jsonb)into rows from(
   select payment.id payment_id,payment.payment_number,orders.order_number,receipt.receipt_number,coalesce(payment.paid_at,payment.created_at) payment_at,payment.payment_method,
+   payment.provider_id,provider.display_name provider_name,
    case when payment.payment_method='QR' then payment.qr_scheme end qr_scheme,case when payment.payment_method='QR' then payment.qr_mode end qr_mode,payment.amount payment_amount,payment.status payment_status,
    coalesce(payment.transaction_reference,payment.reference) transaction_reference,cashier.name cashier,confirmed.name confirmed_by,payment.confirmed_at,payment.confirmation_mode,coalesce(refunded.refunded_amount,0)refunded_amount
-  from public.payments payment join public.orders orders on orders.id=payment.order_id left join public.receipts receipt on receipt.order_id=orders.id left join public.profiles cashier on cashier.id=payment.user_id left join public.profiles confirmed on confirmed.id=payment.confirmed_by left join lateral(select sum(refund.amount)refunded_amount from public.refunds refund where refund.payment_id=payment.id and refund.status='COMPLETED')refunded on true
+  from public.payments payment join public.orders orders on orders.id=payment.order_id left join public.receipts receipt on receipt.order_id=orders.id left join public.profiles cashier on cashier.id=payment.user_id left join public.profiles confirmed on confirmed.id=payment.confirmed_by left join public.payment_providers provider on provider.provider_id=payment.provider_id left join lateral(select sum(refund.amount)refunded_amount from public.refunds refund where refund.payment_id=payment.id and refund.status='COMPLETED')refunded on true
   where coalesce(payment.paid_at,payment.created_at)>=from_at and coalesce(payment.paid_at,payment.created_at)<to_at
  )item;return rows;
 end;$$;

@@ -38,11 +38,22 @@ create index if not exists idx_audit_logs_created_at
 create index if not exists idx_profiles_branch_status
   on public.profiles(branch_id,status) where branch_id is not null;
 
+create table if not exists public.payment_providers(
+ id uuid primary key default gen_random_uuid(),
+ provider_id text not null unique check(provider_id ~ '^[A-Z0-9_]{2,40}$'),
+ display_name text not null check(char_length(btrim(display_name)) between 2 and 80),
+ enabled boolean not null default true,
+ sort_order integer not null default 100 check(sort_order between 0 and 999),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+
 create or replace function public.get_admin_dashboard(
   p_date_from date,
   p_date_to date,
   p_dining_mode text default null,
   p_payment_method text default null,
+  p_payment_provider_id text default null,
   p_staff_id uuid default null,
   p_branch_id uuid default null,
   p_granularity text default 'DAY'
@@ -63,6 +74,7 @@ declare
   delayed_minutes integer := 20;
   normalized_mode text := nullif(lower(btrim(coalesce(p_dining_mode,''))), '');
   normalized_method text := nullif(upper(btrim(coalesce(p_payment_method,''))), '');
+  normalized_provider text := nullif(upper(btrim(coalesce(p_payment_provider_id,''))), '');
   normalized_granularity text := upper(btrim(coalesce(p_granularity,'DAY')));
   access_json jsonb;
   sales_json jsonb := '{}'::jsonb;
@@ -89,6 +101,7 @@ begin
   if p_date_to-p_date_from>366 then raise exception 'DASHBOARD_DATE_RANGE_TOO_LARGE'; end if;
   if normalized_mode is not null and normalized_mode not in ('dine-in','takeaway') then raise exception 'INVALID_DINING_MODE'; end if;
   if normalized_method is not null and normalized_method not in ('CASH','QR','CARD','EWALLET') then raise exception 'INVALID_PAYMENT_METHOD'; end if;
+  if normalized_provider is not null and not exists(select 1 from public.payment_providers where provider_id=normalized_provider) then raise exception 'INVALID_PAYMENT_PROVIDER'; end if;
   if normalized_granularity not in ('DAY','WEEK','MONTH') then raise exception 'INVALID_DASHBOARD_GRANULARITY'; end if;
 
   from_at := p_date_from::timestamp at time zone restaurant_tz;
@@ -115,6 +128,7 @@ begin
       where o.status<>'CANCELLED'
         and (normalized_mode is null or o.dining_mode=normalized_mode)
         and (normalized_method is null or p.payment_method=normalized_method)
+        and (normalized_provider is null or p.provider_id=normalized_provider)
         and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
       group by o.id
@@ -131,6 +145,7 @@ begin
         and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
     )
     select jsonb_build_object(
       'grossSales',s.gross,'discounts',s.discount,'tax',s.tax,'serviceCharge',s.service_charge,
@@ -146,6 +161,7 @@ begin
       join public.payments p on p.order_id=o.id and p.status in ('PAID','REFUNDED')
       where o.status<>'CANCELLED' and (normalized_mode is null or o.dining_mode=normalized_mode)
         and (normalized_method is null or p.payment_method=normalized_method)
+        and (normalized_provider is null or p.provider_id=normalized_provider)
         and (p_staff_id is null or o.user_id=p_staff_id) and (p_branch_id is null or staff.branch_id=p_branch_id)
       group by o.id
     ), prior_sales as (
@@ -156,6 +172,7 @@ begin
         and (normalized_mode is null or o.dining_mode=normalized_mode) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
     ) select s.amount-r.amount into previous_net from prior_sales s cross join prior_refunds r;
     comparison_json := jsonb_build_object('previousNetSales',previous_net,'salesGrowthPercent',case when previous_net=0 then null else round((current_net-previous_net)/abs(previous_net)*100,1) end);
 
@@ -163,7 +180,7 @@ begin
       select o.id,max(coalesce(p.paid_at,p.created_at)) settled_at
       from public.orders o join public.profiles staff on staff.id=o.user_id join public.payments p on p.order_id=o.id and p.status in ('PAID','REFUNDED')
       where o.status<>'CANCELLED' and (normalized_mode is null or o.dining_mode=normalized_mode)
-        and (normalized_method is null or p.payment_method=normalized_method) and (p_staff_id is null or o.user_id=p_staff_id)
+        and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id) group by o.id
       having max(coalesce(p.paid_at,p.created_at))>=from_at and max(coalesce(p.paid_at,p.created_at))<to_at
     ), ranked as (
@@ -178,7 +195,7 @@ begin
     with paid_orders as (
       select o.id from public.orders o join public.profiles staff on staff.id=o.user_id join public.payments p on p.order_id=o.id and p.status in ('PAID','REFUNDED')
       where o.status<>'CANCELLED' and (normalized_mode is null or o.dining_mode=normalized_mode)
-        and (normalized_method is null or p.payment_method=normalized_method) and (p_staff_id is null or o.user_id=p_staff_id)
+        and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
       group by o.id having max(coalesce(p.paid_at,p.created_at))>=from_at and max(coalesce(p.paid_at,p.created_at))<to_at
     ), categories as (
@@ -194,13 +211,14 @@ begin
       select max(coalesce(p.paid_at,p.created_at)) event_at,o.total amount,1 order_count
       from public.orders o join public.profiles staff on staff.id=o.user_id join public.payments p on p.order_id=o.id and p.status in ('PAID','REFUNDED')
       where o.status<>'CANCELLED' and (normalized_mode is null or o.dining_mode=normalized_mode)
-        and (normalized_method is null or p.payment_method=normalized_method) and (p_staff_id is null or o.user_id=p_staff_id)
+        and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id) group by o.id
     ), refund_events as (
       select r.refunded_at event_at,-r.amount amount,0 order_count from public.refunds r join public.orders o on o.id=r.order_id
       join public.profiles staff on staff.id=o.user_id where (normalized_mode is null or o.dining_mode=normalized_mode)
         and (p_staff_id is null or o.user_id=p_staff_id) and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
     ), events as (select * from sale_events union all select * from refund_events), bucketed as (
       select date_trunc(lower(normalized_granularity),event_at at time zone restaurant_tz)::date bucket,
         sum(amount) revenue,sum(order_count) order_count,
@@ -222,6 +240,7 @@ begin
         and (normalized_mode is null or o.dining_mode=normalized_mode) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
     ) select jsonb_build_object('total',count(*),'open',count(*) filter(where status in ('DRAFT','PLACED','CONFIRMED','PREPARING','READY','SERVED')),
       'completed',count(*) filter(where status='COMPLETED'),'cancelled',count(*) filter(where status='CANCELLED')),
       jsonb_build_object('dineIn',count(*) filter(where dining_mode='dine-in'),'takeaway',count(*) filter(where dining_mode='takeaway'))
@@ -233,6 +252,7 @@ begin
         and (normalized_mode is null or o.dining_mode=normalized_mode) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
     ) select coalesce(jsonb_object_agg(status,total),'{}'::jsonb) into order_status_json
       from (select status,count(*) total from scoped group by status)s;
 
@@ -242,6 +262,7 @@ begin
       where o.created_at>=from_at and o.created_at<to_at and (normalized_mode is null or o.dining_mode=normalized_mode)
         and (p_staff_id is null or o.user_id=p_staff_id) and (p_branch_id is null or staff.branch_id=p_branch_id)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
       order by o.created_at desc limit 8
     )x;
   end if;
@@ -251,18 +272,19 @@ begin
       select p.payment_method,count(*) transaction_count,coalesce(sum(p.amount),0) amount
       from public.payments p join public.orders o on o.id=p.order_id join public.profiles staff on staff.id=o.user_id
       where p.status in ('PAID','REFUNDED') and coalesce(p.paid_at,p.created_at)>=from_at and coalesce(p.paid_at,p.created_at)<to_at
-        and (normalized_mode is null or o.dining_mode=normalized_mode) and (normalized_method is null or p.payment_method=normalized_method)
+        and (normalized_mode is null or o.dining_mode=normalized_mode) and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider)
         and (p_staff_id is null or o.user_id=p_staff_id) and (p_branch_id is null or staff.branch_id=p_branch_id)
       group by p.payment_method
     ), refunded as (
       select count(*) count,coalesce(sum(r.amount),0) amount from public.refunds r join public.orders o on o.id=r.order_id join public.profiles staff on staff.id=o.user_id
       where r.refunded_at>=from_at and r.refunded_at<to_at and (normalized_mode is null or o.dining_mode=normalized_mode)
         and (normalized_method is null or exists(select 1 from public.payments p where p.order_id=o.id and p.payment_method=normalized_method))
+        and (normalized_provider is null or exists(select 1 from public.payments p where p.order_id=o.id and p.provider_id=normalized_provider))
         and (p_staff_id is null or o.user_id=p_staff_id) and (p_branch_id is null or staff.branch_id=p_branch_id)
     ), failed as (
       select count(*) count,coalesce(sum(p.amount),0) amount from public.payments p join public.orders o on o.id=p.order_id join public.profiles staff on staff.id=o.user_id
       where p.status='FAILED' and p.created_at>=from_at and p.created_at<to_at and (normalized_mode is null or o.dining_mode=normalized_mode)
-        and (normalized_method is null or p.payment_method=normalized_method) and (p_staff_id is null or o.user_id=p_staff_id)
+        and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider) and (p_staff_id is null or o.user_id=p_staff_id)
         and (p_branch_id is null or staff.branch_id=p_branch_id)
     ) select jsonb_build_object('methods',(select coalesce(jsonb_agg(to_jsonb(m) order by amount desc),'[]') from methods m),
       'refunds',to_jsonb(r),'failed',to_jsonb(f),'unpaidOrders',(select count(*) from public.orders where payment_status in ('UNPAID','PARTIALLY_PAID')))
@@ -309,7 +331,7 @@ begin
       select o.id,o.user_id,o.total,max(coalesce(p.paid_at,p.created_at)) settled_at
       from public.orders o join public.payments p on p.order_id=o.id and p.status in ('PAID','REFUNDED')
       where o.status<>'CANCELLED' and (normalized_mode is null or o.dining_mode=normalized_mode)
-        and (normalized_method is null or p.payment_method=normalized_method) and (p_staff_id is null or o.user_id=p_staff_id)
+        and (normalized_method is null or p.payment_method=normalized_method) and (normalized_provider is null or p.provider_id=normalized_provider) and (p_staff_id is null or o.user_id=p_staff_id)
       group by o.id
     ) select coalesce(jsonb_agg(to_jsonb(x) order by sales_amount desc),'[]') into staff_json from (
       select staff.id,staff.name,staff.role_name role,staff.status account_status,count(s.id) orders_handled,
@@ -332,7 +354,8 @@ begin
 
   select jsonb_build_object(
     'branches',(select coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name) order by name),'[]') from public.branches where status='ACTIVE'),
-    'staff',(select case when public.has_pos_permission('staff.performance.view') then coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name,'role',role_name) order by name),'[]') else '[]'::jsonb end from public.profiles where status='ACTIVE')
+    'staff',(select case when public.has_pos_permission('staff.performance.view') then coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name,'role',role_name) order by name),'[]') else '[]'::jsonb end from public.profiles where status='ACTIVE'),
+    'paymentProviders',(select coalesce(jsonb_agg(jsonb_build_object('providerId',provider_id,'displayName',display_name,'enabled',enabled,'sortOrder',sort_order) order by sort_order,display_name),'[]') from public.payment_providers where enabled=true)
   ) into filter_options_json;
 
   return jsonb_build_object(
@@ -348,7 +371,7 @@ begin
 end;
 $$;
 
-revoke all on function public.get_admin_dashboard(date,date,text,text,uuid,uuid,text) from public,anon;
-grant execute on function public.get_admin_dashboard(date,date,text,text,uuid,uuid,text) to authenticated;
+revoke all on function public.get_admin_dashboard(date,date,text,text,text,uuid,uuid,text) from public,anon;
+grant execute on function public.get_admin_dashboard(date,date,text,text,text,uuid,uuid,text) to authenticated;
 
 commit;

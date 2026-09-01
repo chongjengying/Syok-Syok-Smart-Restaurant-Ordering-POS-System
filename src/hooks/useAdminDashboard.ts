@@ -15,10 +15,10 @@ export function useAdminDashboard(enabled = true) {
   const hasData = useRef(false);
   const requestSequence = useRef(0);
   const realtimeTimer = useRef<number | undefined>(undefined);
-  const { dateFrom, dateTo, diningMode, paymentMethod, staffId, branchId, granularity } = filters;
+  const { dateFrom, dateTo, diningMode, paymentMethod, paymentProviderId, staffId, branchId, granularity } = filters;
   const queryFilters = useMemo<DashboardFilters>(() => ({
-    preset: 'custom', metric: 'revenue', dateFrom, dateTo, diningMode, paymentMethod, staffId, branchId, granularity,
-  }), [dateFrom, dateTo, diningMode, paymentMethod, staffId, branchId, granularity]);
+    preset: 'custom', metric: 'revenue', dateFrom, dateTo, diningMode, paymentMethod, paymentProviderId, staffId, branchId, granularity,
+  }), [dateFrom, dateTo, diningMode, paymentMethod, paymentProviderId, staffId, branchId, granularity]);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;

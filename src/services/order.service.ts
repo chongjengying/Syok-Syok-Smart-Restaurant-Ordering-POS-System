@@ -1,13 +1,14 @@
 import {
   appendOrderItems as appendPersistedOrderItems,
+  cancelPersistedOrder,
   createOrderBillSplit as createPersistedOrderBillSplit,
   fetchOrder,
   fetchOrderBills,
   fetchUnpaidOrders,
   insertOrder,
   insertOrderDraft,
-  patchOrderStatus,
   replaceOrderDraftItems,
+  reopenPersistedOrder,
   submitOrderDraft,
   subscribeToOrderChanges,
   updateTakeawayPackaging,
@@ -222,8 +223,15 @@ export async function getOrder(orderId: string, options: RequestOptions = {}): P
 }
 
 export function cancelOrder(orderId: string, notes = '') {
-  if (!orderId) return Promise.resolve({ data: null, error: new Error('Order ID is required.') });
-  return patchOrderStatus(orderId, { status: 'CANCELLED', notes: String(notes).slice(0, 1000) });
+  const reason = String(notes).trim();
+  if (!orderId || reason.length < 3) return Promise.resolve({ data: null, error: new Error('Order ID and cancellation reason are required.') });
+  return cancelPersistedOrder(orderId, reason.slice(0, 500), { source: 'admin-orders' });
+}
+
+export function reopenOrder(orderId: string, reason = '') {
+  const normalized = String(reason).trim();
+  if (!orderId || normalized.length < 3) return Promise.resolve({ data: null, error: new Error('Order ID and reopen reason are required.') });
+  return reopenPersistedOrder(orderId, normalized.slice(0, 500), { source: 'admin-orders' });
 }
 
 export function subscribeToOrder(
