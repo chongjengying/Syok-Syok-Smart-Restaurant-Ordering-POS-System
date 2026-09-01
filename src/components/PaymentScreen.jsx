@@ -37,7 +37,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
     .map((capability) => capability.method === 'EWALLET' ? { ...capability, method: 'QR' } : capability)
     .filter((capability, index, list) => list.findIndex((entry) => entry.method === capability.method) === index), [capabilities]);
   const selectedCapability = paymentMethods.find((entry) => entry.method === selectedMethod && entry.available);
-  const providers = selectedCapability?.providers || [];
+  const providers = useMemo(() => selectedCapability?.providers || [], [selectedCapability]);
   const outstanding = Number(summary?.remainingAmount ?? order?.total ?? 0);
   const orderTotal = Number(summary?.orderTotal ?? order?.total ?? 0);
   const paid = Number(summary?.paidAmount ?? 0);

@@ -2,7 +2,8 @@ import { supabase } from '../../infrastructure/supabase/client';
 
 export async function listVouchers(search = '') {
   let query = supabase.from('vouchers').select('*').order('created_at', { ascending: false });
-  if (search.trim()) query = query.or(`code.ilike.%${search.trim()}%,name.ilike.%${search.trim()}%`);
+  const normalizedSearch = search.trim().replace(/[^\p{L}\p{N}\s_-]/gu, ' ').replace(/\s+/g, ' ').slice(0, 100);
+  if (normalizedSearch) query = query.or(`code.ilike.%${normalizedSearch}%,name.ilike.%${normalizedSearch}%`);
   const { data, error } = await query;
   return { data: data || [], error };
 }

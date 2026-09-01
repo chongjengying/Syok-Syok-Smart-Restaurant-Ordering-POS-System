@@ -4,9 +4,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // server-side secrets; the POS never receives tokens or client secrets.
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+  const authorization = request.headers.get('Authorization');
+  if (!authorization?.startsWith('Bearer ')) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authorization } } });
+  const { data: authData, error: authError } = await caller.auth.getUser();
+  if (authError || !authData.user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: allowed, error: permissionError } = await caller.rpc('has_pos_permission', { p_permission: 'einvoice.retry' });
+  if (permissionError || !allowed) return Response.json({ error: 'Insufficient permission' }, { status: 403 });
   const body = await request.json().catch(() => null);
   if (!body?.jobId) return Response.json({ error: 'jobId is required' }, { status: 400 });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: profile } = await admin.from('profiles').select('status').eq('id', authData.user.id).maybeSingle();
+  if (!profile || profile.status !== 'ACTIVE') return Response.json({ error: 'Staff account is inactive' }, { status: 403 });
   const { data: job, error } = await admin.from('einvoice_jobs').select('*, einvoice_documents(*)').eq('id', body.jobId).single();
   if (error || !job) return Response.json({ error: 'Job not found' }, { status: 404 });
   // Configuration and HTTP mapper are deliberately server-side. Until the

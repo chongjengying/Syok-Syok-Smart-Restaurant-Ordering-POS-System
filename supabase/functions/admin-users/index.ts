@@ -1,5 +1,4 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import {createClient} from 'npm:@supabase/supabase-js@2';
 import { buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
 import {consumeRateLimit} from '../_shared/rateLimit.ts';
 

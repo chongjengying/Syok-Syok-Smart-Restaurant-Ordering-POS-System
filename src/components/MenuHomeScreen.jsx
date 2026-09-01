@@ -145,9 +145,9 @@ export default function MenuHomeScreen({
       )}
 
       {/* Main Container Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="pos-order-layout flex-1 flex overflow-hidden">
         {/* 2. LEFT NAVIGATION RAIL ($220pt width) */}
-        <div className="w-[220px] bg-white border-r border-[#E9ECEF] flex flex-col py-4 shrink-0 shadow-sm overflow-y-auto">
+        <div className="pos-category-rail w-[220px] bg-white border-r border-[#E9ECEF] flex flex-col py-4 shrink-0 overflow-y-auto">
           <div className="px-4 mb-2">
             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{tr('categories')}</span>
           </div>
@@ -217,7 +217,7 @@ export default function MenuHomeScreen({
         </div>
 
         {/* 3. MAIN CONTENT AREA (Scrollable Grid / Cards) */}
-        <div className="flex-1 p-6 overflow-y-auto bg-[#F8F9FA]">
+        <div className="pos-product-area flex-1 p-6 overflow-y-auto bg-[#F8F9FA]">
           {/* Section Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -242,7 +242,7 @@ export default function MenuHomeScreen({
             </div>
           )}
           <div
-            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8"
+            className="pos-product-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-8"
             aria-busy={isLoadingProducts}
           >
             {isLoadingProducts && <ProductGridSkeleton />}
@@ -264,10 +264,10 @@ export default function MenuHomeScreen({
             {!isLoadingProducts && products.map((dish) => (
               <div
                 key={dish.id}
-                className="w-full h-[330px] bg-white rounded-2xl p-4 border border-[#E9ECEF] card-elevation-low hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group"
+                className="pos-product-card w-full h-[306px] bg-white rounded-xl p-3 border border-[#E9ECEF] card-elevation-low hover:border-[#D4AF37] transition-colors duration-150 flex flex-col justify-between group"
               >
                 {/* 1:1 Aspect Ratio Food Image with 16pt rounded corners */}
-                <div className="relative w-full h-[160px] rounded-xl overflow-hidden bg-gray-100 mb-3">
+                <div className="relative w-full h-[138px] rounded-lg overflow-hidden bg-gray-100 mb-3">
                   <ProductImage src={dish.imageUrl} alt={dish.name} fallbackLabel={tr('productImageUnavailable')} className="h-full w-full object-cover" />
                   {!dish.isAvailable && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/80 px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">{tr('soldOut')}</span>}
                 </div>
@@ -313,7 +313,7 @@ export default function MenuHomeScreen({
         </div>
 
         {/* 4. PERSISTENT CART DRAWER (Right Side Bar) */}
-        <div className="w-[340px] md:w-[360px] bg-white border-l border-[#E9ECEF] flex flex-col shrink-0 shadow-lg z-20">
+        <div className="pos-cart-panel w-[340px] md:w-[360px] bg-white border-l border-[#E9ECEF] flex flex-col shrink-0 z-20">
           {/* Cart Header */}
           <div className="p-5 bg-[#121212] text-white flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2.5">

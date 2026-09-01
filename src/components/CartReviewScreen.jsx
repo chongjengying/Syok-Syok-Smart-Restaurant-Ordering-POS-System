@@ -67,9 +67,9 @@ export default function CartReviewScreen({
       </div>
 
       {/* Main Content Area: Split 2 Columns */}
-      <div className="flex-1 flex overflow-hidden p-6 gap-6">
+      <div className="pos-cart-review-layout flex-1 flex overflow-hidden p-6 gap-6">
         {/* Left Column: ITEMS REVIEW */}
-        <div className="flex-1 bg-white rounded-2xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col overflow-hidden">
+        <div className="pos-cart-review-items flex-1 bg-white rounded-xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col overflow-hidden">
           <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-4">
             <h2 className="font-extrabold text-base tracking-wide text-[#121212] uppercase">
               {t.itemsReview}
@@ -245,7 +245,7 @@ export default function CartReviewScreen({
         </div>
 
         {/* Right Sidebar: ORDER SUMMARY */}
-        <div className="w-[360px] md:w-[380px] bg-white rounded-2xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col justify-between shrink-0">
+        <div className="pos-cart-review-summary w-[360px] md:w-[380px] bg-white rounded-xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col justify-between shrink-0">
           <div>
             <h2 className="font-extrabold text-base tracking-wide text-[#121212] uppercase pb-4 border-b border-gray-100 mb-6">
               {tr('previewOnly')} {t.orderSummary}

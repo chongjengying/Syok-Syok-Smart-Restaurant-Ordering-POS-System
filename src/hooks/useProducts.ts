@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getAllProducts, subscribeToCatalog } from '../services/catalog.service';
 import {
   getProductCache,
@@ -90,7 +90,8 @@ export function useProducts({ categoryId = null, search = '' }: ProductHookFilte
     };
   }, [executeRefresh]);
 
-  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const deferredSearch = useDeferredValue(search);
+  const normalizedSearch = deferredSearch.trim().toLocaleLowerCase();
   const products = useMemo(() => (cache?.products || []).filter((product) => (
     (!categoryId || product.categoryId === categoryId) && matchesSearch(product, normalizedSearch)
   )), [cache, categoryId, normalizedSearch]);

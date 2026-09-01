@@ -127,10 +127,16 @@ assert.match(adminPhaseB, /old_value[\s\S]*new_value/i,
   'Authorization audits must retain old and new values.');
 
 const adminUsersFunction = await readFile(path.join(root, 'supabase', 'functions', 'admin-users', 'index.ts'), 'utf8');
+assert.equal((adminUsersFunction.match(/import\s*\{\s*createClient\s*\}/g) || []).length, 1,
+  'The Admin user Edge Function must have exactly one createClient import.');
 assert.match(adminUsersFunction, /auth\.admin\.inviteUserByEmail/i,
   'Staff creation must use the server-side Auth Admin API.');
 assert.match(adminUsersFunction, /has_pos_permission/i,
   'The Admin user boundary must verify database permissions.');
+
+const einvoiceFunction = await readFile(path.join(root, 'supabase', 'functions', 'einvoice-submit', 'index.ts'), 'utf8');
+assert.match(einvoiceFunction, /has_pos_permission[\s\S]*einvoice\.retry/i,
+  'The e-Invoice submission boundary must require einvoice.retry before using its service-role client.');
 
 const dashboardSecurity = await readFile(
   path.join(root, 'supabase', 'migrations', '20260826143000_production_admin_dashboard.sql'),
@@ -144,7 +150,7 @@ for (const permission of ['report.view','payment.view','order.view','audit.view'
 }
 assert.match(dashboardSecurity, /staff\.performance\.view[\s\S]*where r\.name='ADMIN'/i,
   'Sensitive staff performance must be granted only to Admin by default.');
-assert.match(dashboardSecurity, /revoke all on function public\.get_admin_dashboard\(date,date,text,text,uuid,uuid,text\) from public,anon/i,
+assert.match(dashboardSecurity, /revoke all on function public\.get_admin_dashboard\(date,date,text,text,text,uuid,uuid,text\) from public,anon/i,
   'The filtered dashboard RPC must not be executable by anonymous users.');
 
 const tableMoveRpc = await readFile(

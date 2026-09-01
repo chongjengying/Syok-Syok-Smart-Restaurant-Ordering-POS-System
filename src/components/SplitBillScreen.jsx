@@ -55,7 +55,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
   const paidCents = parseMoneyToCents(summary?.paidAmount ?? '') ?? 0;
   const selectedBill = bills.find((bill) => bill.id === selectedBillId) || null;
   const selectedCapability = capabilities.find((capability) => capability.method === selectedMethod);
-  const selectedProviders = selectedCapability?.providers || [];
+  const selectedProviders = useMemo(() => selectedCapability?.providers || [], [selectedCapability]);
   const selectedProvider = selectedProviders.find((provider) => provider.providerId === providerId);
   const equalPreview = useMemo(() => {
     return splitCentsEqually(remainingCents, equalCount);

@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ImagePlus, PackagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ImagePlus, PackagePlus, Pencil, Trash2, X } from 'lucide-react';
 import { useProductManagement } from '../hooks/useProductManagement';
 import { hasPosCapability, POS_CAPABILITIES } from '../shared/permissions';
 import { validateProductImage } from '../services/product-image.service';
 import ProductImage from './products/ProductImage';
 import VirtualizedProductGrid from './products/VirtualizedProductGrid';
+import SearchFilterBar, { FilterSelect } from './ui/SearchFilterBar';
 
 const emptyForm = { categoryId: '', name: '', description: '', unit: '', price: '', cost: '', isActive: true, isAvailable: true };
 
@@ -17,6 +18,9 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
   const [fileError, setFileError] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const deepLinkOpened = useRef(false);
   const canDelete = hasPosCapability(role, POS_CAPABILITIES.DELETE_PRODUCT_IMAGE);
   const canCreate = !permissions || permissions.includes('product.create');
@@ -25,8 +29,10 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
   const canDeactivate = !permissions || permissions.includes('product.deactivate');
   const visibleProducts = useMemo(() => manager.products.filter(product => (
     (!categoryFilter || product.categoryId === categoryFilter)
-    && `${product.code} ${product.name}`.toLowerCase().includes(query.toLowerCase())
-  )), [manager.products, categoryFilter, query]);
+    && (!statusFilter || (statusFilter === 'ACTIVE') === product.isActive)
+    && (!availabilityFilter || (availabilityFilter === 'AVAILABLE') === product.isAvailable)
+    && `${product.code} ${product.name}`.toLowerCase().includes(deferredQuery.trim().toLowerCase())
+  )), [manager.products, categoryFilter, statusFilter, availabilityFilter, deferredQuery]);
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const close = () => { setEditing(null); setForm(emptyForm); setFile(null); setPreview(''); setFileError(''); };
@@ -59,7 +65,7 @@ export default function ProductManagementScreen({ role, onBack, embedded = false
     </header>
     {manager.error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{manager.error}</div>}
     {manager.notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{manager.notice}</div>}
-    <div className="mb-5 flex flex-wrap gap-3"><div className="relative min-w-64 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search code or product" className="w-full rounded-xl border bg-white py-2.5 pl-10"/></div><select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="rounded-xl border bg-white px-4"><option value="">All categories</option>{manager.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+    <SearchFilterBar query={query} onQueryChange={setQuery} placeholder="Search product name or code" resultCount={visibleProducts.length} onReset={() => { setQuery(''); setCategoryFilter(''); setStatusFilter(''); setAvailabilityFilter(''); }} className="mb-5"><FilterSelect label="Category" value={categoryFilter} onChange={setCategoryFilter} options={[{ value:'', label:'All' }, ...manager.categories.map(c => ({ value:c.id, label:c.name }))]} /><FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[{value:'',label:'All'},{value:'ACTIVE',label:'Active'},{value:'INACTIVE',label:'Inactive'}]} /><FilterSelect label="Stock" value={availabilityFilter} onChange={setAvailabilityFilter} options={[{value:'',label:'All'},{value:'AVAILABLE',label:'Available'},{value:'SOLD_OUT',label:'Sold out'}]} /></SearchFilterBar>
     {manager.isLoading ? <p>Loading products…</p> : visibleProducts.length === 0 ? <p className="rounded-xl bg-white p-8 text-center text-gray-400">No products found.</p> : <VirtualizedProductGrid items={visibleProducts} renderItem={product => <article key={product.id} className="overflow-hidden rounded-2xl bg-white shadow">
       <div className="h-44 bg-gray-100"><ProductImage src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" /></div>
       <div className="p-4"><div className="flex justify-between gap-3"><div><h2 className="font-black">{product.name}</h2><p className="text-xs text-gray-400">{product.code}</p></div><div className="text-right"><strong>RM {product.price.toFixed(2)}</strong><p className="text-[10px] text-gray-400">Cost RM {product.cost.toFixed(2)}</p></div></div>

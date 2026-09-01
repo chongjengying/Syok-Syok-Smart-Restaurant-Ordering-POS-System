@@ -107,9 +107,9 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
   };
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-[#0A0A0F]">
+    <div className="auth-screen relative w-full h-full flex items-center justify-center overflow-hidden bg-[#111214]">
       {/* Animated Background Gradient Orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="auth-decoration absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
           style={{
@@ -141,7 +141,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
       {/* Subtle Grid Pattern Overlay */}
       <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        className="auth-decoration absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{
           backgroundImage: `linear-gradient(rgba(212,175,55,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,0.3) 1px, transparent 1px)`,
           backgroundSize: '60px 60px',
@@ -151,13 +151,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
       {/* Auth Card */}
       <div className="relative z-10 w-full max-w-[440px] mx-auto px-4">
         {/* Card Container with Glass Effect */}
-        <div
-          className="rounded-[28px] border border-white/[0.08] p-8 sm:p-10 relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, rgba(26,26,30,0.95) 0%, rgba(18,18,22,0.98) 100%)',
-            boxShadow: '0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(212,175,55,0.05), inset 0 1px 0 rgba(255,255,255,0.03)',
-          }}
-        >
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#18191C] p-8 shadow-xl sm:p-10">
           {/* Top Gold Accent Line */}
           <div
             className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-24 rounded-full"
@@ -177,25 +171,11 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
           {/* Header: Logo & Branding */}
           <div className="flex flex-col items-center mb-6">
             {/* Animated Logo Ring */}
-            <div
-              className="w-[88px] h-[88px] rounded-full p-[3px] mb-4 relative"
-              style={{
-                background: 'conic-gradient(from 0deg, #D4AF37, #B8952B, #8B6914, #D4AF37)',
-                animation: 'spinGlow 6s linear infinite',
-              }}
-            >
+            <div className="relative mb-4 h-[72px] w-[72px] rounded-xl border border-[#D4AF37]/40 bg-[#222327] p-[3px]">
               <div className="w-full h-full rounded-full bg-[#121216] flex flex-col items-center justify-center">
                 <ChefHat className="w-8 h-8 text-[#D4AF37] mb-0.5" />
                 <span className="text-[7px] tracking-[3px] text-[#D4AF37] font-bold uppercase">POS</span>
               </div>
-              {/* Outer glow pulse */}
-              <div
-                className="absolute inset-0 rounded-full pointer-events-none"
-                style={{
-                  boxShadow: '0 0 30px rgba(212,175,55,0.15)',
-                  animation: 'pulseGlow 3s ease-in-out infinite',
-                }}
-              />
             </div>
 
             <h1 className="text-[20px] font-bold text-white tracking-tight">

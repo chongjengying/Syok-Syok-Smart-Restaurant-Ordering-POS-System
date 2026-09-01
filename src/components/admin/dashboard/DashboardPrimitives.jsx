@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowDownRight, ArrowUpRight, Minus, RefreshCw } from 'lucide-react';
 import { formatPercent } from '../../../utils/admin-dashboard-formatters';
+import SharedStatusBadge from '../../ui/StatusBadge';
 
 export function Panel({ title, subtitle, action, children, className = '' }) {
   return <article className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
@@ -20,9 +21,7 @@ export function MetricCard({ label, value, helper, growth, Icon, tone='amber', o
 }
 
 export function StatusBadge({ value }) {
-  const code=String(value||'UNKNOWN').toUpperCase();
-  const tone=code.includes('FAIL')||code.includes('CANCEL')||code==='CRITICAL'?'bg-red-100 text-red-700':code.includes('READY')||code.includes('PAID')||code.includes('COMPLETE')||code==='ACTIVE'?'bg-emerald-100 text-emerald-700':code.includes('PREPAR')||code.includes('PENDING')||code.includes('UNPAID')||code==='WARNING'?'bg-amber-100 text-amber-800':'bg-slate-100 text-slate-600';
-  return <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black tracking-wide ${tone}`}>{code.replaceAll('_',' ')}</span>;
+  return <SharedStatusBadge value={value} />;
 }
 
 export function EmptyState({ children='No data for this period.' }) { return <p className="py-10 text-center text-sm text-slate-400">{children}</p>; }
