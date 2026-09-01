@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Banknote, Check, ChefHat, ChevronUp, ClipboardList, Delete, Layers, Lock, LogIn, LogOut, ReceiptText, Search, Settings, ShieldCheck, Table2, UserRound, UsersRound, UtensilsCrossed } from 'lucide-react';
+import { env } from '../config/env';
 
 const ROLE_FEATURES = {
   ADMIN: [
@@ -121,7 +122,7 @@ export default function StaffSelectorScreen({
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   });
-  const environment = (import.meta.env.VITE_APP_ENV || import.meta.env.MODE || 'staging').toUpperCase();
+  const environment = (env.appEnv || 'staging').toUpperCase();
   const normalizedStaffSearch = staffSearch.trim().toLowerCase();
   const matchingStaff = normalizedStaffSearch
     ? staff.filter(person => `${person.name || ''} ${person.role || ''}`.toLowerCase().includes(normalizedStaffSearch))

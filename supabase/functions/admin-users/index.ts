@@ -121,6 +121,7 @@ Deno.serve(async (request) => {
       console.error('Staff invitation failed', inviteError);
       return json(inviteError?.message?.toLowerCase().includes('already') ? 409 : 500, { error: inviteError?.message?.toLowerCase().includes('already') ? 'A staff account already uses this email.' : 'Unable to invite staff.' });
     }
+    const enablePosAccess = body.enablePosAccess !== false;
     const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: invited.user.id, p_payload: { name, role, status: 'ACTIVE' } });
     if (error) {
       console.error('Invited Auth user profile setup failed', error);
@@ -129,7 +130,13 @@ Deno.serve(async (request) => {
     }
     const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: invited.user.id, p_action: 'USER_CREATED' });
     if (auditError) console.error('Unable to audit staff invitation', auditError);
-    return json(201, { data });
+    let temporaryPin = null;
+    if (enablePosAccess) {
+      const { data: pinData, error: pinError } = await caller.rpc('require_staff_pin_setup', { p_user_id: invited.user.id });
+      if (pinError) console.error('Unable to enable POS PIN setup for invited user', pinError);
+      temporaryPin = pinData?.temporaryPin || null;
+    }
+    return json(201, { data: { ...data, temporaryPin } });
   }
 
   const userId = typeof body.userId === 'string' ? body.userId : '';
@@ -142,6 +149,16 @@ Deno.serve(async (request) => {
     const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: userId, p_action: 'USER_PASSWORD_RESET_REQUESTED' });
     if (auditError) console.error('Unable to audit password reset request', auditError);
     return json(200, { data: { resetRequested: true } });
+  }
+  if (body.action === 'require-pin-setup') {
+    const { data: resetData, error } = await caller.rpc('require_staff_pin_setup', { p_user_id: userId });
+    if (error) {
+      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PIN_SETUP_FAILED';
+      return json(code === 'INSUFFICIENT_PERMISSION' ? 403 : code === 'USER_NOT_FOUND' ? 404 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    }
+    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: userId, p_action: 'USER_PIN_SETUP_REQUIRED' });
+    if (auditError) console.error('Unable to audit PIN setup requirement', auditError);
+    return json(200, { data: { pinSetupRequired: true, temporaryPin: resetData?.temporaryPin || null } });
   }
   const payload = { name: body.name, username: body.username, role: body.role, status: body.status, branchId: body.branchId };
   const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: userId, p_payload: payload });

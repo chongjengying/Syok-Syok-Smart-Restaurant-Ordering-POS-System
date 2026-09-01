@@ -1,8 +1,9 @@
 import React from 'react';
 import { CheckCircle2, Database, Layers, Loader2, ServerCog, UtensilsCrossed, Wifi } from 'lucide-react';
+import { env } from '../config/env';
 
 export default function StaffAccessStatusScreen({ isOnline, mode = 'checking' }) {
-  const environment = (import.meta.env.VITE_APP_ENV || import.meta.env.MODE || 'staging').toUpperCase();
+  const environment = (env.appEnv || 'staging').toUpperCase();
   const restoring = mode === 'restoring';
   const checks = [
     ['Internet Connection', isOnline],
