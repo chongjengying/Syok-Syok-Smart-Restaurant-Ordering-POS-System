@@ -52,6 +52,8 @@ export default function StaffSelectorScreen({
   onLogout,
   canConfigurePins,
   onConfigurePins,
+  canSkip,
+  onSkip,
 }) {
   const [time, setTime] = useState(() => new Date());
   const [pin, setPin] = useState('');
@@ -73,6 +75,11 @@ export default function StaffSelectorScreen({
     if (value === 'back') {
       setConfirmError('');
       return setPin(current => current.slice(0, -1));
+    }
+    if (value === 'clear') {
+      setPin('');
+      setConfirmError('');
+      return;
     }
     if (value === 'submit') {
       if (!selectedStaff || pin.length !== 6 || !onSubmit) return;
@@ -128,7 +135,7 @@ export default function StaffSelectorScreen({
     ? staff.filter(person => `${person.name || ''} ${person.role || ''}`.toLowerCase().includes(normalizedStaffSearch))
     : staff;
   const visibleStaff = showAllStaff ? matchingStaff : staff.slice(0, 4);
-  const keys = ['1','2','3','4','5','6','7','8','9','back','0'];
+  const keys = ['1','2','3','4','5','6','7','8','9','back','0','clear'];
   const features = ROLE_FEATURES[selectedStaff?.role] || [];
   const hasPinError = Boolean(error && selectedStaff);
   const setupRequired = Boolean(selectedStaff?.pin_setup_required || selectedStaff?.pin_status === 'SETUP_REQUIRED');
@@ -210,8 +217,8 @@ export default function StaffSelectorScreen({
           {confirmError&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{confirmError}</p>}
           {error&&selectedStaff&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{error}</p>}
           <div className="mx-auto grid w-full max-w-[430px] grid-cols-3 gap-3">
-            {keys.map(key => <button key={key} type="button" disabled={keypadDisabled} onClick={() => void press(key)} className={`${key === '0' ? 'col-start-2' : ''} flex h-[68px] items-center justify-center rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.035] text-4xl font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.22)] transition hover:border-[#D4AF37]/70 hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-30`}>
-              {key === 'back' ? <Delete size={27}/> : key}
+            {keys.map(key => <button key={key} type="button" aria-label={key === 'back' ? 'Delete last PIN digit' : key === 'clear' ? 'Clear PIN' : `Enter ${key}`} disabled={keypadDisabled} onClick={() => void press(key)} className={`${key === '0' ? 'col-start-2' : ''} flex h-[68px] items-center justify-center rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.035] text-4xl font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.22)] transition hover:border-[#D4AF37]/70 hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-30`}>
+              {key === 'back' ? <Delete size={27}/> : key === 'clear' ? 'Clear' : key}
             </button>)}
           </div>
           <button type="button" disabled={keypadDisabled || pin.length !== 6} onClick={() => void press('submit')} className="relative z-20 mx-auto mt-6 flex min-h-[70px] w-full max-w-[430px] shrink-0 items-center justify-center gap-4 rounded-xl border border-[#D4AF37]/60 bg-[#D4AF37] px-5 text-2xl font-black text-black shadow-[0_18px_42px_rgba(212,175,55,0.24),inset_0_1px_0_rgba(255,255,255,0.22)] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-35">
@@ -233,6 +240,7 @@ export default function StaffSelectorScreen({
             <Layers size={22}/>
             {environment}
           </span>
+          {canSkip && <button type="button" onClick={onSkip} disabled={isSubmitting} className="rounded-xl border border-[#D4AF37]/60 bg-[#D4AF37] px-5 py-3 text-sm font-black text-black transition hover:brightness-110 disabled:opacity-40">Skip staff PIN</button>}
         </div>
         <div className="relative flex min-h-14 items-center justify-center gap-3 border-t border-slate-700/40 px-8 py-3 text-sm font-bold text-slate-500 lg:px-10">
           <span className="flex items-center gap-3">

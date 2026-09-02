@@ -95,7 +95,7 @@ const readRoute = () => {
   return { section, query };
 };
 
-export default function AdminShell({ role, permissions, onBack, lang }) {
+export default function AdminShell({ role, permissions, onBack, onSwitchStaff, lang }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const allowed = useMemo(() => new Set(permissions), [permissions]);
   const first = items.find((item) => allowed.has(item[2]))?.[0] || "";
@@ -323,12 +323,17 @@ export default function AdminShell({ role, permissions, onBack, lang }) {
             {tr("adminMenu")}
           </button>
           <span className="hidden lg:block" />
-          {allowed.has("system.health.view") && (
-            <OperationalIndicator
-              health={healthState.data}
-              onClick={() => navigate("system-health")}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {allowed.has("system.health.view") && (
+              <OperationalIndicator
+                health={healthState.data}
+                onClick={() => navigate("system-health")}
+              />
+            )}
+            {onSwitchStaff && <button type="button" onClick={onSwitchStaff} className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 transition hover:bg-amber-100" title="Return to staff PIN selection">
+              <Users size={15} /> Switch Staff
+            </button>}
+          </div>
         </div>
         <div key={routeKey} className="p-4 sm:p-6">
           {content}

@@ -684,6 +684,8 @@ export default function App() {
             setCurrentScreen('admin');
             setOperatorReady(true);
           }}
+          canSkip={profile?.role === 'ADMIN'}
+          onSkip={() => setOperatorReady(true)}
         />
       </IpadShell>
     );
@@ -873,6 +875,7 @@ export default function App() {
           <AdminShell
             role={profile.role}
             permissions={permissionState.permissions}
+            onSwitchStaff={handleSwitchStaff}
             onBack={() => {
               globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
               setCurrentScreen('welcome');
