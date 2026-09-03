@@ -492,7 +492,6 @@ Deno.serve(async (request) => {
       return jsonResponse(['TABLE_NOT_AVAILABLE', 'ACTIVE_ORDER_EXISTS'].includes(code) ? 409 : 400, {
         error: code.replaceAll('_', ' ').toLowerCase(),
         code,
-        details: error.message,
       });
     }
     return jsonResponse(201, { data });
