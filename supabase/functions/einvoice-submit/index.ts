@@ -22,6 +22,21 @@ Deno.serve(async (request) => {
   const { data: allowed, error: permissionError } = await caller.rpc('has_pos_permission', { p_permission: 'einvoice.retry' });
   if (permissionError || !allowed) return Response.json({ error: 'Insufficient permission' }, { status: 403 });
   const body = await request.json().catch(() => null);
+  if (body?.action === 'testConnection') {
+    if (!body.profileId) return Response.json({ error: 'profileId is required' }, { status: 400 });
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const { data: company } = await admin.from('company_einvoice_profiles').select('environment,status').eq('id', body.profileId).single();
+    if (!company) return Response.json({ error: 'Supplier profile not found' }, { status: 404 });
+    const clientId = Deno.env.get('MYINVOIS_CLIENT_ID');
+    const clientSecret = Deno.env.get('MYINVOIS_CLIENT_SECRET');
+    if (!clientId || !clientSecret) return Response.json({ connected: false, configured: false, error: 'ERP client credentials are not configured.' }, { status: 409 });
+    try {
+      await myinvoisToken(company.environment === 'PRODUCTION' ? 'PRODUCTION' : 'SANDBOX', clientId, clientSecret);
+      return Response.json({ connected: true, configured: true, environment: company.environment });
+    } catch {
+      return Response.json({ connected: false, configured: true, error: 'MyInvois authentication failed.' }, { status: 502 });
+    }
+  }
   if (!body?.jobId) return Response.json({ error: 'jobId is required' }, { status: 400 });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: profile } = await admin.from('profiles').select('status').eq('id', authData.user.id).maybeSingle();
