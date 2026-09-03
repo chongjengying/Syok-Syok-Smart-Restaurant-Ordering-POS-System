@@ -255,12 +255,17 @@ export async function startStaffPinSession(userId, pin) {
 
 export function setOwnStaffPin(pin) {
   if (!/^\d{6}$/.test(pin)) return Promise.resolve({ data: null, error: new Error('PIN must contain exactly six digits.') });
+  if (/^(\d)\1{5}$/.test(pin) || ['012345', '123456', '234567', '345678', '456789', '567890', '987654', '876543', '765432', '654321', '543210'].includes(pin)) {
+    return Promise.resolve({ data: null, error: new Error('Choose a less predictable six-digit PIN. Repeated or sequential digits are not allowed.') });
+  }
   return persistOwnStaffPin(pin).then((result) => {
     if (!result.error) return result;
     const message = String(result.error.message || '');
-    return message.includes('STAFF_PIN_ALREADY_IN_USE')
-      ? { data: null, error: new Error('That PIN is already assigned to another staff account. Choose a different PIN.') }
-      : { data: null, error: new Error('Unable to save the PIN. Please try again.') };
+    if (message.includes('STAFF_PIN_ALREADY_IN_USE')) return { data: null, error: new Error('That PIN is already assigned to another staff account. Choose a different PIN.') };
+    if (message.includes('INVALID_STAFF_PIN')) return { data: null, error: new Error('Choose a less predictable six-digit PIN. Repeated or sequential digits are not allowed.') };
+    if (message.includes('ACTIVE_PROFILE_REQUIRED')) return { data: null, error: new Error('Your staff profile is not active. Ask an administrator to enable POS access.') };
+    if (message.includes('JWT') || message.includes('session') || message.includes('authentication')) return { data: null, error: new Error('Your session expired. Sign in again before setting the PIN.') };
+    return { data: null, error: new Error(`Unable to save the PIN${result.error.code ? ` (${result.error.code})` : ''}. Please try again.`) };
   });
 }
 

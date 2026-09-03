@@ -151,6 +151,7 @@ export default function StaffSelectorScreen({
         ? canSetupSelectedPin ? 'Create your private POS PIN for' : 'Sign in with this staff member’s account to set a PIN for'
         : temporaryPinRequired ? 'Enter the temporary PIN issued for' : 'Continue as'
     : 'Choose a staff member to unlock PIN entry.';
+  const isCreatingPin = pinResetRequired || setupRequired;
   const keypadDisabled = isSubmitting || !selectedStaff || (setupRequired && !canSetupSelectedPin && !pinResetRequired);
   return <div className="flex h-full w-full items-center justify-center bg-[#101014] p-4 text-white lg:p-6">
     <section className="flex h-full max-h-[720px] w-full max-w-[1040px] flex-col overflow-hidden rounded-[26px] border border-white/10 bg-gradient-to-br from-[#1A1A1E] via-[#121217] to-[#0A0A0C] shadow-[0_28px_90px_rgba(0,0,0,0.62),inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -214,6 +215,7 @@ export default function StaffSelectorScreen({
             {[0,1,2,3,4,5].map(index => <i key={index} className={`h-5 w-5 rounded-full border shadow-[0_0_18px_rgba(212,175,55,0.2)] ${hasPinError && index < pin.length ? 'border-red-400 bg-red-500' : index < pin.length ? 'border-[#D4AF37] bg-[#D4AF37]' : 'border-slate-600 bg-slate-700/40'}`}/>)}
           </div>
           {selectedStaff ? <p className="mb-4 text-center text-sm font-bold text-slate-400">{pinHelp} <span className="text-white">{selectedStaff.name}</span></p> : <p className="mb-4 text-center text-sm font-bold text-slate-500">{pinHelp}</p>}
+          {selectedStaff&&isCreatingPin&&<p className="mb-4 text-center text-xs font-semibold text-amber-300">Use six non-sequential digits; repeated PINs such as 111111 are not allowed.</p>}
           {confirmError&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{confirmError}</p>}
           {error&&selectedStaff&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{error}</p>}
           <div className="mx-auto grid w-full max-w-[430px] grid-cols-3 gap-3">
