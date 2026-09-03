@@ -35,6 +35,10 @@ const ROLE_FEATURES = {
   ],
 };
 
+const requiresPinSetup = (staff) => Boolean(
+  staff && (staff.pin_setup_required || !staff.pin_status || staff.pin_status === 'SETUP_REQUIRED' || staff.pin_status === 'NOT_CONFIGURED')
+);
+
 export default function StaffSelectorScreen({
   staff,
   selectedStaff,
@@ -84,7 +88,7 @@ export default function StaffSelectorScreen({
     if (value === 'submit') {
       if (!selectedStaff || pin.length !== 6 || !onSubmit) return;
       submitLock.current = true;
-      const setupRequired = Boolean(selectedStaff.pin_setup_required || selectedStaff.pin_status === 'SETUP_REQUIRED');
+      const setupRequired = requiresPinSetup(selectedStaff);
       let ok = false;
       if (pinResetRequired && onSetupPin) {
         if (resetStep === 'new') {
@@ -138,7 +142,7 @@ export default function StaffSelectorScreen({
   const keys = ['1','2','3','4','5','6','7','8','9','back','0','clear'];
   const features = ROLE_FEATURES[selectedStaff?.role] || [];
   const hasPinError = Boolean(error && selectedStaff);
-  const setupRequired = Boolean(selectedStaff?.pin_setup_required || selectedStaff?.pin_status === 'SETUP_REQUIRED');
+  const setupRequired = requiresPinSetup(selectedStaff);
   const temporaryPinRequired = Boolean(selectedStaff?.temporary_pin_required || selectedStaff?.pin_status === 'TEMPORARY_RESET');
   const canSetupSelectedPin = setupRequired && selectedStaff?.id === currentUserId;
   const pinHeading = pinResetRequired
