@@ -22,7 +22,14 @@ export default function TerminalLockScreen({ staff, onUnlock, onLogout }) {
       <input autoFocus type="password" inputMode="numeric" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && void submit()} className="mx-auto mt-7 block w-full rounded-xl border border-white/15 bg-black/30 p-4 text-center text-3xl tracking-[0.5em] outline-none focus:border-[#D4AF37]" aria-label="PIN" />
       {error && <p role="alert" className="mt-3 text-sm font-bold text-red-300">{error}</p>}
       <button disabled={busy || pin.length !== 6} onClick={() => void submit()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#D4AF37] p-4 font-black text-black disabled:opacity-40">{busy && <Loader2 className="animate-spin" size={18}/>} {busy ? 'Unlocking…' : 'Unlock'}</button>
-      <button onClick={onLogout} className="mt-4 text-sm font-bold text-slate-400 underline">Switch Staff / Log Out</button>
+      <button
+        onClick={() => {
+          if (window.confirm('Switch staff now? You will leave the current staff session.')) onLogout();
+        }}
+        className="mt-4 text-sm font-bold text-slate-400 underline"
+      >
+        Switch Staff / Log Out
+      </button>
     </section>
   </div>;
 }

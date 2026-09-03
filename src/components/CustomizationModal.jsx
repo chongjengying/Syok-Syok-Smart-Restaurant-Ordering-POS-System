@@ -80,7 +80,9 @@ export default function CustomizationModal({
     const singleOption = selectedOptions.find((option) => option.selectionType === 'SINGLE');
     const multipleOptions = selectedOptions.filter((option) => option.selectionType === 'MULTIPLE');
     onSave({
-      dish,
+      // Keep the resolved catalog image on the cart item. Cart and review
+      // screens intentionally render from item.dish.image.
+      dish: { ...dish, image: dish.image || dish.imageUrl || null },
       selectedOptions,
       portion: singleOption ? { ...singleOption, priceDelta: singleOption.priceAdjustment } : null,
       selectedAddOns: multipleOptions.map((option) => ({ ...option, price: option.priceAdjustment })),

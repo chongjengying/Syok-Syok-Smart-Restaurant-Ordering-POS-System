@@ -7,10 +7,13 @@ export function mapCategory(category) {
 }
 
 export function mapProduct(product) {
+  const image = product.image || product.imageUrl || product.imagePath || null;
   return {
     ...product,
     price: Number(product.price),
     description: product.description || '',
     optionGroups: Array.isArray(product.optionGroups) ? product.optionGroups : [],
+    image,
+    imageUrl: product.imageUrl || image,
   };
 }

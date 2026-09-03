@@ -14,6 +14,7 @@ export default function TableSelectionScreen({
   tablesError,
   onBack,
   onContinue,
+  onRefreshTables,
   contextError,
   grandTotal,
   takeawayOrders = [],
@@ -314,7 +315,10 @@ export default function TableSelectionScreen({
         <div className="pt-6">
           {contextError && (
             <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
-              {contextError}
+              <p>{contextError}</p>
+              <button type="button" onClick={() => void onRefreshTables?.()} className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-black text-red-700 hover:bg-red-50">
+                Refresh tables and try again
+              </button>
             </div>
           )}
           {diningMode === 'dine-in' && selectedProgressOrders.map((progressOrder) => (

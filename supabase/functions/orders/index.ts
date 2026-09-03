@@ -488,7 +488,12 @@ Deno.serve(async (request) => {
     });
     if (error) {
       const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'DRAFT_CREATION_FAILED';
-      return jsonResponse(['TABLE_NOT_AVAILABLE', 'ACTIVE_ORDER_EXISTS'].includes(code) ? 409 : 400, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      console.error('create_pos_draft failed', { message: error.message, details: error.details, hint: error.hint, code, diningMode, tableId });
+      return jsonResponse(['TABLE_NOT_AVAILABLE', 'ACTIVE_ORDER_EXISTS'].includes(code) ? 409 : 400, {
+        error: code.replaceAll('_', ' ').toLowerCase(),
+        code,
+        details: error.message,
+      });
     }
     return jsonResponse(201, { data });
   }

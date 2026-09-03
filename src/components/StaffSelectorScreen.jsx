@@ -222,11 +222,18 @@ export default function StaffSelectorScreen({
               <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/80">{pinResetRequired ? 'Temporary PIN accepted. Create and confirm a new permanent six-digit PIN.' : 'An administrator reset this PIN. Enter the temporary six-digit PIN you received to continue.'}</p>
             </div>
           </div>}
+          {selectedStaff ? <p className="mb-3 text-center text-sm font-bold text-slate-400">{pinHelp} <span className="text-white">{selectedStaff.name}</span></p> : <p className="mb-3 text-center text-sm font-bold text-slate-500">{pinHelp}</p>}
+          {selectedStaff&&isCreatingPin&&<div aria-label="PIN requirements" className="mb-4 rounded-xl border border-sky-400/25 bg-sky-400/[0.08] px-4 py-3">
+            <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-sky-200"><ShieldCheck size={15}/>PIN requirements</div>
+            <div className="mt-2 flex flex-wrap justify-center gap-2 text-xs font-bold text-slate-200">
+              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">6 digits</span>
+              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">No sequences</span>
+              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">No repeated digits</span>
+            </div>
+          </div>}
           <div aria-label={`${pin.length} of 6 PIN digits entered`} className="mb-5 flex justify-center gap-10">
             {[0,1,2,3,4,5].map(index => <i key={index} className={`h-5 w-5 rounded-full border shadow-[0_0_18px_rgba(212,175,55,0.2)] ${hasPinError && index < pin.length ? 'border-red-400 bg-red-500' : index < pin.length ? 'border-[#D4AF37] bg-[#D4AF37]' : 'border-slate-600 bg-slate-700/40'}`}/>)}
           </div>
-          {selectedStaff ? <p className="mb-4 text-center text-sm font-bold text-slate-400">{pinHelp} <span className="text-white">{selectedStaff.name}</span></p> : <p className="mb-4 text-center text-sm font-bold text-slate-500">{pinHelp}</p>}
-          {selectedStaff&&isCreatingPin&&<p className="mb-4 text-center text-xs font-semibold text-amber-300">Use six non-sequential digits; repeated PINs such as 111111 are not allowed.</p>}
           {confirmError&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{confirmError}</p>}
           {error&&selectedStaff&&<p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-center text-sm font-bold text-red-300">{error}</p>}
           <div className="mx-auto grid w-full max-w-[430px] grid-cols-3 gap-3">
@@ -238,6 +245,12 @@ export default function StaffSelectorScreen({
             <LogIn size={31} />
             {isSubmitting ? pinResetRequired || setupRequired ? 'Saving PIN...' : 'Signing in...' : pinResetRequired ? resetStep === 'confirm' ? 'Save PIN' : 'Continue' : setupRequired ? 'Set PIN' : 'Sign In'}
           </button>
+          {canSkip && <div className="mx-auto mt-5 w-full max-w-[430px] rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-center">
+            <p className="text-xs font-semibold text-slate-400">Need to enter the POS without selecting a staff PIN?</p>
+            <button type="button" onClick={onSkip} disabled={isSubmitting} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-[#D4AF37]/70 bg-transparent px-5 text-base font-black text-[#D4AF37] transition hover:bg-[#D4AF37]/10 disabled:opacity-40">
+              Continue without PIN
+            </button>
+          </div>}
         </div>
       </main>
       <footer className="relative z-0 shrink-0 border-t border-slate-700/55">
@@ -253,7 +266,6 @@ export default function StaffSelectorScreen({
             <Layers size={22}/>
             {environment}
           </span>
-          {canSkip && <button type="button" onClick={onSkip} disabled={isSubmitting} className="rounded-xl border border-[#D4AF37]/60 bg-[#D4AF37] px-5 py-3 text-sm font-black text-black transition hover:brightness-110 disabled:opacity-40">Skip staff PIN</button>}
         </div>
         <div className="relative flex min-h-14 items-center justify-center gap-3 border-t border-slate-700/40 px-8 py-3 text-sm font-bold text-slate-500 lg:px-10">
           <span className="flex items-center gap-3">

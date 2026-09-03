@@ -23,6 +23,7 @@ export function mapProductRecord(product: ProductRecord): Product | null {
     optionGroups: Array.isArray(product.optionGroups) ? product.optionGroups : [],
     imagePath,
     imageUrl: getProductImageUrl(imagePath),
+    image: getProductImageUrl(imagePath),
     isActive: product.isActive ?? status,
     isAvailable: product.isAvailable ?? status,
   };

@@ -90,7 +90,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [diningMode, setDiningMode] = useState('takeaway'); // 'dine-in' | 'takeaway'
   const [selectedTable, setSelectedTable] = useState(null);
-  const { tables, isLoading: tablesLoading, error: tablesError } = useTables(Boolean(session));
+  const { tables, isLoading: tablesLoading, error: tablesError, refresh: refreshTables } = useTables(Boolean(session));
   const [grandTotal, setGrandTotal] = useState(0);
   const [orderContextError, setOrderContextError] = useState('');
   const [orderSubmitError, setOrderSubmitError] = useState('');
@@ -809,6 +809,7 @@ export default function App() {
           tablesError={tablesError}
           onBack={() => setCurrentScreen(tableSelectionBackScreen)}
           onContinue={handleOpenOrderContext}
+          onRefreshTables={async () => { setOrderContextError(''); await refreshTables(); }}
           contextError={orderContextError}
           grandTotal={authoritativeTotal ?? grandTotal}
           takeawayOrders={activeTakeawayOrders}

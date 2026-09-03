@@ -126,10 +126,10 @@ Deno.serve(async (request) => {
     const providers = Array.isArray(providerRows) ? providerRows.filter((provider) => provider.enabled) : [];
     return jsonResponse(200, { data: { methods: getPaymentCapabilities().map((capability) => (
       ['QR', 'EWALLET'].includes(capability.method) ? { ...capability, available: providers.length > 0, providers } : capability
-    )) } } });
+    )) } });
   }
 
-  if (!['ADMIN', 'MANAGER'].includes(callerProfile.role_name)) {
+  if (!['ADMIN', 'MANAGER', 'CASHIER'].includes(callerProfile.role_name)) {
     return jsonResponse(403, {
       error: 'Cashier, manager or administrator access is required.',
       code: 'INSUFFICIENT_PERMISSION',

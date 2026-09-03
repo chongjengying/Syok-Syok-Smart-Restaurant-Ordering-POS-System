@@ -131,7 +131,9 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                 {onSwitchStaff && (
                   <button
                     type="button"
-                    onClick={onSwitchStaff}
+                    onClick={() => {
+                      if (window.confirm('Switch staff now? Any unsent order changes may be discarded.')) onSwitchStaff();
+                    }}
                     className="flex items-center gap-1 rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-semibold text-[#D4AF37] transition-colors hover:bg-[#D4AF37]/25 hover:text-[#FFF0B3]"
                     title="Switch to another staff account using a PIN"
                   >

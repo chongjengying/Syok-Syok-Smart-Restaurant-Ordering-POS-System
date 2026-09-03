@@ -130,24 +130,26 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
   }, []);
 
   const createDraftContext = useCallback(async (mode, selectedTableId, fallbackTableLabel = '') => {
+    const idempotencyKey = crypto.randomUUID();
+    const draft = await createOrderDraft(mode, mode === 'dine-in' ? selectedTableId : null, idempotencyKey);
+    if (draft.error || !draft.data?.id) return draft;
     const localDraft = {
-      id: null,
+      id: draft.data.id,
       orderId: 'NEW',
-      status: 'LOCAL_DRAFT',
-      paymentStatus: null,
+      status: 'DRAFT',
+      paymentStatus: 'PENDING',
       diningMode: mode,
       tableId: mode === 'dine-in' ? selectedTableId : null,
       selectedTable: fallbackTableLabel,
       createdAt: new Date().toISOString(),
-      isLocalDraft: true,
     };
     setPendingOrder(null);
     setActiveOrder(localDraft);
     setDraftCart([]);
     setOrderHistory([]);
-    requestKey.current = null;
+    requestKey.current = idempotencyKey;
+    sessionStorage.setItem(activeOrderKey, draft.data.id);
     sessionStorage.removeItem(pendingOrderKey);
-    sessionStorage.removeItem(activeOrderKey);
     return { data: localDraft, error: null };
   }, []);
 
