@@ -215,6 +215,13 @@ export default function StaffSelectorScreen({
               Back to staff
             </button>}
           </div>
+          {selectedStaff&&temporaryPinRequired&&<div role="status" className="mb-5 flex gap-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-left text-amber-100">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+            <div>
+              <strong className="block text-sm font-black">PIN reset requested</strong>
+              <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/80">{pinResetRequired ? 'Temporary PIN accepted. Create and confirm a new permanent six-digit PIN.' : 'An administrator reset this PIN. Enter the temporary six-digit PIN you received to continue.'}</p>
+            </div>
+          </div>}
           <div aria-label={`${pin.length} of 6 PIN digits entered`} className="mb-5 flex justify-center gap-10">
             {[0,1,2,3,4,5].map(index => <i key={index} className={`h-5 w-5 rounded-full border shadow-[0_0_18px_rgba(212,175,55,0.2)] ${hasPinError && index < pin.length ? 'border-red-400 bg-red-500' : index < pin.length ? 'border-[#D4AF37] bg-[#D4AF37]' : 'border-slate-600 bg-slate-700/40'}`}/>)}
           </div>

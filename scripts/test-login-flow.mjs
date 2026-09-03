@@ -60,6 +60,12 @@ assert.match(staffSelector, /Create New PIN/,
   'PIN screen must show the create-new-PIN step.');
 assert.match(staffSelector, /Confirm New PIN/,
   'PIN screen must show the confirm-new-PIN step.');
+assert.match(staffSelector, /PIN reset requested/,
+  'PIN screen must clearly identify an administrator-requested PIN reset.');
+assert.match(staffSelector, /An administrator reset this PIN/,
+  'PIN screen must explain how to use the temporary PIN.');
+assert.match(staffSelector, /Temporary PIN accepted/,
+  'PIN screen must explain the permanent-PIN stage after temporary PIN acceptance.');
 assert.match(staffSelector, /PINs do not match/,
   'PIN screen must reject mismatched permanent PIN confirmation.');
 assert.match(staffSelector, /Other Staff \(\$\{staff\.length-4\}\)/,
