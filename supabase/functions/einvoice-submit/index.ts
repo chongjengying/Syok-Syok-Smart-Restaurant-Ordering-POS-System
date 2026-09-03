@@ -1,6 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { myinvoisToken, submitMyinvois } from '../_shared/myinvois.ts';
 
+const classifyError = (message: string) => {
+  if (message === 'LOCAL_VALIDATION') return { code: 'LOCAL_VALIDATION', retryable: false };
+  if (message.includes('AUTH_400') || message.includes('AUTH_401') || message.includes('AUTH_403')) return { code: 'AUTHENTICATION', retryable: false };
+  if (message.includes('_400') || message.includes('_422')) return { code: 'MYINVOIS_VALIDATION', retryable: false };
+  if (message.includes('_429')) return { code: 'RATE_LIMIT', retryable: true };
+  if (message.includes('AbortError')) return { code: 'TIMEOUT', retryable: true };
+  return { code: 'MYINVOIS_TEMPORARY', retryable: true };
+};
+
 // Worker entry point. MyInvois credentials are intentionally read only from
 // server-side secrets; the POS never receives tokens or client secrets.
 Deno.serve(async (request) => {
@@ -35,16 +44,17 @@ Deno.serve(async (request) => {
     const document = job.einvoice_documents;
     const payload = document?.transaction_snapshot;
     if (!payload || typeof payload !== 'object') throw new Error('LOCAL_VALIDATION');
-    const result = await submitMyinvois(environment, token.access_token, [payload]);
+    const result = await submitMyinvois(environment, token.access_token, document.document_number, payload);
     await admin.from('einvoice_jobs').update({ status: 'WAITING_VALIDATION', last_error_code: null, last_error_message: null }).eq('id', job.id);
     await admin.from('einvoice_documents').update({ internal_status: 'SUBMITTED', submitted_at: new Date().toISOString(), submission_uid: result?.submissionUid || result?.submissionUID || null }).eq('id', document.id);
     return Response.json({ status: 'SUBMITTED' }, { status: 202 });
   } catch (submissionError) {
     const attempt = Number(job.attempt_count || 0) + 1;
-    const terminal = attempt >= Number(job.max_attempts || 8);
+    const classification = classifyError(submissionError instanceof Error ? submissionError.message : 'MYINVOIS_SUBMISSION_FAILED');
+    const terminal = !classification.retryable || attempt >= Number(job.max_attempts || 8);
     const message = submissionError instanceof Error ? submissionError.message.slice(0, 240) : 'MYINVOIS_SUBMISSION_FAILED';
-    await admin.from('einvoice_jobs').update({ status: terminal ? 'DEAD_LETTER' : 'RETRYING', last_error_code: message.split('_')[0], last_error_message: message, next_attempt_at: new Date(Date.now() + Math.min(3600000, 300000 * 2 ** Math.min(attempt - 1, 4))).toISOString() }).eq('id', job.id);
-    await admin.from('einvoice_documents').update({ internal_status: terminal ? 'FAILED' : 'QUEUED', error_code: message.split('_')[0], error_message: message }).eq('id', job.einvoice_documents.id);
+    await admin.from('einvoice_jobs').update({ status: terminal ? 'DEAD_LETTER' : 'RETRYING', last_error_code: classification.code, last_error_message: message, next_attempt_at: new Date(Date.now() + Math.min(3600000, 300000 * 2 ** Math.min(attempt - 1, 4))).toISOString() }).eq('id', job.id);
+    await admin.from('einvoice_documents').update({ internal_status: terminal ? 'FAILED' : 'QUEUED', error_code: classification.code, error_message: message }).eq('id', job.einvoice_documents.id);
     return Response.json({ status: terminal ? 'DEAD_LETTER' : 'RETRYING' }, { status: 202 });
   }
 });
