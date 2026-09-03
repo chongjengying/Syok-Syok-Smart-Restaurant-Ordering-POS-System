@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { myinvoisToken, submitMyinvois } from '../_shared/myinvois.ts';
 
 // Worker entry point. MyInvois credentials are intentionally read only from
 // server-side secrets; the POS never receives tokens or client secrets.
@@ -16,13 +17,34 @@ Deno.serve(async (request) => {
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: profile } = await admin.from('profiles').select('status').eq('id', authData.user.id).maybeSingle();
   if (!profile || profile.status !== 'ACTIVE') return Response.json({ error: 'Staff account is inactive' }, { status: 403 });
-  const { data: job, error } = await admin.from('einvoice_jobs').select('*, einvoice_documents(*)').eq('id', body.jobId).single();
+  const { data: job, error } = await admin.from('einvoice_jobs').select('*, einvoice_documents(*)').eq('id', body.jobId).in('status', ['QUEUED', 'RETRYING']).lte('next_attempt_at', new Date().toISOString()).single();
   if (error || !job) return Response.json({ error: 'Job not found' }, { status: 404 });
-  // Configuration and HTTP mapper are deliberately server-side. Until the
-  // MyInvois secrets are configured, leave the job retryable and never block POS.
-  if (!Deno.env.get('MYINVOIS_CLIENT_ID') || !Deno.env.get('MYINVOIS_CLIENT_SECRET')) {
+  const { data: companyProfile } = await admin.from('company_einvoice_profiles').select('environment,status').eq('id', job.profile_id).single();
+  if (!companyProfile || !['ACTIVE', 'CONNECTED'].includes(companyProfile.status)) return Response.json({ error: 'e-Invoice company configuration is not active.' }, { status: 409 });
+  const clientId = Deno.env.get('MYINVOIS_CLIENT_ID');
+  const clientSecret = Deno.env.get('MYINVOIS_CLIENT_SECRET');
+  if (!clientId || !clientSecret) {
     await admin.from('einvoice_jobs').update({ status: 'RETRYING', last_error_code: 'NOT_CONFIGURED', last_error_message: 'MyInvois credentials are not configured', next_attempt_at: new Date(Date.now() + 300000).toISOString() }).eq('id', body.jobId);
     return Response.json({ status: 'RETRYING' }, { status: 202 });
   }
-  return Response.json({ error: 'MyInvois adapter requires environment-specific credentials and endpoint configuration' }, { status: 501 });
+  const claimed = await admin.from('einvoice_jobs').update({ status: 'PROCESSING', attempt_count: Number(job.attempt_count || 0) + 1, last_attempt_at: new Date().toISOString() }).eq('id', job.id).in('status', ['QUEUED', 'RETRYING']).select('id').maybeSingle();
+  if (claimed.error || !claimed.data) return Response.json({ status: 'ALREADY_PROCESSING' }, { status: 202 });
+  const environment = companyProfile.environment === 'PRODUCTION' ? 'PRODUCTION' : 'SANDBOX';
+  try {
+    const token = await myinvoisToken(environment, clientId, clientSecret);
+    const document = job.einvoice_documents;
+    const payload = document?.transaction_snapshot;
+    if (!payload || typeof payload !== 'object') throw new Error('LOCAL_VALIDATION');
+    const result = await submitMyinvois(environment, token.access_token, [payload]);
+    await admin.from('einvoice_jobs').update({ status: 'WAITING_VALIDATION', last_error_code: null, last_error_message: null }).eq('id', job.id);
+    await admin.from('einvoice_documents').update({ internal_status: 'SUBMITTED', submitted_at: new Date().toISOString(), submission_uid: result?.submissionUid || result?.submissionUID || null }).eq('id', document.id);
+    return Response.json({ status: 'SUBMITTED' }, { status: 202 });
+  } catch (submissionError) {
+    const attempt = Number(job.attempt_count || 0) + 1;
+    const terminal = attempt >= Number(job.max_attempts || 8);
+    const message = submissionError instanceof Error ? submissionError.message.slice(0, 240) : 'MYINVOIS_SUBMISSION_FAILED';
+    await admin.from('einvoice_jobs').update({ status: terminal ? 'DEAD_LETTER' : 'RETRYING', last_error_code: message.split('_')[0], last_error_message: message, next_attempt_at: new Date(Date.now() + Math.min(3600000, 300000 * 2 ** Math.min(attempt - 1, 4))).toISOString() }).eq('id', job.id);
+    await admin.from('einvoice_documents').update({ internal_status: terminal ? 'FAILED' : 'QUEUED', error_code: message.split('_')[0], error_message: message }).eq('id', job.einvoice_documents.id);
+    return Response.json({ status: terminal ? 'DEAD_LETTER' : 'RETRYING' }, { status: 202 });
+  }
 });
