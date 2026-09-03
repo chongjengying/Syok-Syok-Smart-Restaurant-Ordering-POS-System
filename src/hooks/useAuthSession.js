@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getValidatedSession, onAuthStateChange, signOut } from '../features/auth/authService';
 
-const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
+const INACTIVITY_LIMIT_MS = 3 * 60 * 1000;
 
 export function useAuthSession() {
   const signOutReason = useRef('');
@@ -10,6 +10,7 @@ export function useAuthSession() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(
     () => new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
   );
@@ -62,14 +63,9 @@ export function useAuthSession() {
   useEffect(() => {
     if (!session) return undefined;
     let timer;
-    const lock = () => {
-      signOutReason.current = 'The POS was locked after 15 minutes of inactivity. Sign in again to continue.';
-      void signOut().finally(() => {
-        setSession(null);
-        setNotice(signOutReason.current || 'The POS was locked after 15 minutes of inactivity. Sign in again to continue.');
-      });
-    };
+    const lock = () => setIsLocked(true);
     const reset = () => {
+      if (isLocked) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(lock, INACTIVITY_LIMIT_MS);
     };
@@ -80,7 +76,7 @@ export function useAuthSession() {
       window.clearTimeout(timer);
       events.forEach((event) => window.removeEventListener(event, reset));
     };
-  }, [session]);
+  }, [session, isLocked]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -124,6 +120,9 @@ export function useAuthSession() {
 
   return {
     session,
+    isLocked,
+    lockTerminal: () => setIsLocked(true),
+    unlockTerminal: () => setIsLocked(false),
     isLoading,
     error,
     notice,

@@ -3,7 +3,7 @@ import { Wifi, Battery, Maximize2, User, UsersRound } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { env } from '../config/env';
 
-export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, onSwitchStaff, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
+export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, onLock = onLogout, onSwitchStaff, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
   const tr = (key) => translate(lang, key);
   const [time, setTime] = useState('');
 
@@ -140,7 +140,7 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                   </button>
                 )}
                 <button
-                  onClick={onLogout}
+                  onClick={onLock}
                   className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-[#FFF0B3] transition-colors cursor-pointer font-semibold bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-full"
                   title={tr('lockTerminal')}
                 >

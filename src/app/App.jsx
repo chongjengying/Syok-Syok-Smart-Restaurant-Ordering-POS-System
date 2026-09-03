@@ -30,6 +30,7 @@ import { canAccessProtectedScreen, getRoleLanding, hasAdminWorkspaceAccess } fro
 import { useStaffHandoff } from '../hooks/useStaffHandoff';
 import StaffSelectorScreen from '../components/StaffSelectorScreen';
 import StaffAccessStatusScreen from '../components/StaffAccessStatusScreen';
+import TerminalLockScreen from '../components/TerminalLockScreen';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -44,7 +45,7 @@ function OperationalScreenLoader({ lang }) {
 
 export default function App() {
   // Auth State
-  const { session, isLoading: authLoading, refreshSession, signOut, isPasswordRecovery, finishPasswordRecovery, notice: sessionNotice, clearNotice } = useAuthSession();
+  const { session, isLoading: authLoading, refreshSession, signOut, isPasswordRecovery, finishPasswordRecovery, notice: sessionNotice, clearNotice, isLocked, lockTerminal, unlockTerminal } = useAuthSession();
   const {
     profile,
     isLoading: profileLoading,
@@ -701,6 +702,7 @@ export default function App() {
       setLang={setLang}
       enabledLanguages={enabledLanguages}
       onLogout={handleLogout}
+      onLock={lockTerminal}
       onSwitchStaff={handleSwitchStaff}
       userEmail={session?.user?.email}
       onOpenProfile={() => setIsProfileOpen(true)}
@@ -933,6 +935,7 @@ export default function App() {
         onLogout={handleLogout}
         lang={lang}
       />
+      {isLocked && <TerminalLockScreen staff={profile} onUnlock={unlockTerminal} onLogout={handleLogout} />}
     </IpadShell>
   );
 }
