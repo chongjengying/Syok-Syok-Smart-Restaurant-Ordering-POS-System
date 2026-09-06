@@ -34,6 +34,7 @@ function mapTable(table: RestaurantTableRecord): RestaurantTable {
     paymentStatus: order.payment_status,
     total: Number(order.total || 0),
     createdAt: order.created_at,
+    hasUnfulfilledKitchenItems: (order.order_items || []).some((item) => ['SUBMITTED', 'PREPARING', 'READY'].includes(item.item_status)),
   }));
   const activeOrder = mappedOrders.find((order) => ['UNPAID', 'PARTIALLY_PAID'].includes(order.paymentStatus))
     || mappedOrders[0]

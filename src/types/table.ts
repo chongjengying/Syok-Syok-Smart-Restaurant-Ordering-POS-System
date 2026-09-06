@@ -31,6 +31,7 @@ export interface ActiveTableOrder {
   paymentStatus: PaymentStatus;
   total: number;
   createdAt: string;
+  hasUnfulfilledKitchenItems?: boolean;
 }
 
 export interface RestaurantTable {
@@ -47,12 +48,14 @@ export interface RestaurantTable {
 }
 
 export interface TableFilters {
+  branchId?: string;
   status?: TableStatus;
   includeInactive?: boolean;
   signal?: AbortSignal;
 }
 
 export interface TableInput {
+  branchId?: string;
   tableNumber?: string;
   tableName?: string;
   capacity?: number;

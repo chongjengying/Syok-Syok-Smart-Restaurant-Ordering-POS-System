@@ -126,7 +126,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
     requestKey.current ||= crypto.randomUUID();
     setConfirmation({
       splitType: mode,
-      paymentMethod: selectedMethod,
+      paymentMethod: String(selectedMethod || '').toUpperCase().replace(/[-_ ]/g, '') === 'EWALLET' ? 'EWALLET' : selectedMethod,
       amount: formatCents(amountCents),
       receivedAmount: formatCents(receivedCents),
       changeAmount: formatCents(receivedCents - amountCents),

@@ -98,7 +98,7 @@ Deno.serve(async (request) => {
   });
   const { data: userData, error: userError } = await caller.auth.getUser();
   if (userError || !userData.user) return jsonResponse(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await caller.from('profiles').select('role_name, status').eq('id', userData.user.id).single();
+  const { data: callerProfile } = await caller.from('profiles').select('role_name, status, branch_id').eq('id', userData.user.id).single();
   if (!callerProfile || callerProfile.status !== 'ACTIVE') {
     return jsonResponse(403, { error: 'An active staff profile is required.' });
   }
@@ -132,7 +132,7 @@ Deno.serve(async (request) => {
         return jsonResponse(403, { error: 'Administrator or manager access is required to include inactive tables.' });
       }
     }
-    const { data, error } = await callerRepository.list(requestedStatus, includeInactive);
+    const { data, error } = await callerRepository.list(requestedStatus, includeInactive, new URL(request.url).searchParams.get('branchId'));
     if (error) return jsonResponse(500, { error: 'Unable to load restaurant tables.' });
     return jsonResponse(200, { data });
   }
@@ -240,7 +240,10 @@ Deno.serve(async (request) => {
     if (body.error) return jsonResponse(400, { error: body.error });
     const validation = validateTable(body.data!, false, true);
     if (validation.error) return jsonResponse(400, { error: validation.error });
-    const { data, error } = await adminRepository.create(validation.data!);
+    const branchId = String(body.data?.branchId || callerProfile.branch_id || '');
+    const { data: scoped } = await caller.rpc('can_access_branch', { p_branch_id: branchId });
+    if (!scoped) return jsonResponse(403, { error: 'Branch access denied.' });
+    const { data, error } = await adminRepository.create({ ...validation.data!, branch_id: branchId });
     if (error?.code === '23505') return jsonResponse(409, { error: 'Table number or QR code already exists.' });
     if (error) return jsonResponse(500, { error: 'Unable to create restaurant table.' });
     const { error: auditError } = await caller.rpc('record_table_admin_action', { p_table_id: data.id, p_action: 'TABLE_CREATED', p_details: validation.data });
@@ -249,6 +252,9 @@ Deno.serve(async (request) => {
   }
 
   if (!tableId || tableId.length > 128 || tableAction) return jsonResponse(400, { error: 'A valid table ID is required.' });
+
+  const { data: visibleTable } = await callerRepository.getById(tableId);
+  if (!visibleTable) return jsonResponse(404, { error: 'Restaurant table was not found.' });
 
   if (request.method === 'PATCH') {
     const body = await readBody(request);

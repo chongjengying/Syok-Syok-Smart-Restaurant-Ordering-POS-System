@@ -23,6 +23,8 @@ async function request(path, { method = 'GET', key = anonKey, token = key, body 
 }
 
 const suffix = crypto.randomUUID().slice(0, 8);
+const [branch] = await request('/rest/v1/branches?code=eq.MAIN&select=id', { key: serviceKey });
+assert.ok(branch?.id, 'Seeded MAIN branch is required.');
 const category = (await request('/rest/v1/categories', {
   method: 'POST', key: serviceKey, body: { name: `Kitchen ${suffix}` },
 }))[0];
@@ -32,7 +34,7 @@ const product = (await request('/rest/v1/products', {
 }))[0];
 const table = (await request('/rest/v1/restaurant_tables', {
   method: 'POST', key: serviceKey,
-  body: { table_number: `K-${suffix}`, capacity: 4, area: 'Kitchen Test', status: 'AVAILABLE', is_active: true },
+  body: { branch_id: branch.id, table_number: `K-${suffix}`, capacity: 4, area: 'Kitchen Test', status: 'AVAILABLE', is_active: true },
 }))[0];
 const auth = await request('/auth/v1/signup', {
   method: 'POST',
@@ -43,7 +45,7 @@ const auth = await request('/auth/v1/signup', {
   },
 });
 await request(`/rest/v1/profiles?id=eq.${auth.user.id}`, {
-  method: 'PATCH', key: serviceKey, body: { role_name: 'ADMIN', status: 'ACTIVE' },
+  method: 'PATCH', key: serviceKey, body: { role_name: 'ADMIN', status: 'ACTIVE', branch_id: branch.id },
 });
 const functionRequest = (path = '', options = {}) => request(`/functions/v1/orders${path}`, {
   ...options, token: auth.access_token,
@@ -62,7 +64,7 @@ async function createOrder(diningMode, tableId, serviceMode, note) {
 
 async function assertLifecycle(order, expectedLocation, fulfillmentStatus) {
   let queue = await functionRequest();
-  let queued = queue.data.find((entry) => entry.id === order.data.id);
+  let queued = queue.data.rows.find((entry) => entry.id === order.data.id);
   assert.ok(queued, 'Placed order was not loaded from the real kitchen queue');
   assert.equal(queued.order_number, order.data.order_number);
   assert.equal(queued.restaurant_tables?.table_number || 'Takeaway', expectedLocation);
@@ -91,7 +93,7 @@ async function assertLifecycle(order, expectedLocation, fulfillmentStatus) {
     assert.equal(item.item_status, expectedItemStatus[nextStatus], `Item did not persist ${expectedItemStatus[nextStatus]}`);
   }
   queue = await functionRequest();
-  queued = queue.data.find((entry) => entry.id === order.data.id);
+  queued = queue.data.rows.find((entry) => entry.id === order.data.id);
   assert.equal(queued, undefined, 'Served order remained in the active kitchen queue');
 }
 

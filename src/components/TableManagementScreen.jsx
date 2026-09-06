@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Loader2, MoveRight, Pencil, Plus, RefreshCw, Sparkles, UtensilsCrossed, Wrench, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, MoveRight, Pencil, Plus, RefreshCw, Sparkles, UtensilsCrossed, Wrench, X } from 'lucide-react';
 import { useTableManagement } from '../hooks/useTableManagement';
 import { translate, translateStatus } from '../utils/i18n';
 
@@ -11,7 +11,7 @@ const statusStyles = {
   DISABLED: 'bg-red-100 text-red-800',
 };
 
-export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false, initialStatus = '' }) {
+export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false, initialStatus = '', branchId = '' }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const includeInactive = ['ADMIN', 'MANAGER'].includes(role);
   const {
@@ -21,6 +21,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
     refresh,
     updatingId,
     actionError,
+    actionMessage,
     reserve,
     releaseReservation,
     startCleaning,
@@ -30,7 +31,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
     moveOrder,
     create,
     edit,
-  } = useTableManagement(true, { includeInactive });
+  } = useTableManagement(true, { includeInactive, branchId });
   const [move, setMove] = useState(null);
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [tableEditor, setTableEditor] = useState(null);
@@ -78,6 +79,11 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
             <AlertTriangle className="w-4 h-4 shrink-0" /> {actionError || error}
           </div>
         )}
+        {actionMessage && (
+          <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 flex gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> {actionMessage}
+          </div>
+        )}
         {isLoading ? (
           <div className="h-full flex items-center justify-center gap-3 text-gray-500"><Loader2 className="w-6 h-6 animate-spin" /> {tr('loadingTables')}</div>
         ) : visibleTables.length === 0 ? (
@@ -86,6 +92,10 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {visibleTables.map((table) => {
               const order = table.activeOrder;
+              const canMoveOrder = Boolean(order
+                && ['DRAFT', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED'].includes(order.status)
+                && ['UNPAID', 'PARTIALLY_PAID'].includes(order.paymentStatus));
+              const canCompleteCleaning = !order?.hasUnfulfilledKitchenItems;
               const busy = updatingId === table.id || updatingId === order?.id;
               return (
                 <article key={table.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -111,13 +121,16 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
                     {table.status === 'RESERVED' && (
                       <button disabled={busy} onClick={() => releaseReservation(table.id)} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold disabled:opacity-50">{tr('releaseReservation')}</button>
                     )}
-                    {table.status === 'CLEANING' && (
+                    {table.status === 'CLEANING' && canCompleteCleaning && (
                       <button disabled={busy} onClick={() => runCleaningComplete(table.id)} className="rounded-lg bg-purple-100 px-3 py-2 text-xs font-bold text-purple-800 disabled:opacity-50 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> {tr('cleaningComplete')}</button>
+                    )}
+                    {table.status === 'CLEANING' && !canCompleteCleaning && (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Kitchen items must be served before cleaning can be completed.</p>
                     )}
                     {table.status === 'OCCUPIED' && !order && (
                       <button disabled={busy} onClick={() => runStartCleaning(table.id)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> {tr('startCleaning')}</button>
                     )}
-                    {order && (
+                    {canMoveOrder && (
                       <button disabled={busy} onClick={() => setMove({ orderId: order.id, sourceTableId: table.id, orderNumber: order.orderNumber })} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50 flex items-center gap-1"><MoveRight className="w-3.5 h-3.5" /> {tr('move')}</button>
                     )}
                     {['ADMIN', 'MANAGER'].includes(role) && ['AVAILABLE', 'CLEANING'].includes(table.status) && (
@@ -152,7 +165,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
           </div>
         </div>
       )}
-      {tableEditor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><form onSubmit={async e => { e.preventDefault(); const input = { ...tableForm, capacity: Number(tableForm.capacity) }; const result = tableEditor.id ? await edit(tableEditor.id, input) : await create(input); if (!result.error) setTableEditor(null); }} className="w-full max-w-md rounded-2xl bg-white p-6"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{tableEditor.id ? 'Edit' : 'Add'} Table</h2><button type="button" onClick={() => setTableEditor(null)}><X/></button></div><label className="block text-sm font-bold">Table number<input required maxLength={20} value={tableForm.tableNumber} onChange={e => setTableForm({...tableForm,tableNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Name<input maxLength={100} value={tableForm.tableName} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Area<input required maxLength={100} value={tableForm.area} onChange={e => setTableForm({...tableForm,area:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Capacity<input required type="number" min="1" max="100" value={tableForm.capacity} onChange={e => setTableForm({...tableForm,capacity:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>{actionError&&<p className="mt-3 text-sm text-red-600">{actionError}</p>}<button disabled={Boolean(updatingId)} className="mt-6 w-full rounded-xl bg-[#D4AF37] p-3 font-black">{updatingId?'Saving…':'Save Table'}</button></form></div>}
+      {tableEditor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><form onSubmit={async e => { e.preventDefault(); if (!globalThis.confirm(tableEditor.id ? 'Save changes to this table?' : 'Create this table?')) return; const input = { ...tableForm, capacity: Number(tableForm.capacity) }; const result = tableEditor.id ? await edit(tableEditor.id, input) : await create(input); if (!result.error) setTableEditor(null); }} className="w-full max-w-md rounded-2xl bg-white p-6"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{tableEditor.id ? 'Edit' : 'Add'} Table</h2><button type="button" onClick={() => setTableEditor(null)}><X/></button></div><label className="block text-sm font-bold">Table number<input required maxLength={20} value={tableForm.tableNumber} onChange={e => setTableForm({...tableForm,tableNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Name<input maxLength={100} value={tableForm.tableName} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Area<input required maxLength={100} value={tableForm.area} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Capacity<input required type="number" min="1" max="100" value={tableForm.capacity} onChange={e => setTableForm({...tableForm,capacity:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>{actionError&&<p className="mt-3 text-sm text-red-600">{actionError}</p>}<button disabled={Boolean(updatingId)} className="mt-6 w-full rounded-xl bg-[#D4AF37] p-3 font-black">{updatingId?'Saving…':'Save Table'}</button></form></div>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelOrder, createOrder, createOrderDraft, getOrder, saveOrderDraftItems, saveTakeawayPackaging, submitOrder } from '../services/order.service';
 import { processPayment } from '../services/payment.service';
+import { applyVoucherToOrder, removeVoucherFromOrder } from '../services/discount.service';
 
 const pendingOrderKey = 'pos.pendingOrderId';
 const activeOrderKey = 'pos.activeOrderId';
@@ -18,6 +19,11 @@ function activeOrderView(order, tableLabel = '') {
     createdAt: order.created_at || order.createdAt,
     draftVersion: Number(order.draft_version ?? order.draftVersion ?? 0),
     total: Number(order.total || 0),
+    subtotal: Number(order.subtotal || 0),
+    discount: Number(order.discount || 0),
+    tax: Number(order.tax || 0),
+    serviceCharge: Number(order.service_charge || order.serviceCharge || 0),
+    adjustmentMetadata: order.adjustment_metadata || order.adjustmentMetadata || {},
   };
 }
 
@@ -120,6 +126,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
   }, []);
 
   const startNewOrderContext = useCallback(() => {
+    draftVersion.current = 0;
     setPendingOrder(null);
     setActiveOrder(null);
     setDraftCart([]);
@@ -133,6 +140,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     const idempotencyKey = crypto.randomUUID();
     const draft = await createOrderDraft(mode, mode === 'dine-in' ? selectedTableId : null, idempotencyKey);
     if (draft.error || !draft.data?.id) return draft;
+    draftVersion.current = 0;
     const localDraft = {
       id: draft.data.id,
       orderId: 'NEW',
@@ -162,6 +170,19 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     const orderId = activeOrder.id;
     const operation = draftSaveQueue.current.catch(() => null).then(async () => {
       const result = await saveOrderDraftItems(orderId, nextCart, draftVersion.current);
+      // Refresh a conflicting draft, but never overwrite another terminal's
+      // changes by retrying an old cart with the newer version.
+      if (result.error?.code === 'STALE_DRAFT_VERSION' || result.error?.message?.toLowerCase().includes('stale draft')) {
+        const latest = await getOrder(orderId);
+        if (!latest.error) {
+          applyPersistedOrder(latest.data, tableLabel);
+          return {
+            ...result,
+            restoredCart: draftCartView(latest.data),
+            error: Object.assign(new Error('This order was changed on another terminal. The latest cart has been loaded; please review it and try again.'), { code: 'STALE_DRAFT_VERSION' }),
+          };
+        }
+      }
       if (result.error) return result;
       const persisted = await getOrder(orderId);
       if (persisted.error) return persisted;
@@ -176,7 +197,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     const result = await getOrder(orderId);
     if (result.error) return result;
     const activeUnpaidOrder = activeStatuses.has(result.data.status)
-      && ['UNPAID', 'PARTIALLY_PAID'].includes(result.data.paymentStatus);
+      && ['PENDING', 'UNPAID', 'PARTIALLY_PAID'].includes(result.data.paymentStatus);
     const paidKitchenOrder = result.data.status === 'COMPLETED'
       && result.data.paymentStatus === 'PAID'
       && result.data.items.some((item) => ['SUBMITTED', 'PREPARING', 'READY'].includes(item.itemStatus));
@@ -211,6 +232,15 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     await draftSaveQueue.current;
     const saved = await saveOrderDraftItems(activeOrder.id, cart, draftVersion.current);
     if (saved.error) return saved;
+    const appliedVoucherCode = activeOrder.adjustmentMetadata?.voucher?.code;
+    if (appliedVoucherCode) {
+      const recalculated = await applyVoucherToOrder(activeOrder.id, appliedVoucherCode);
+      if (recalculated.error) {
+        // The backend owns eligibility. If the cart no longer qualifies, continue
+        // with the voucher removed and surface the authoritative order below.
+        await removeVoucherFromOrder(activeOrder.id);
+      }
+    }
     const result = await submitOrder(activeOrder.id, requestKey.current);
     if (result.error) {
       const reconciled = await getOrder(activeOrder.id);
@@ -257,6 +287,16 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     if (!pendingOrder?.id) {
       return { data: null, error: new Error('No unpaid order is available for payment.') };
     }
+    // Split-bill payments are already committed by the payment RPC. The
+    // final button only confirms the refreshed paid order; do not send the
+    // UI's synthetic MULTIPLE method through the single-payment endpoint.
+    if (paymentMethod === 'MULTIPLE') {
+      const persisted = await getOrder(pendingOrder.id);
+      if (persisted.error) return persisted;
+      if (persisted.data.paymentStatus !== 'PAID') return { data: null, error: new Error('Payment status changed. Refresh the order.') };
+      applyPersistedOrder(persisted.data, tableLabel);
+      return { data: persisted.data, error: null };
+    }
     const authoritativeAmount = Number.isFinite(finalAmount) ? Number(finalAmount) : Number(pendingOrder.total);
     const signature = `${pendingOrder.id}|${paymentMethod}|${authoritativeAmount}`;
     if (paymentRequest.current?.signature !== signature) {
@@ -288,7 +328,29 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     return { data: persistedResult.data, error: null };
   }, [applyPersistedOrder, pendingOrder, tableLabel]);
 
+  const applyVoucher = useCallback(async (code) => {
+    if (!activeOrder?.id) return { data: null, error: new Error('Create an order before applying a voucher.') };
+    await draftSaveQueue.current;
+    const result = await applyVoucherToOrder(activeOrder.id, code);
+    if (result.error) return result;
+    const persisted = await getOrder(activeOrder.id);
+    if (persisted.error) return persisted;
+    applyPersistedOrder(persisted.data, tableLabel);
+    return { data: { ...result.data, order: persisted.data }, error: null };
+  }, [activeOrder?.id, applyPersistedOrder, tableLabel]);
+
+  const removeVoucher = useCallback(async () => {
+    if (!activeOrder?.id) return { data: null, error: new Error('No active order is available.') };
+    const result = await removeVoucherFromOrder(activeOrder.id);
+    if (result.error) return result;
+    const persisted = await getOrder(activeOrder.id);
+    if (persisted.error) return persisted;
+    applyPersistedOrder(persisted.data, tableLabel);
+    return { data: { ...result.data, order: persisted.data }, error: null };
+  }, [activeOrder?.id, applyPersistedOrder, tableLabel]);
+
   const resetCheckout = useCallback(() => {
+    draftVersion.current = 0;
     setPendingOrder(null);
     setActiveOrder(null);
     setDraftCart([]);
@@ -315,6 +377,8 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     saveDraftCart,
     startNewOrderContext,
     submitPayment,
+    applyVoucher,
+    removeVoucher,
     resetCheckout,
   };
 }

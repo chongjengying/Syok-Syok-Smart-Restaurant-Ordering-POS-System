@@ -6,13 +6,14 @@ const visibleOrderStatuses = ['DRAFT', 'CONFIRMED', 'PREPARING', 'READY', 'SERVE
 export class TableRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  list(status?: string | null, includeInactive = false) {
+  list(status?: string | null, includeInactive = false, branchId?: string | null) {
     let query = this.client
       .from('restaurant_tables')
       .select(tableColumns)
       .in('orders.status', visibleOrderStatuses)
       .order('area')
       .order('table_number');
+    if (branchId) query = query.eq('branch_id', branchId);
     if (!includeInactive) query = query.eq('is_active', true);
     if (status) query = query.eq('status', status);
     return query;

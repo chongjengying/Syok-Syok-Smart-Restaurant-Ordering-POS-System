@@ -27,7 +27,7 @@ Deno.serve(async (request) => {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: userResult, error: userError } = await caller.auth.getUser();
   if (userError || !userResult.user) return json(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await caller.from('profiles').select('status').eq('id', userResult.user.id).single();
+  const { data: callerProfile } = await caller.from('profiles').select('status,role_name,branch_id').eq('id', userResult.user.id).single();
   if (!callerProfile || callerProfile.status !== 'ACTIVE') return json(403, { error: 'An active staff profile is required.' });
   const permission = request.method === 'GET' ? 'user.view' : request.method === 'POST' ? 'user.create' : 'user.edit';
   const { data: allowed } = await caller.rpc('has_pos_permission', { p_permission: permission });
@@ -38,9 +38,11 @@ Deno.serve(async (request) => {
     const search = requestUrl.searchParams.get('search')?.trim().slice(0, 100) || '';
     const page = Math.max(1, Number(requestUrl.searchParams.get('page')) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('pageSize')) || 25));
-    const { data: profiles, error: profileError } = await admin.from('profiles')
+    let profilesQuery = admin.from('profiles')
       .select('id,name,username,email,role_name,status,branch_id,created_at,updated_at')
       .order('created_at', { ascending: false });
+    if (callerProfile.role_name !== 'ADMIN') profilesQuery = profilesQuery.eq('branch_id', callerProfile.branch_id);
+    const { data: profiles, error: profileError } = await profilesQuery;
     if (profileError) {
       console.error('Admin profile listing failed', profileError);
       return json(500, { error: 'Unable to load staff accounts.' });
@@ -71,6 +73,7 @@ Deno.serve(async (request) => {
       };
     });
     for (const authUser of authUsers) {
+      if (callerProfile.role_name !== 'ADMIN') continue;
       if (profileById.has(authUser.id)) continue;
       linkedUsers.push({
         id: authUser.id,
@@ -122,7 +125,8 @@ Deno.serve(async (request) => {
       return json(inviteError?.message?.toLowerCase().includes('already') ? 409 : 500, { error: inviteError?.message?.toLowerCase().includes('already') ? 'A staff account already uses this email.' : 'Unable to invite staff.' });
     }
     const enablePosAccess = body.enablePosAccess !== false;
-    const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: invited.user.id, p_payload: { name, role, status: 'ACTIVE' } });
+    const additionalBranches = Array.isArray(body.additionalBranches) ? body.additionalBranches.filter((value): value is string => typeof value === 'string') : [];
+    const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: invited.user.id, p_payload: { name, role, status: 'ACTIVE', branchId: body.branchId || callerProfile.branch_id, additionalBranches } });
     if (error) {
       console.error('Invited Auth user profile setup failed', error);
       await admin.auth.admin.deleteUser(invited.user.id);
@@ -141,6 +145,8 @@ Deno.serve(async (request) => {
 
   const userId = typeof body.userId === 'string' ? body.userId : '';
   if (!userId) return json(400, { error: 'userId is required.' });
+  const { data: targetScope } = await admin.from('profiles').select('branch_id').eq('id',userId).maybeSingle();
+  if (callerProfile.role_name !== 'ADMIN' && targetScope?.branch_id !== callerProfile.branch_id) return json(403, { error: 'Branch access denied.' });
   if (body.action === 'reset-password') {
     const { data: target } = await admin.from('profiles').select('email').eq('id', userId).single();
     if (!target?.email) return json(404, { error: 'Staff account was not found.' });

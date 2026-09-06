@@ -74,7 +74,7 @@ Deno.serve(async request => {
   const bucket=!prior||now-prior.windowStarted>=60_000?{windowStarted:now,gets:0,posts:0}:prior;
   if(request.method==='POST')bucket.posts+=1;else bucket.gets+=1;
   rateBuckets.set(rateKey,bucket);
-  if(bucket.posts>10||bucket.gets>30)return jsonResponse(429,{error:'Health endpoint rate limit exceeded.',code:'RATE_LIMITED',correlationId});
+  if(bucket.posts>10||bucket.gets>30)return jsonResponse(429,{error:'Health endpoint rate limit exceeded.',code:'RATE_LIMITED',retryAfterSeconds:60,correlationId});
   const {data:profile}=await caller.from('profiles').select('status').eq('id',authResult.data.user.id).single();
   if(!profile||profile.status!=='ACTIVE') return jsonResponse(403,{error:'An active staff profile is required.',code:'INSUFFICIENT_PERMISSION',correlationId});
 

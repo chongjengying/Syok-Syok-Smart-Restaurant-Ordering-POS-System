@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, Plus, Minus, ChevronRight } from 'lucide-react';
 import { translate, translations } from '../utils/i18n';
 
 import { soundFx } from '../utils/audio';
 import { calculateCartPreviewTotals, getCartItemCount, getCartItemPreviewTotal } from '../services/cart.service';
 import { formatMoney } from '../services/money.service';
+import { listAvailableVouchers } from '../features/vouchers/voucherRepository';
 
 export default function CartReviewScreen({
   cart,
@@ -20,12 +21,45 @@ export default function CartReviewScreen({
   selectedTable,
   isAddOn,
   authoritativeBillTotal,
+  activeOrder,
+  onApplyVoucher,
+  onRemoveVoucher,
   lang
 }) {
   const t = translations[lang] || translations.en;
   const tr = (key, variables) => translate(lang, key, variables);
 
   const previewTotals = calculateCartPreviewTotals(cart);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherMessage, setVoucherMessage] = useState('');
+  const [voucherBusy, setVoucherBusy] = useState(false);
+  const [voucherPickerOpen, setVoucherPickerOpen] = useState(false);
+  const [voucherSearch, setVoucherSearch] = useState('');
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const voucher = activeOrder?.adjustmentMetadata?.voucher;
+  useEffect(() => {
+    if (!activeOrder?.id) { setAvailableVouchers([]); return undefined; }
+    let active = true;
+    void listAvailableVouchers(activeOrder.id, voucherSearch).then((result) => {
+      if (active && !result.error) setAvailableVouchers(result.data);
+    });
+    return () => { active = false; };
+  }, [activeOrder?.id, voucherPickerOpen, voucherSearch]);
+  const applyVoucher = async (code = voucherCode) => {
+    if (!code.trim() || voucherBusy) return;
+    setVoucherBusy(true); setVoucherMessage('');
+    const result = await onApplyVoucher?.(code);
+    setVoucherBusy(false);
+    if (result?.error) setVoucherMessage(result.error.message);
+    else { setVoucherCode(''); setVoucherMessage('Voucher applied successfully.'); }
+  };
+  const removeVoucher = async () => {
+    if (voucherBusy) return;
+    setVoucherBusy(true); setVoucherMessage('');
+    const result = await onRemoveVoucher?.();
+    setVoucherBusy(false);
+    setVoucherMessage(result?.error ? result.error.message : 'Voucher removed.');
+  };
 
   const updateQuantity = (index, delta) => {
     soundFx.playTap();
@@ -297,6 +331,13 @@ export default function CartReviewScreen({
               {submitError}
             </div>
           )}
+          <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-black uppercase tracking-wider text-amber-900">Promotion / Voucher</p>
+            {voucher ? <div className="mt-2 flex items-center justify-between gap-3 text-sm"><div><strong>{voucher.code}</strong><span className="ml-2 text-emerald-700">-{formatMoney(voucher.discount)}</span></div><button disabled={voucherBusy} onClick={() => void removeVoucher()} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <div className="mt-3 flex gap-2"><button disabled={voucherBusy || !activeOrder?.id} onClick={() => setVoucherPickerOpen(true)} className="flex-1 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left text-sm font-bold">Select Voucher{availableVouchers.length ? ` · ${availableVouchers.length} available` : ''}</button><input value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} placeholder="Enter code" maxLength={60} className="w-28 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy || !activeOrder?.id} onClick={() => void applyVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>}
+            {voucherMessage && <p role="status" className={`mt-2 text-xs font-semibold ${voucherMessage.includes('success') || voucherMessage === 'Voucher removed.' ? 'text-emerald-700' : 'text-red-700'}`}>{voucherMessage}</p>}
+          </section>
+          {voucher && activeOrder?.discount > 0 && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm"><div className="flex justify-between font-bold text-emerald-900"><span>Voucher {voucher.code}</span><span>-{formatMoney(activeOrder.discount)}</span></div><div className="mt-1 flex justify-between text-xs text-emerald-800"><span>Tax + service charge after voucher</span><span>{formatMoney(activeOrder.tax + activeOrder.serviceCharge)}</span></div></div>}
+          {voucherPickerOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-lg font-black">Vouchers for this order</h3><button onClick={() => setVoucherPickerOpen(false)}>✕</button></div><input autoFocus value={voucherSearch} onChange={(event) => setVoucherSearch(event.target.value)} placeholder="Search voucher code" className="mt-4 w-full rounded-xl border p-3"/><div className="mt-4 max-h-80 space-y-3 overflow-y-auto">{availableVouchers.map((entry) => <div key={entry.id} className="rounded-xl border p-3"><div className="flex justify-between"><strong>{entry.code}</strong><span>{entry.voucher_type === 'PERCENTAGE' ? `${entry.value}% OFF` : `RM ${entry.value} OFF`}</span></div><p className={`mt-1 text-xs font-semibold ${entry.status === 'AVAILABLE' ? 'text-emerald-700' : 'text-amber-700'}`}>{entry.statusLabel || entry.status}</p><p className="text-xs text-slate-500">{entry.customer_description || entry.description || 'Voucher'}</p><button disabled={entry.status !== 'AVAILABLE' || voucherBusy} className="mt-2 rounded-lg bg-[#121212] px-3 py-2 text-xs font-bold text-[#D4AF37] disabled:opacity-40" onClick={() => { setVoucherCode(entry.code); setVoucherPickerOpen(false); void applyVoucher(entry.code); }}>Apply</button></div>)}{!availableVouchers.length && <p className="py-6 text-center text-sm text-slate-500">No vouchers found.</p>}</div></div></div>}
           <button
             disabled={cart.length === 0}
             onClick={() => {

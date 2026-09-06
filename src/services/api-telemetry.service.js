@@ -4,6 +4,7 @@ import { supabase } from '../infrastructure/supabase/client';
 const queue=[];
 let flushTimer;
 let flushing=false;
+let retryAfter=0;
 
 function scheduleFlush(){
   if(flushTimer||!queue.length)return;
@@ -18,7 +19,7 @@ export function recordApiTelemetry(event){
 }
 
 export async function flushApiTelemetry(){
-  if(flushing||!queue.length)return;
+  if(flushing||!queue.length||Date.now()<retryAfter)return;
   flushing=true;
   const events=queue.splice(0,50);
   try{
@@ -29,7 +30,16 @@ export async function flushApiTelemetry(){
       headers:{apikey:env.supabaseKey,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
       body:JSON.stringify({events}),
     });
-    if(!response.ok)queue.unshift(...events);
+    if(!response.ok){
+      // A rate-limited telemetry sink must not amplify its own failure by
+      // immediately retrying the same batch. Keep a short local cooldown and
+      // discard the batch; operational requests remain unaffected.
+      if(response.status===429){
+        retryAfter=Date.now()+60_000;
+      } else {
+        queue.unshift(...events);
+      }
+    }
   }catch{queue.unshift(...events);}finally{
     flushing=false;
     if(queue.length)scheduleFlush();

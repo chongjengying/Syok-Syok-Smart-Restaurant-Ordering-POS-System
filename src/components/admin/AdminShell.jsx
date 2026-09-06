@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowLeft,
-  Boxes,
   ChartNoAxesCombined,
   ClipboardList,
   CreditCard,
@@ -33,6 +32,8 @@ import TableManagementScreen from "../TableManagementScreen";
 import ReportsScreen from "../ReportsScreen";
 import QrPaymentSettings from "./QrPaymentSettings";
 import PaymentProviders from "./PaymentProviders";
+import TerminalManagement from "./TerminalManagement";
+import OrganizationManagement from "./OrganizationManagement";
 import SystemHealthPage from "../../pages/admin/SystemHealthPage";
 import OperationalIndicator from "../system-health/OperationalIndicator";
 import { useSystemHealth } from "../../hooks/useSystemHealth";
@@ -42,9 +43,22 @@ import { translate } from "../../utils/i18n";
 import InventoryManagementPage from "../../pages/admin/InventoryManagementPage";
 import EinvoiceOverview from "./EinvoiceOverview";
 import VoucherManagement from "./VoucherManagement";
+import PromotionManagement from "./PromotionManagement";
+import DiscountActivity from "./DiscountActivity";
+import { getSystemSettings } from "../../services/systemSettings.service";
 
 const groups = [
   ["", [["dashboard", "Dashboard", "dashboard.view", LayoutDashboard]]],
+  [
+    "ORGANIZATION",
+    [
+      ["company", "Company", "company.view", Settings],
+      ["branches", "Branches", "branch.view", FolderTree],
+      ["terminals", "Terminals", "terminal.view", Settings],
+      ["users", "Staff", "user.view", Users],
+      ["roles", "Roles & Permissions", "role.view", ShieldCheck],
+    ],
+  ],
   [
     "OPERATIONS",
     [
@@ -54,21 +68,20 @@ const groups = [
     ],
   ],
   [
-    "CATALOG",
+    "BUSINESS",
     [
       ["products", "Products", "product.view", PackageSearch],
       ["categories", "Categories", "category.view", FolderTree],
-      ["inventory", "Inventory", "inventory.view", Boxes],
+      ["promotions", "Promotions", "promotion.view", ReceiptText],
+      ["vouchers", "Vouchers", "voucher.view", ReceiptText],
     ],
   ],
   [
-    "MANAGEMENT",
+    "REPORTS",
     [
-      ["users", "Users", "user.view", Users],
-      ["roles", "Roles & Permissions", "role.view", ShieldCheck],
-      ["reports", "Reports", "report.view", TrendingUp],
-      ["vouchers", "Vouchers & Promotions", "voucher.view", ReceiptText],
-      ["einvoice", "e-Invoice", "einvoice.view", FileText],
+      ["reports", "Sales Reports", "report.view", TrendingUp],
+      ["discount-activity", "Voucher Usage", "voucher.activity.view", ReceiptText],
+      ["audit", "Audit Logs", "audit.view", Logs],
     ],
   ],
   [
@@ -76,14 +89,14 @@ const groups = [
     [
       [
         "system-administration",
-        "System Administration",
+        "Restaurant Settings",
         "settings.view",
         Settings,
       ],
       ["system-health", "System Health", "system.health.view", Activity],
-      ["audit", "Audit Logs", "audit.view", Logs],
-      ["qr-settings", "DuitNow QR", "settings.manage", QrCode],
-      ["payment-providers", "Payment Providers", "settings.manage", CreditCard],
+      ["qr-settings", "QR Payment Settings", "settings.manage", QrCode],
+      ["payment-providers", "Payment Methods", "settings.manage", CreditCard],
+      ["einvoice", "E-Invoice", "einvoice.view", FileText],
     ],
   ],
 ];
@@ -107,8 +120,22 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
   );
   const [routeKey, setRouteKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [businessLabel, setBusinessLabel] = useState("Restaurant Admin");
   const healthState = useSystemHealth(allowed.has("system.health.view"));
   const networkState = useNetworkStatus();
+
+  useEffect(() => {
+    if (!allowed.has("settings.view")) return undefined;
+    let active = true;
+    void getSystemSettings().then((result) => {
+      if (!active || result.error || !result.data) return;
+      const info = result.data.restaurantInfo || {};
+      const name = String(info.restaurantName || "").trim();
+      const branch = String(info.branchName || "").trim();
+      if (name) setBusinessLabel(branch ? `${name} · ${branch}` : name);
+    });
+    return () => { active = false; };
+  }, [allowed]);
 
   const navigate = (nextSection, filters = {}) => {
     if (
@@ -223,16 +250,22 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
         embedded
         lang={lang}
         initialStatus={activeParams.get("status") || ""}
+        branchId={activeParams.get("branchId") || ""}
       />
     ),
     reports: <ReportsScreen embedded lang={lang} />,
     audit: <AuditLogs />,
     "qr-settings": <QrPaymentSettings />,
     "payment-providers": <PaymentProviders />,
+    terminals: <TerminalManagement permissions={permissions} />,
+    company: <OrganizationManagement mode="company" permissions={permissions} />,
+    branches: <OrganizationManagement mode="branch" permissions={permissions} />,
     "system-health": <SystemHealthPage state={healthState} />,
     "system-administration": <SystemAdministrationPage lang={lang} />,
     einvoice: <EinvoiceOverview />,
-    vouchers: <VoucherManagement />,
+    vouchers: <VoucherManagement initialStatus={activeParams.get("status") || ""} initialValidity={activeParams.get("validity") || ""} initialCreate={activeParams.get("create") === "1"} />,
+    promotions: <PromotionManagement initialStatus={activeParams.get("status") || ""} initialCreate={activeParams.get("create") === "1"} />,
+    "discount-activity": <DiscountActivity initialKind={activeParams.get("kind") || ""} />,
   }[section];
 
   const sidebar = (
@@ -262,7 +295,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
       </div>
       <div className="mb-6 flex items-center gap-2 text-lg font-black text-[#D4AF37]">
         <ChartNoAxesCombined />
-        ADMIN
+        <span className="truncate" title={businessLabel}>{businessLabel}</span>
       </div>
       {groups.map(([label, groupItems]) => {
         const visible = groupItems.filter((item) => allowed.has(item[2]));
@@ -270,18 +303,22 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
           <div key={label} className="mb-5">
             {label && (
               <p className="mb-2 px-3 text-[10px] font-black tracking-widest text-gray-500">
-                {tr(`adminGroup${label}`)}
+                {label}
               </p>
             )}
-            {visible.map(([id, _text, , Icon]) => (
-              <button
-                key={id}
-                onClick={() => navigate(id)}
-                className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section === id ? "bg-[#D4AF37] text-black" : "text-gray-300 hover:bg-white/10"}`}
-              >
-                <Icon size={17} />
-                {tr(`adminNav_${id}`)}
-              </button>
+            {visible.map(([id, text, , Icon]) => (
+              <React.Fragment key={id}>
+                <button
+                  onClick={() => navigate(id)}
+                  className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section === id ? "bg-[#D4AF37] text-black" : "text-gray-300 hover:bg-white/10"}`}
+                >
+                  <Icon size={17} />
+                  {text}
+                </button>
+                {id === "promotions" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["All",{}],["Active",{status:"ACTIVE"}],["Scheduled",{status:"SCHEDULED"}],["Expired",{status:"EXPIRED"}],["Disabled",{status:"DISABLED"}],["+ Create Promotion",{create:"1"}]].map(([label, filters]) => <button key={label} onClick={() => navigate("promotions", filters)} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
+                {id === "vouchers" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["All",{}],["Active",{status:"ACTIVE"}],["Scheduled",{validity:"UPCOMING"}],["Fully Redeemed",{status:"REDEEMED"}],["Expired",{status:"EXPIRED"}],["Disabled",{status:"DISABLED"}],["+ Create Voucher",{create:"1"}]].map(([label, filters]) => <button key={label} onClick={() => navigate("vouchers", filters)} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
+                {id === "discount-activity" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["Promotion Usage","PROMOTION"],["Voucher Redemption","VOUCHER"],["Manual Discounts","MANUAL"],["Manager Overrides","OVERRIDE"]].map(([label, kind]) => <button key={kind} onClick={() => navigate("discount-activity", {kind})} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
+              </React.Fragment>
             ))}
           </div>
         ) : null;

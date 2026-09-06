@@ -8,14 +8,33 @@ export function calculateDiscount({ subtotal, type, value, maximum }) {
   return Math.round(Math.min(base, Math.max(0, maximum == null ? raw : Math.min(raw, Number(maximum)))) * 100) / 100;
 }
 
-function friendly(error) { return error?.message || 'Unable to process voucher'; }
-
-export async function validateVoucher(code, subtotal, orderType) {
-  const { data, error } = await supabase.rpc('validate_voucher', { p_code: code, p_subtotal: subtotal, p_order_type: orderType || null });
-  return error ? { data: null, error: new Error(friendly(error)) } : { data, error: null };
+function friendly(error) {
+  const message = String(error?.message || '');
+  const messages = {
+    VOUCHER_NOT_FOUND: 'Voucher code not found.', VOUCHER_INACTIVE: 'This voucher is inactive.',
+    VOUCHER_NOT_ACTIVE_YET: 'This voucher is not active yet.', VOUCHER_EXPIRED: 'This voucher has expired.',
+    VOUCHER_MINIMUM_SPEND: 'The order does not meet this voucher’s minimum spend.',
+    VOUCHER_ORDER_TYPE: 'This voucher cannot be used for this order type.',
+    VOUCHER_USAGE_LIMIT: 'This voucher has reached its usage limit.',
+    VOUCHER_STACKING_CONFLICT: 'This voucher cannot be combined with the current promotion.',
+    VOUCHER_NO_ELIGIBLE_ITEMS: 'This voucher has no eligible items in this order.',
+    ORDER_NOT_EDITABLE: 'This order has already been paid or completed and cannot be changed.',
+    INSUFFICIENT_PERMISSION: 'You do not have permission to apply vouchers.',
+  };
+  return Object.entries(messages).find(([code]) => message.includes(code))?.[1] || message || 'Unable to process voucher.';
 }
 
-export async function redeemVoucher(voucherId, orderId, amount, idempotencyKey = crypto.randomUUID()) {
-  const { data, error } = await supabase.rpc('redeem_voucher', { p_voucher_id: voucherId, p_order_id: orderId, p_amount: amount, p_idempotency_key: idempotencyKey });
+export async function applyVoucherToOrder(orderId, code) {
+  const { data, error } = await supabase.rpc('apply_voucher_to_order', {
+    p_order_id: orderId,
+    p_code: String(code || '').trim().toUpperCase(),
+  });
+  if (error) return { data: null, error: new Error(friendly(error)) };
+  if (data?.ok === false) return { data: null, error: new Error(friendly({ message: data.code })) };
+  return { data, error: null };
+}
+
+export async function removeVoucherFromOrder(orderId) {
+  const { data, error } = await supabase.rpc('remove_voucher_from_order', { p_order_id: orderId });
   return error ? { data: null, error: new Error(friendly(error)) } : { data, error: null };
 }

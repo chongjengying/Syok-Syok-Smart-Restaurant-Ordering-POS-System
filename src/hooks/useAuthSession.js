@@ -1,3 +1,5 @@
+import { supabase, isOperatorMode } from '../infrastructure/supabase/client';
+import { lockOperatorSession } from '../services/terminal-context.service';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getValidatedSession, onAuthStateChange, signOut } from '../features/auth/authService';
 
@@ -11,6 +13,17 @@ export function useAuthSession() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
   const [isLocked, setIsLocked] = useState(false);
+  const [idleTimeout, setIdleTimeout] = useState(INACTIVITY_LIMIT_MS);
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!session || !isOperatorMode()) return;
+      const { data } = await supabase.rpc('get_pos_display_settings');
+      if (active && data) setIdleTimeout(data.pos?.autoLockEnabled === false ? 0 : Math.max(1, Math.min(120, Number(data.pos?.idleTimeoutMinutes || 3))) * 60000);
+    };
+    void load(); window.addEventListener('pos-settings-updated', load);
+    return () => { active = false; window.removeEventListener('pos-settings-updated', load); };
+  }, [session]);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(
     () => new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
   );
@@ -63,11 +76,11 @@ export function useAuthSession() {
   useEffect(() => {
     if (!session) return undefined;
     let timer;
-    const lock = () => setIsLocked(true);
+    const lock = () => { if (isOperatorMode()) { setIsLocked(true); void lockOperatorSession(); } };
     const reset = () => {
       if (isLocked) return;
       window.clearTimeout(timer);
-      timer = window.setTimeout(lock, INACTIVITY_LIMIT_MS);
+      if (idleTimeout) timer = window.setTimeout(lock, idleTimeout);
     };
     const events = ['pointerdown', 'keydown', 'touchstart'];
     events.forEach((event) => window.addEventListener(event, reset, { passive: true }));
@@ -76,7 +89,7 @@ export function useAuthSession() {
       window.clearTimeout(timer);
       events.forEach((event) => window.removeEventListener(event, reset));
     };
-  }, [session, isLocked]);
+  }, [session, isLocked, idleTimeout]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -121,7 +134,7 @@ export function useAuthSession() {
   return {
     session,
     isLocked,
-    lockTerminal: () => setIsLocked(true),
+    lockTerminal: () => { if (isOperatorMode()) { setIsLocked(true); void lockOperatorSession(); } },
     unlockTerminal: () => setIsLocked(false),
     isLoading,
     error,

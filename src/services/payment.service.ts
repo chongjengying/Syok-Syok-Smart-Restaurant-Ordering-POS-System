@@ -57,13 +57,16 @@ export function processSplitPayment(input: SplitPaymentInput) {
   if (!input.orderId || !input.idempotencyKey) {
     return Promise.resolve({ data: null, error: new Error('Split payment details are incomplete.') });
   }
-  if (!supportedMethods.has(input.paymentMethod)) {
+  const paymentMethod = String(input.paymentMethod || '').toUpperCase().replace(/[-_ ]/g, '') === 'EWALLET'
+    ? 'EWALLET'
+    : String(input.paymentMethod || '').toUpperCase();
+  if (!supportedMethods.has(paymentMethod)) {
     return Promise.resolve({ data: null, error: new Error('The selected payment method is unsupported.') });
   }
-  if (['QR', 'EWALLET'].includes(input.paymentMethod) && !input.providerId) {
+  if (['QR', 'EWALLET'].includes(paymentMethod) && !input.providerId) {
     return Promise.resolve({ data: null, error: new Error('Select a QR / E-wallet provider.') });
   }
-  return submitSplitPayment(input);
+  return submitSplitPayment({ ...input, paymentMethod });
 }
 
 export function processPayment(
@@ -75,7 +78,8 @@ export function processPayment(
   submitTakeaway = false,
   paymentReference?: string,
 ) {
-  const method = String(paymentMethod || '').toUpperCase();
+  const normalized = String(paymentMethod || '').toUpperCase().replace(/[-_ ]/g, '');
+  const method = normalized === 'EWALLET' ? 'EWALLET' : normalized;
   if (!orderId) return Promise.resolve({ data: null, error: new Error('Order ID is required.') });
   if (!supportedMethods.has(method)) {
     return Promise.resolve({ data: null, error: new Error('The selected payment method is unsupported.') });

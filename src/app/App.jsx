@@ -1,3 +1,5 @@
+import { isOperatorMode } from '../infrastructure/supabase/client';
+import { endOperatorSession } from '../services/terminal-context.service';
 import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import IpadShell from '../components/IpadShell';
 import WelcomeScreen from '../components/WelcomeScreen';
@@ -50,9 +52,10 @@ export default function App() {
     profile,
     isLoading: profileLoading,
     error: profileError,
-  } = useProfile(session?.user?.id || '');
-  const permissionState = usePermissions(session?.user?.id || '');
+  } = useProfile(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
+  const permissionState = usePermissions(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
   const [operatorReady, setOperatorReady] = useState(false);
+  const [posRequested, setPosRequested] = useState(false);
   const staffHandoff = useStaffHandoff(Boolean(session) && !operatorReady, session?.user?.id || '');
 
   // Navigation includes order list → detail → payment → confirmation.
@@ -90,7 +93,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [diningMode, setDiningMode] = useState('takeaway'); // 'dine-in' | 'takeaway'
   const [selectedTable, setSelectedTable] = useState(null);
-  const { tables, isLoading: tablesLoading, error: tablesError, refresh: refreshTables } = useTables(Boolean(session));
+  const { tables, isLoading: tablesLoading, error: tablesError, refresh: refreshTables } = useTables(Boolean(session) && operatorReady && isOperatorMode());
   const [grandTotal, setGrandTotal] = useState(0);
   const [orderContextError, setOrderContextError] = useState('');
   const [orderSubmitError, setOrderSubmitError] = useState('');
@@ -120,13 +123,15 @@ export default function App() {
     discardDraft,
     openExistingOrder,
     prepareTakeawayPayment,
+    applyVoucher,
+    removeVoucher,
     sendOrder,
     saveDraftCart,
     startNewOrderContext,
     submitPayment,
     resetCheckout,
   } = useCheckout({
-    enabled: Boolean(session),
+    enabled: Boolean(session) && operatorReady && isOperatorMode(),
     cart,
     diningMode,
     tableId: selectedTable,
@@ -155,6 +160,10 @@ export default function App() {
 
   const handleSwitchStaff = async () => {
     await discardDraft();
+    const ended = await endOperatorSession();
+    if (ended.error) { setOrderContextError(ended.error.message); return; }
+    unlockTerminal();
+    setPosRequested(true);
     setIsProfileOpen(false);
     globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
     setCurrentScreen('welcome');
@@ -236,7 +245,7 @@ export default function App() {
     const result = await saveDraftCart(nextCart);
     if (result.error) {
       setOrderSubmitError(getUserErrorMessage(result.error, 'Unable to save the order draft.'));
-      replaceCart(draftCart);
+      replaceCart(result.restoredCart ?? draftCart);
       return false;
     }
     return true;
@@ -536,7 +545,12 @@ export default function App() {
   const canAccessTables = permissionState.hasPermission('table.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
   const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
     .some((permission) => permissionState.hasPermission(permission));
-  const canAccessAdmin = hasAdminWorkspaceAccess(permissionState.permissions);
+  const canAccessAdmin = !isOperatorMode() && hasAdminWorkspaceAccess(permissionState.permissions);
+  useEffect(() => {
+    // Administrators authenticate with email/password and do not require the
+    // operational staff PIN handoff used by cashiers, waiters, and kitchen staff.
+    if (profile?.status === 'ACTIVE' && profile.role === 'ADMIN' && !operatorReady && !posRequested && !isOperatorMode()) setOperatorReady(true);
+  }, [operatorReady, posRequested, profile]);
   useEffect(() => {
     if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
       globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
@@ -546,6 +560,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) {
+      setPosRequested(false);
       appliedRoleLanding.current = false;
       landingSessionId.current = '';
       setOperatorReady(false);
@@ -558,7 +573,7 @@ export default function App() {
     if (!operatorReady) return;
     if (!profile || profile.status !== 'ACTIVE' || profileLoading || permissionState.isLoading || appliedRoleLanding.current) return;
     appliedRoleLanding.current = true;
-    const landing = getRoleLanding(profile.role);
+    const landing = isOperatorMode() ? (profile.role === 'KITCHEN' ? 'kitchen' : 'welcome') : getRoleLanding(profile.role);
     if (landing === 'admin') {
       globalThis.history?.replaceState(null, '', '#admin/dashboard');
       setCurrentScreen('admin');
@@ -685,8 +700,8 @@ export default function App() {
             setCurrentScreen('admin');
             setOperatorReady(true);
           }}
-          canSkip={profile?.role === 'ADMIN'}
-          onSkip={() => setOperatorReady(true)}
+          canSkip={false}
+          onSkip={() => {}}
         />
       </IpadShell>
     );
@@ -779,6 +794,9 @@ export default function App() {
           selectedTable={selectedTableLabel}
           isAddOn={Boolean(activeOrder?.id && activeOrder.status !== 'DRAFT')}
           authoritativeBillTotal={authoritativeTotal}
+          activeOrder={activeOrder}
+          onApplyVoucher={applyVoucher}
+          onRemoveVoucher={removeVoucher}
           lang={lang}
         />
       )}
@@ -827,6 +845,7 @@ export default function App() {
           orderId={pendingOrder?.id || activeOrder?.id}
           onBack={handleBackFromPayment}
           onPaymentSubmit={handlePayment}
+          onApplyVoucher={applyVoucher}
           lang={lang}
         />
       )}
@@ -879,10 +898,7 @@ export default function App() {
             role={profile.role}
             permissions={permissionState.permissions}
             onSwitchStaff={handleSwitchStaff}
-            onBack={() => {
-              globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
-              setCurrentScreen('welcome');
-            }}
+            onBack={handleSwitchStaff}
             lang={lang}
           />
         </Suspense>
@@ -936,7 +952,7 @@ export default function App() {
         onLogout={handleLogout}
         lang={lang}
       />
-      {isLocked && <TerminalLockScreen staff={profile} onUnlock={unlockTerminal} onLogout={handleLogout} />}
+      {isLocked && <TerminalLockScreen staff={profile} onUnlock={unlockTerminal} onLogout={handleLogout} onSwitchStaff={handleSwitchStaff} />}
     </IpadShell>
   );
 }

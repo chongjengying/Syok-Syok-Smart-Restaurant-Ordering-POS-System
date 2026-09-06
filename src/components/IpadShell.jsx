@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, Battery, Maximize2, User, UsersRound } from 'lucide-react';
+import { Wifi, Battery, LogOut, Maximize2, User, UsersRound } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { env } from '../config/env';
 
@@ -141,6 +141,17 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                     Switch Staff
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Log out of the terminal? Any unsent order changes may be discarded.')) onLogout();
+                  }}
+                  className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-100"
+                  title={tr('logout')}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  {tr('logout')}
+                </button>
                 <button
                   onClick={onLock}
                   className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-[#FFF0B3] transition-colors cursor-pointer font-semibold bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-full"

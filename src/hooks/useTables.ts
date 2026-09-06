@@ -4,10 +4,11 @@ import type { RestaurantTable } from '../types/table';
 import { createRealtimeRecoveryTracker } from '../services/realtime-recovery.service';
 
 interface TableHookOptions {
+  branchId?: string;
   includeInactive?: boolean;
 }
 
-export function useTables(enabled = true, { includeInactive = false }: TableHookOptions = {}) {
+export function useTables(enabled = true, { includeInactive = false, branchId }: TableHookOptions = {}) {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -15,7 +16,7 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
   const refresh = useCallback(async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
     if (!enabled) return;
     if (!silent) setIsLoading(true);
-    const result = await getTables({ signal, includeInactive });
+    const result = await getTables({ signal, includeInactive, branchId });
     if (signal?.aborted) return;
     if (result.error || !result.data) {
       setError(result.error?.message || 'Unable to load restaurant tables.');
@@ -24,7 +25,7 @@ export function useTables(enabled = true, { includeInactive = false }: TableHook
       setError('');
     }
     if (!silent) setIsLoading(false);
-  }, [enabled, includeInactive]);
+  }, [enabled, includeInactive, branchId]);
 
   useEffect(() => {
     if (!enabled) {

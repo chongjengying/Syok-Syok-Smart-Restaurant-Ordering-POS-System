@@ -24,8 +24,10 @@ const [
   read('supabase/migrations/20260829110000_staff_pin_handoff.sql'),
 ]);
 
-assert.match(authRepository, /verifyOtp\(\{\s*token_hash:\s*tokenHash,\s*type:\s*'email'\s*\}\)/,
-  'Staff PIN token exchange must verify the generated email token hash.');
+const pinEndpoint = await read('supabase/functions/staff-pin-session/index.ts');
+assert.match(pinEndpoint, /verifyOtp\(\{\s*token_hash:\s*tokenHash,\s*type:\s*'email'\s*\}\)/, 'Server must verify PIN exchange token before returning credentials.');
+assert.match(pinEndpoint, /begin_terminal_staff_session/, 'PIN token must be bound to a terminal session.');
+assert.match(authRepository, /operatorSupabase.auth.setSession\(session\)/, 'Operator credentials must not replace the admin account session.');
 
 assert.match(adminUsersFunction, /temporaryPin\s*=\s*pinData\?\.temporaryPin\s*\|\|\s*null/,
   'Admin-created staff accounts must return the generated temporary PIN once.');

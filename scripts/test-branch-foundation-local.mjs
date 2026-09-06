@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { getLocalSupabaseStatus } from './local-supabase-status.mjs';
+import { bindTestTerminal } from './operational-session-fixture.mjs';
+const status=getLocalSupabaseStatus();
+assert.ok(['localhost','127.0.0.1'].includes(new URL(status.API_URL).hostname));
+let token=status.SERVICE_ROLE_KEY;
+async function request(path,{body,method=body?'POST':'GET',service=false,ok=true}={}) {
+ const r=await fetch(`${status.API_URL}${path}`,{method,headers:{apikey:status.ANON_KEY,Authorization:`Bearer ${service?status.SERVICE_ROLE_KEY:token}`,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body)});
+ const raw=await r.text(); const data=raw?JSON.parse(raw):null; if(ok)assert.ok(r.ok,`${path}: ${JSON.stringify(data)}`);else assert.ok(!r.ok,`${path} should reject`);return data;
+}
+const rpc=(name,body={},extra={})=>request(`/rest/v1/rpc/${name}`,{body,...extra});
+const suffix=crypto.randomUUID().slice(0,8);
+const [main]=await request('/rest/v1/branches?code=eq.MAIN&select=id,company_id',{service:true});
+async function user(role,branchId) {
+ const data=await request('/auth/v1/signup',{body:{email:`foundation-${role}-${suffix}@example.com`,password:`Foundation-${suffix}!`}});
+ await request(`/rest/v1/profiles?id=eq.${data.user.id}`,{method:'PATCH',service:true,body:{role_name:role,status:'ACTIVE',branch_id:branchId}});
+ return data;
+}
+const admin=await user('ADMIN',main.id);token=admin.access_token;
+const branch=await rpc('save_branch',{p_id:null,p_payload:{code:`B-${suffix.toUpperCase()}`,name:'Foundation test branch',status:'ACTIVE'},p_expected_revision:null});
+await rpc('save_branch',{p_id:null,p_payload:{code:branch.code,name:'Duplicate',status:'ACTIVE'},p_expected_revision:null},{ok:false});
+const terminal=await rpc('save_pos_terminal',{p_id:null,p_branch_id:branch.id,p_code:`${branch.code}-T01`,p_name:'Foundation test POS',p_type:'POS'});
+assert.equal(terminal.registration_status,'UNREGISTERED');
+await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'ACTIVATE'},{ok:false});
+const device=crypto.randomUUID()+crypto.randomUUID();
+await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'REGISTER',p_device_identifier:device});
+await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'ACTIVATE'});
+await rpc('save_pos_terminal',{p_id:terminal.id,p_branch_id:main.id,p_code:terminal.terminal_code,p_name:'Move terminal',p_type:'POS'},{ok:false});
+const saved=await rpc('save_branch_configuration',{p_branch_id:branch.id,p_patch:{tax_rate:8,service_charge_rate:5,receipt_config:{receiptFooter:'Foundation receipt'}},p_expected_revision:branch.revision});
+assert.equal(saved.settings.tax_rate,8);
+assert.equal(saved.settings.receipt_config.receiptFooter,'Foundation receipt');
+await rpc('save_branch_configuration',{p_branch_id:branch.id,p_patch:{tax_rate:10},p_expected_revision:branch.revision},{ok:false});
+await rpc('save_branch_configuration',{p_branch_id:branch.id,p_patch:{tax_rate:101},p_expected_revision:saved.branch.revision},{ok:false});
+const manager=await user('MANAGER',branch.id);token=manager.access_token;
+await rpc('get_branch_management',{p_branch_id:main.id},{ok:false});
+assert.equal((await request('/rest/v1/branches?select=id')).length,1);
+const pin=String(Math.floor(100000+Math.random()*899999));
+await rpc('set_own_staff_pin',{p_pin:pin});
+const operationalAuth=await request('/auth/v1/token?grant_type=password',{body:{email:admin.user.email,password:`Foundation-${suffix}!`}});
+const mainDevice=await bindTestTerminal({status,userId:admin.user.id,accessToken:operationalAuth.access_token,branchId:main.id});
+await rpc('transition_pos_terminal',{p_terminal_id:mainDevice.terminal.id,p_action:'DEACTIVATE'},{ok:false});
+token=admin.access_token;
+await request('/functions/v1/staff-pin-session',{body:{userId:manager.user.id,pin,deviceIdentifier:mainDevice.device},ok:false});
+const exchange=await request('/functions/v1/staff-pin-session',{body:{userId:manager.user.id,pin,deviceIdentifier:device}});
+assert.ok(exchange.data.session?.access_token,'Expected bound operator credentials');
+token=exchange.data.session.access_token;
+const current=await rpc('current_terminal_staff_session');
+assert.equal(current.staff_id,manager.user.id);assert.equal(current.branch_id,branch.id);assert.equal(current.terminal_id,terminal.id);assert.equal(current.actor_auth_user_id,admin.user.id);
+await rpc('lock_terminal_staff_session');
+assert.ok(!(await rpc('current_terminal_staff_session'))?.id);
+assert.equal(await rpc('verify_own_terminal_lock_pin',{p_pin:pin}),true);
+assert.equal((await rpc('current_terminal_staff_session')).id,current.id);
+await rpc('end_terminal_staff_session');
+assert.ok(!(await rpc('current_terminal_staff_session'))?.id);
+token=admin.access_token;
+await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'DEACTIVATE'});
+await request('/functions/v1/staff-pin-session',{body:{userId:manager.user.id,pin,deviceIdentifier:device},ok:false});
+console.log('PASS: branch identity, duplicate codes, registration lifecycle, configuration inheritance, stale writes, rate validation, manager isolation, PIN branch isolation, bound staff context, lock/unlock, session end and terminal deactivation');

@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { getAllProducts, subscribeToCatalog } from '../services/catalog.service';
 import {
   getProductCache,
@@ -35,14 +35,28 @@ export function useProducts({ categoryId = null, search = '' }: ProductHookFilte
   const [cache, setCache] = useState<ProductCacheEntry | null>(() => getProductCache());
   const [isFetching, setIsFetching] = useState(() => isProductCacheStale(getProductCache()));
   const [error, setError] = useState('');
+  const refreshSequence = useRef(0);
 
   const executeRefresh = useCallback(async (force = false) => {
+    const sequence = ++refreshSequence.current;
     setIsFetching(true);
     try {
-      await refreshProductCache(loadProductCatalogue, force);
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await refreshProductCache(loadProductCatalogue, force || attempt > 0);
+          lastError = null;
+          break;
+        } catch (refreshError) {
+          lastError = refreshError;
+          if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+      if (sequence !== refreshSequence.current) return;
+      if (lastError) throw lastError;
       setError('');
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : 'Unable to load products.');
+      if (sequence === refreshSequence.current) setError(refreshError instanceof Error ? refreshError.message : 'Unable to load products.');
     } finally {
       setIsFetching(false);
     }

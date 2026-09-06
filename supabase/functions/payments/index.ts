@@ -211,7 +211,7 @@ Deno.serve(async (request) => {
   if (splitType) {
     const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
     const rawMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod.toUpperCase() : '';
-    const method = rawMethod === 'E_WALLET' ? 'EWALLET' : rawMethod;
+    const method = rawMethod.replace(/[-_ ]/g, '') === 'EWALLET' ? 'EWALLET' : rawMethod;
     const amount = typeof body.amount === 'string' || typeof body.amount === 'number' ? String(body.amount) : null;
     const receivedAmount = typeof body.receivedAmount === 'string' || typeof body.receivedAmount === 'number'
       ? String(body.receivedAmount)
@@ -307,7 +307,7 @@ Deno.serve(async (request) => {
 
   const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
   const rawMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod.toUpperCase() : '';
-  const method = rawMethod === 'E_WALLET' ? 'EWALLET' : rawMethod;
+  const method = rawMethod.replace(/[-_ ]/g, '') === 'EWALLET' ? 'EWALLET' : rawMethod;
   const finalAmount = typeof body.finalAmount === 'number' ? body.finalAmount : Number.NaN;
   const receivedAmount = typeof body.receivedAmount === 'number' ? body.receivedAmount : finalAmount;
   const paymentReference = typeof body.paymentReference === 'string' ? body.paymentReference.trim().slice(0, 150) : '';

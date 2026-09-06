@@ -16,7 +16,7 @@ const METHOD_DETAILS = {
   QR: { icon: Smartphone, label: 'QR / E-wallet' },
 };
 
-export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang = 'en' }) {
+export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onApplyVoucher, lang = 'en' }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const { order, isLoading: isLoadingOrder, error: orderError } = useOrder(orderId, Boolean(orderId));
   const { methods: capabilities, isLoading: isLoadingMethods, error: capabilitiesError, refresh } = usePaymentCapabilities();
@@ -31,8 +31,12 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
   const [paymentError, setPaymentError] = useState('');
   const [earlyPaymentAcknowledged, setEarlyPaymentAcknowledged] = useState(false);
   const [showQrConfirmation, setShowQrConfirmation] = useState(false);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherBusy, setVoucherBusy] = useState(false);
+  const [voucherMessage, setVoucherMessage] = useState('');
 
   const paymentMethods = useMemo(() => capabilities
+    .map((capability) => ({ ...capability, method: String(capability.method || '').toUpperCase().replace(/[-_ ]/g, '') }))
     .filter((capability) => ['CASH', 'QR', 'EWALLET'].includes(capability.method))
     .map((capability) => capability.method === 'EWALLET' ? { ...capability, method: 'QR' } : capability)
     .filter((capability, index, list) => list.findIndex((entry) => entry.method === capability.method) === index), [capabilities]);
@@ -57,7 +61,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
     && (selectedMethod !== 'CASH' || cashTender)
     && (!providerRequired || selectedProvider)
     && (!hasActiveKitchenItems || earlyPaymentAcknowledged)
-    && !isProcessing);
+    && !isProcessing && !voucherBusy && !isLoadingSummary && !summaryError);
   const canComplete = Boolean(summary?.paymentStatus === 'PAID' && Number(summary.remainingAmount) === 0 && !isProcessing);
 
   useEffect(() => {
@@ -66,8 +70,8 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
   }, [paymentMethods, selectedMethod]);
 
   useEffect(() => {
-    if (!amountInput && outstanding > 0) setAmountInput(outstanding.toFixed(2));
-  }, [amountInput, outstanding]);
+    setAmountInput(outstanding.toFixed(2));
+  }, [orderId, outstanding]);
 
   useEffect(() => {
     if (!providers.some((provider) => provider.providerId === providerId)) setProviderId(providers[0]?.providerId || '');
@@ -81,7 +85,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
     const result = await processSplitPayment({
       orderId,
       splitType: amount === outstanding ? 'FULL' : 'AMOUNT',
-      paymentMethod: selectedMethod,
+      paymentMethod: String(selectedMethod || '').toUpperCase().replace(/[-_ ]/g, '') === 'EWALLET' ? 'QR' : selectedMethod,
       amount: amount.toFixed(2),
       receivedAmount: selectedMethod === 'CASH' ? cashTender.receivedAmount.toFixed(2) : amount.toFixed(2),
       providerId: providerRequired ? providerId : null,
@@ -114,6 +118,30 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
     if (result?.error) setPaymentError(getUserErrorMessage(result.error, 'Order could not be completed.'));
   };
 
+  const requestVoucher = async () => {
+    if (!voucherCode.trim() || voucherBusy || isProcessing || paid > 0) return;
+    setVoucherBusy(true); setVoucherMessage('');
+    try {
+      const result = await onApplyVoucher?.(voucherCode);
+      if (result?.error) {
+        setVoucherMessage(result.error.message);
+        return;
+      }
+      const refreshed = await refetch();
+      if (refreshed.error || !refreshed.data) {
+        setVoucherMessage('Voucher applied, but payment details could not be refreshed. Reopen payment to reload the total.');
+        return;
+      }
+      setAmountInput(Number(refreshed.data.remainingAmount).toFixed(2));
+      setVoucherCode('');
+      setVoucherMessage('Voucher applied. Payment total updated.');
+    } catch (error) {
+      setVoucherMessage(getUserErrorMessage(error, 'Voucher could not be applied.'));
+    } finally {
+      setVoucherBusy(false);
+    }
+  };
+
   const orderItems = useMemo(() => order?.items || [], [order?.items]);
 
   return (
@@ -143,6 +171,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
                 </div>
                 <div className="ml-auto mt-5 max-w-sm space-y-2 text-sm">
                   <div className="flex justify-between"><span>{tr('subtotal')}</span><span>{money(order.subtotal)}</span></div>
+                  {order.discount > 0 && <div className="flex justify-between font-semibold text-emerald-700"><span>{order.adjustmentMetadata?.voucher?.code ? `Voucher ${order.adjustmentMetadata.voucher.code}` : 'Promotion / Voucher'}</span><span>-{money(order.discount)}</span></div>}
                   <div className="flex justify-between"><span>{tr('tax')}</span><span>{money(order.tax)}</span></div>
                   {order.serviceCharge > 0 && <div className="flex justify-between"><span>{tr('serviceCharge')}</span><span>{money(order.serviceCharge)}</span></div>}
                   <div className="flex justify-between border-t-2 border-[#121212] pt-3 text-xl font-black"><span>{tr('total')}</span><span>{money(order.total)}</span></div>
@@ -159,6 +188,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, lang =
             </div>
 
             <h2 className="mt-5 font-black">Select payment method</h2>
+            {paid === 0 && <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-amber-900">Promotion / Voucher</p><div className="mt-2 flex gap-2"><input value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} maxLength={60} placeholder="Enter voucher code" className="min-w-0 flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy} onClick={() => void requestVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>{voucherMessage && <p role="status" className={`mt-2 text-xs font-semibold ${voucherMessage.includes('updated') ? 'text-emerald-700' : 'text-red-700'}`}>{voucherMessage}</p>}</section>}
             {isLoadingMethods || isLoadingSummary ? <div className="flex h-24 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="h-5 w-5 animate-spin" /> Loading payment details...</div> : (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {paymentMethods.map((capability) => {

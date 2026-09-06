@@ -3,9 +3,10 @@ import { supabase } from '../infrastructure/supabase/client';
 import type { ApiResult, RequestOptions } from '../types/api';
 import type { RestaurantTableRecord, TableFilters, TableInput, TableStatus } from '../types/table';
 
-export function fetchTables({ status, includeInactive = false, signal }: TableFilters = {}) {
+export function fetchTables({ branchId, status, includeInactive = false, signal }: TableFilters = {}) {
   return apiRequest('tables', {
     query: {
+      ...(branchId ? { branchId } : {}),
       ...(status ? { status } : {}),
       ...(includeInactive ? { includeInactive: 'true' } : {}),
     },

@@ -1,0 +1,10 @@
+alter table public.vouchers drop constraint if exists vouchers_voucher_type_check;
+alter table public.vouchers add constraint vouchers_voucher_type_check check (voucher_type in ('FIXED','PERCENTAGE','FREE_ITEM','PROMO_CODE','BUY_X_GET_Y','ITEM_SPECIFIC','CATEGORY_SPECIFIC'));
+alter table public.vouchers add column if not exists valid_time_from time;
+alter table public.vouchers add column if not exists valid_time_until time;
+alter table public.vouchers add column if not exists valid_days smallint[] not null default '{}';
+alter table public.vouchers add column if not exists max_usage_per_order integer not null default 1 check (max_usage_per_order > 0);
+alter table public.vouchers add column if not exists requires_manager_approval boolean not null default false;
+alter table public.vouchers add column if not exists promotion_compatible boolean not null default false;
+alter table public.vouchers add column if not exists buy_quantity integer;
+alter table public.vouchers add column if not exists get_quantity integer;

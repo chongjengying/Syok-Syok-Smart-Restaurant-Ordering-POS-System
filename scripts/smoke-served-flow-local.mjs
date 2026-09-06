@@ -22,18 +22,20 @@ async function request(path, { method = 'GET', key = anonKey, token = key, body,
   return { status: response.status, payload };
 }
 
-async function createStaff(role, suffix) {
+async function createStaff(role, suffix, branchId) {
   const auth = (await request('/auth/v1/signup', {
     method: 'POST',
     body: { email: `${role.toLowerCase()}-serve-${suffix}@example.com`, password: `Serve-${suffix}-Pass!` },
   })).payload;
   await request(`/rest/v1/profiles?id=eq.${auth.user.id}`, {
-    method: 'PATCH', key: serviceKey, body: { role_name: role, status: 'ACTIVE' },
+    method: 'PATCH', key: serviceKey, body: { role_name: role, status: 'ACTIVE', branch_id: branchId },
   });
   return auth.access_token;
 }
 
 const suffix = crypto.randomUUID().slice(0, 8);
+const [branch] = (await request('/rest/v1/branches?code=eq.MAIN&select=id', { key: serviceKey })).payload;
+assert.ok(branch?.id, 'Seeded MAIN branch is required.');
 const category = (await request('/rest/v1/categories', {
   method: 'POST', key: serviceKey, body: { name: `Serve ${suffix}` },
 })).payload[0];
@@ -43,12 +45,12 @@ const product = (await request('/rest/v1/products', {
 })).payload[0];
 const table = (await request('/rest/v1/restaurant_tables', {
   method: 'POST', key: serviceKey,
-  body: { table_number: `S-${suffix}`, capacity: 4, area: 'Serving Test', status: 'AVAILABLE', is_active: true },
+  body: { branch_id: branch.id, table_number: `S-${suffix}`, capacity: 4, area: 'Serving Test', status: 'AVAILABLE', is_active: true },
 })).payload[0];
 
-const adminToken = await createStaff('ADMIN', suffix);
-const waiterToken = await createStaff('WAITER', suffix);
-const kitchenToken = await createStaff('KITCHEN', suffix);
+const adminToken = await createStaff('ADMIN', suffix, branch.id);
+const waiterToken = await createStaff('WAITER', suffix, branch.id);
+const kitchenToken = await createStaff('KITCHEN', suffix, branch.id);
 const ordersRequest = (token, path = '', options = {}) => request(`/functions/v1/orders${path}`, { ...options, token });
 
 const created = (await ordersRequest(adminToken, '', {

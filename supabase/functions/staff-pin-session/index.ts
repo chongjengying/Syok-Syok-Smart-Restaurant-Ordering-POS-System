@@ -16,7 +16,7 @@ Deno.serve(async (request) => {
   if (!authorization?.startsWith('Bearer ')) return json(401, { error: 'Authentication is required.', code: 'AUTHENTICATION_REQUIRED' });
   if (!supabaseUrl || !anonKey || !serviceKey) return json(500, { error: 'Server configuration is incomplete.', code: 'SERVER_ERROR' });
 
-  let body: { userId?: string; pin?: string };
+  let body: { userId?: string; pin?: string; deviceIdentifier?: string };
   try { body = await request.json(); } catch { return json(400, { error: 'A valid request is required.', code: 'INVALID_REQUEST' }); }
   const userId = String(body.userId || '');
   const pin = String(body.pin || '');
@@ -36,6 +36,12 @@ Deno.serve(async (request) => {
     error: limit.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many PIN attempts. Try again later.' : 'PIN verification is temporarily unavailable.',
     code: limit.error || 'RATE_LIMIT_UNAVAILABLE',
   });
+
+  const { data: terminal } = await admin.from('pos_terminals').select('id,branch_id,status,registration_status').eq('device_identifier', String(body.deviceIdentifier || '')).maybeSingle();
+  const { data: targetProfile } = await admin.from('profiles').select('branch_id,status').eq('id', userId).maybeSingle();
+  if (!terminal || terminal.status !== 'ACTIVE' || terminal.registration_status !== 'REGISTERED' || targetProfile?.branch_id !== terminal.branch_id || targetProfile?.status !== 'ACTIVE') {
+    return json(403, { error: 'Staff and registered terminal must belong to the same active branch.', code: 'STAFF_BRANCH_ACCESS_DENIED' });
+  }
 
   const { data: exchange, error: exchangeError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: userId, p_pin: pin });
   if (exchangeError) {
@@ -72,11 +78,22 @@ Deno.serve(async (request) => {
     console.error('Staff session exchange failed');
     return json(500, { error: 'Unable to start the staff session.', code: 'SESSION_EXCHANGE_FAILED' });
   }
-  return json(200, {
-    data: {
-      tokenHash,
-      verificationType: 'email',
-      pinResetRequired: Boolean(exchange.pinResetRequired),
-    },
+  // Exchange on the server so the database session is bound before credentials
+  // reach the browser. The admin account session remains separate.
+  const staffClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: verified, error: verifyError } = await staffClient.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
+  if (verifyError || !verified.session) return json(500, { error: 'Unable to start staff session.', code: 'SESSION_EXCHANGE_FAILED' });
+  const claims = JSON.parse(atob(verified.session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+  const { error: bindingError } = await admin.rpc('begin_terminal_staff_session', {
+    p_actor: callerAuth.user.id, p_staff_id: userId, p_device_identifier: body.deviceIdentifier,
+    p_auth_session_id: claims.session_id,
   });
+  if (bindingError) {
+    await staffClient.auth.signOut({ scope: 'local' });
+    return json(403, { error: 'The branch, terminal or staff is unavailable.', code: 'TERMINAL_SESSION_REJECTED' });
+  }
+  return json(200, { data: {
+    session: { access_token: verified.session.access_token, refresh_token: verified.session.refresh_token },
+    pinResetRequired: Boolean(exchange.pinResetRequired),
+  } });
 });

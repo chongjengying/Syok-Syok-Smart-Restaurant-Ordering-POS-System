@@ -1,4 +1,5 @@
-import { supabase } from '../../infrastructure/supabase/client';
+import { supabase, accountSupabase, operatorSupabase, setOperatorMode, subscribeEffectiveAuth } from '../../infrastructure/supabase/client';
+import { getDeviceIdentifier } from '../../services/terminal-context.service';
 import { env } from '../../config/env';
 
 const profileColumns = 'id, name, username, email, role_name, status, created_at, updated_at, roles(name)';
@@ -20,19 +21,21 @@ export function fetchMyStaffSession() {
 }
 
 export function fetchSelectableStaff() {
-  return supabase.rpc('list_pos_staff');
+  return accountSupabase.rpc('list_terminal_branch_staff', { p_device_identifier: getDeviceIdentifier() });
 }
 
 export function requestStaffPinExchange(userId, pin) {
-  return supabase.functions.invoke('staff-pin-session', { body: { userId, pin } });
+  return accountSupabase.functions.invoke('staff-pin-session', { body: { userId, pin, deviceIdentifier: getDeviceIdentifier() } });
 }
 
 export function persistOwnStaffPin(pin) {
   return supabase.rpc('set_own_staff_pin', { p_pin: pin });
 }
 
-export function verifyStaffPinToken(tokenHash) {
-  return supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
+export async function verifyStaffPinToken(session) {
+  const result = await operatorSupabase.auth.setSession(session);
+  if (!result.error) setOperatorMode(true);
+  return result;
 }
 
 export async function probeAuthHealth(signal) {
@@ -69,8 +72,11 @@ export function recordSuccessfulLogin() {
   return supabase.rpc('record_my_login');
 }
 
-export function destroyAuthSession() {
-  return supabase.auth.signOut();
+export async function destroyAuthSession() {
+  await operatorSupabase.rpc('end_terminal_staff_session');
+  await operatorSupabase.auth.signOut({ scope: 'local' });
+  setOperatorMode(false);
+  return accountSupabase.auth.signOut();
 }
 
 export function fetchAuthUser() {
@@ -82,8 +88,7 @@ export function fetchAuthSession() {
 }
 
 export function subscribeToAuthState(onChange) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(onChange);
-  return () => subscription.unsubscribe();
+  return subscribeEffectiveAuth(onChange);
 }
 
 export function fetchProfile(userId) {

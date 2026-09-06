@@ -216,14 +216,14 @@ export async function getStaffSession() {
 
 export async function listSelectableStaff() {
   const result = await fetchSelectableStaff();
-  if (result.error) return { data: [], error: new Error('Unable to load staff profiles. Check the connection and retry.') };
+  if (result.error) return { data: [], error: new Error(result.error.message?.includes('TERMINAL') ? 'This browser needs an active registered terminal. Open Admin → Branches → Terminals to register it.' : 'Unable to load branch staff. Check the connection and retry.') };
   return { data: result.data || [], error: null };
 }
 
 export async function startStaffPinSession(userId, pin) {
   if (!userId || !/^\d{6}$/.test(pin)) return validationError('Enter your six-digit PIN.');
   const exchange = await requestStaffPinExchange(userId, pin);
-  const tokenHash = exchange.data?.data?.tokenHash;
+  const tokenHash = exchange.data?.data?.session;
   const pinResetRequired = Boolean(exchange.data?.data?.pinResetRequired);
   if (exchange.error || !tokenHash) {
     const context = exchange.error?.context;
