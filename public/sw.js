@@ -23,13 +23,20 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (['/rest/', '/auth/', '/functions/', '/realtime/', '/storage/'].some((prefix) => url.pathname.startsWith(prefix))) return;
 
+  const cacheResponse = (cacheKey, response) => {
+    if (response.ok) {
+      // Clone synchronously. Waiting until after the response is returned can
+      // race with the browser consuming the body and throw Response.clone().
+      const copy = response.clone();
+      event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, copy)));
+    }
+    return response;
+  };
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', response.clone()));
-          return response;
-        })
+        .then((response) => cacheResponse('/index.html', response))
         .catch(() => caches.match('/index.html')),
     );
     return;
@@ -40,10 +47,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          return response;
-        })
+        .then((response) => cacheResponse(request, response))
         .catch(() => caches.match(request)),
     );
     return;
@@ -51,10 +55,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      const refreshed = fetch(request).then((response) => {
-        if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-        return response;
-      });
+      const refreshed = fetch(request).then((response) => cacheResponse(request, response));
       return cached || refreshed;
     }),
   );
