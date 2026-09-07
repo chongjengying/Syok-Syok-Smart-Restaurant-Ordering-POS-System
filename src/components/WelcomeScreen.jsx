@@ -11,6 +11,7 @@ export default function WelcomeScreen({
   onOpenReports: _onOpenReports,
   onOpenTables,
   onOpenUnpaidOrders,
+  onOpenCashShift,
   onOpenProducts: _onOpenProducts,
   onOpenAdmin,
   canStartOrder,
@@ -21,6 +22,7 @@ export default function WelcomeScreen({
   canAccessReports,
   canAccessTables,
   canAccessUnpaidOrders,
+  canAccessCashShift,
   lang,
   setLang,
   enabledLanguages = SUPPORTED_LANGUAGES,
@@ -112,13 +114,14 @@ export default function WelcomeScreen({
             </button>
           )}
 
-          {(canAccessKitchen || canAccessReadyToServe || canAccessReports || canAccessTables || canAccessUnpaidOrders || canManageProducts || canAccessAdmin) && (
+          {(canAccessKitchen || canAccessReadyToServe || canAccessReports || canAccessTables || canAccessUnpaidOrders || canAccessCashShift || canManageProducts || canAccessAdmin) && (
             <div className="flex flex-wrap items-center justify-center gap-3">
               {canAccessUnpaidOrders && (
                 <button onClick={onOpenUnpaidOrders} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
                   <ReceiptText className="w-4 h-4 text-[#D4AF37]" /> {tr('unpaidOrderAction')}
                 </button>
               )}
+              {canAccessCashShift && <button onClick={onOpenCashShift} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]"><ReceiptText className="w-4 h-4 text-[#D4AF37]" /> Cash Shift</button>}
               {canAccessKitchen && (
                 <button onClick={onOpenKitchen} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
                   <ClipboardList className="w-4 h-4 text-[#D4AF37]" /> {tr('kitchenQueue')}

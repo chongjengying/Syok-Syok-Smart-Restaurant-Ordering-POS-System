@@ -33,6 +33,7 @@ import { useStaffHandoff } from '../hooks/useStaffHandoff';
 import StaffSelectorScreen from '../components/StaffSelectorScreen';
 import StaffAccessStatusScreen from '../components/StaffAccessStatusScreen';
 import TerminalLockScreen from '../components/TerminalLockScreen';
+import CashShiftScreen from '../components/CashShiftScreen';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -108,6 +109,8 @@ export default function App() {
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
   const canStartOrder = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canAccessCashShift = permissionState.hasPermission('cash.shift.view');
+  const canMoveCash = permissionState.hasPermission('cash.movement');
   const canAccessUnpaidOrders = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
   const canAccessPayments = permissionState.hasPermission('payment.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
   const {
@@ -739,6 +742,7 @@ export default function App() {
           onOpenReports={() => setCurrentScreen('reports')}
           onOpenTables={() => setCurrentScreen('tableManagement')}
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
+          onOpenCashShift={() => setCurrentScreen('cashShift')}
           onOpenProducts={() => {
             globalThis.history?.replaceState(null, '', '#admin/products');
             setCurrentScreen('admin');
@@ -753,6 +757,7 @@ export default function App() {
           canAccessReports={canAccessReports}
           canAccessTables={canAccessTables}
           canAccessUnpaidOrders={canAccessUnpaidOrders}
+          canAccessCashShift={canAccessCashShift}
           canManageProducts={canManageProducts}
           canAccessAdmin={canAccessAdmin}
           lang={lang}
@@ -762,6 +767,7 @@ export default function App() {
           handleInstallPwa={handleInstallPwa}
         />
       )}
+      {currentScreen === 'cashShift' && canAccessCashShift && <CashShiftScreen onBack={() => setCurrentScreen('welcome')} canMoveCash={canMoveCash} />}
 
       {/* Screen 2: Menu Home Screen */}
       {currentScreen === 'menu' && (
