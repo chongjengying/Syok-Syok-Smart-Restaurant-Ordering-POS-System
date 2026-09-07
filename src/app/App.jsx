@@ -1,5 +1,5 @@
 import { isOperatorMode } from '../infrastructure/supabase/client';
-import { endOperatorSession } from '../services/terminal-context.service';
+import { endOperatorSession, resolveTerminal } from '../services/terminal-context.service';
 import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import IpadShell from '../components/IpadShell';
 import WelcomeScreen from '../components/WelcomeScreen';
@@ -55,8 +55,15 @@ export default function App() {
   } = useProfile(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
   const permissionState = usePermissions(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
   const [operatorReady, setOperatorReady] = useState(false);
+  const [terminalContext, setTerminalContext] = useState(null);
   const [posRequested, setPosRequested] = useState(false);
   const staffHandoff = useStaffHandoff(Boolean(session) && !operatorReady, session?.user?.id || '');
+  useEffect(() => {
+    let active = true;
+    if (!session || operatorReady) { setTerminalContext(null); return () => { active = false; }; }
+    void resolveTerminal().then((result) => { if (active) setTerminalContext(result.data?.ok ? result.data : null); });
+    return () => { active = false; };
+  }, [session, operatorReady]);
 
   // Navigation includes order list → detail → payment → confirmation.
   const [currentScreen, setCurrentScreen] = useState(() => globalThis.location?.hash?.startsWith('#admin/') ? 'admin' : 'welcome');
@@ -693,6 +700,7 @@ export default function App() {
           }}
           currentUserId={session.user.id}
           pinResetRequired={staffHandoff.pinResetRequired}
+          terminalContext={terminalContext}
           canConfigurePins={profile.role === 'ADMIN'}
           onConfigurePins={() => {
             appliedRoleLanding.current = true;

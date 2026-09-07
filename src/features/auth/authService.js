@@ -234,8 +234,10 @@ export async function startStaffPinSession(userId, pin) {
       ? 'This PIN is temporarily locked. Try again in five minutes.'
       : code === 'PIN_SETUP_REQUIRED'
         ? 'Set your six-digit POS PIN before signing in.'
-      : code === 'INVALID_PIN'
-        ? 'The PIN is incorrect.'
+      : code === 'INVALID_PIN' || code === 'STAFF_ACCESS_DENIED'
+        ? 'Unable to sign in. Please verify your PIN or contact a manager.'
+      : code === 'TERMINAL_UNAVAILABLE'
+        ? 'This terminal is currently unavailable. Please contact an administrator.'
       : code === 'STAFF_AUTH_UNAVAILABLE'
         ? 'This staff profile is not linked to a Supabase Auth account. Recreate or invite this staff account from Admin.'
         : 'Unable to verify the PIN. Check the connection and try again.';

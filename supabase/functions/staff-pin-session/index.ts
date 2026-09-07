@@ -37,10 +37,16 @@ Deno.serve(async (request) => {
     code: limit.error || 'RATE_LIMIT_UNAVAILABLE',
   });
 
-  const { data: terminal } = await admin.from('pos_terminals').select('id,branch_id,status,registration_status').eq('device_identifier', String(body.deviceIdentifier || '')).maybeSingle();
-  const { data: targetProfile } = await admin.from('profiles').select('branch_id,status').eq('id', userId).maybeSingle();
-  if (!terminal || terminal.status !== 'ACTIVE' || terminal.registration_status !== 'REGISTERED' || targetProfile?.branch_id !== terminal.branch_id || targetProfile?.status !== 'ACTIVE') {
-    return json(403, { error: 'Staff and registered terminal must belong to the same active branch.', code: 'STAFF_BRANCH_ACCESS_DENIED' });
+  const { data: terminal } = await admin.from('pos_terminals').select('id,company_id,branch_id,status,registration_status,lock_status').eq('device_identifier', String(body.deviceIdentifier || '')).maybeSingle();
+  const { data: targetProfile } = await admin.from('profiles').select('company_id,status').eq('id', userId).maybeSingle();
+  const { data: assignment } = terminal && targetProfile
+    ? await admin.from('staff_branch_assignments').select('staff_id').eq('staff_id', userId).eq('branch_id', terminal.branch_id).eq('status', 'ACTIVE').maybeSingle()
+    : { data: null };
+  if (!terminal || terminal.status !== 'ACTIVE' || terminal.registration_status !== 'REGISTERED' || terminal.lock_status === 'LOCKED') {
+    return json(403, { error: 'This terminal is currently unavailable. Please contact an administrator.', code: 'TERMINAL_UNAVAILABLE' });
+  }
+  if (!targetProfile || targetProfile.status !== 'ACTIVE' || targetProfile.company_id !== terminal.company_id || !assignment) {
+    return json(403, { error: 'Unable to sign in. Please verify your PIN or contact a manager.', code: 'STAFF_ACCESS_DENIED' });
   }
 
   const { data: exchange, error: exchangeError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: userId, p_pin: pin });

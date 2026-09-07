@@ -51,6 +51,7 @@ export default function StaffSelectorScreen({
   onSetupPin,
   currentUserId,
   pinResetRequired,
+  terminalContext,
   onCancel,
   onRetry,
   onLogout,
@@ -167,6 +168,7 @@ export default function StaffSelectorScreen({
           <div>
             <h1 className="text-4xl font-black tracking-[0.08em] text-white drop-shadow">SYOK SYOK POS</h1>
             <p className="mt-1 text-xl font-bold text-slate-400">Staff Sign In</p>
+            {terminalContext && <p className="mt-2 text-sm font-bold text-[#D4AF37]">{terminalContext.branchCode} · {terminalContext.terminalCode} — {terminalContext.terminalName}</p>}
           </div>
         </div>
         <time className="sr-only">{time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
@@ -259,7 +261,7 @@ export default function StaffSelectorScreen({
             <i className={`h-6 w-6 rounded-full border-2 ${isOnline ? 'border-emerald-300 bg-emerald-500 shadow-[0_0_20px_rgba(34,197,94,0.42)]' : 'border-red-300 bg-red-500'}`}/>
             <span>
               <strong className="block text-lg font-black">{isOnline ? 'Online' : 'Offline'}</strong>
-              <small className="text-xs font-medium text-slate-400">{isOnline ? 'All systems operational' : 'Connection unavailable'}</small>
+              <small className="text-xs font-medium text-slate-400">{isOnline ? (terminalContext ? `${terminalContext.companyName} · registered terminal` : 'Registered terminal required') : 'Connection unavailable'}</small>
             </span>
           </span>
           <span className="flex items-center gap-3 rounded-2xl border border-[#D4AF37]/35 bg-[#D4AF37]/10 px-5 py-2.5 text-lg font-black text-[#D4AF37] shadow-[0_0_24px_rgba(212,175,55,0.1)]">
