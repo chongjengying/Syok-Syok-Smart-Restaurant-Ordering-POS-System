@@ -45,6 +45,7 @@ import EinvoiceOverview from "./EinvoiceOverview";
 import VoucherManagement from "./VoucherManagement";
 import PromotionManagement from "./PromotionManagement";
 import DiscountActivity from "./DiscountActivity";
+import CashShiftManagement from "./CashShiftManagement";
 import { getSystemSettings } from "../../services/systemSettings.service";
 
 const groups = [
@@ -64,6 +65,7 @@ const groups = [
     [
       ["orders", "Orders", "order.view", ClipboardList],
       ["payments", "Payments", "payment.view", ReceiptText],
+      ["cash-shifts", "Cashier Shifts", "cash.shift.view", CreditCard],
       ["tables", "Tables", "table.view", UtensilsCrossed],
     ],
   ],
@@ -244,6 +246,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
     roles: <RolePermissions canEdit={allowed.has("role.edit")} />,
     orders: <AdminOrders canManage={allowed.has("order.manage")} />,
     payments: <AdminPayments canRefund={allowed.has("payment.refund")} />,
+    "cash-shifts": <CashShiftManagement canForceClose={allowed.has("cash.shift.force_close")} />,
     tables: (
       <TableManagementScreen
         role={role}

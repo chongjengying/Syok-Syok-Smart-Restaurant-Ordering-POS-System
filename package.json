@@ -16,6 +16,7 @@
     "test:login-flow": "node scripts/test-login-flow.mjs",
     "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
     "test:security-contracts": "node scripts/test-security-contracts.mjs",
+    "test:cash-shifts-contracts": "node scripts/test-cash-shifts-contracts.mjs",
     "test:split-money": "node scripts/test-split-money.mjs",
     "test:checkout-drafts": "node scripts/test-checkout-drafts.mjs",
     "test:table-to-payment-local": "node scripts/smoke-table-to-payment-local.mjs",

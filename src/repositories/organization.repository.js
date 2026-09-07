@@ -13,6 +13,13 @@ export const fetchTerminals = (branchId) => {
 export const persistTerminal = (form) => supabase.rpc('save_pos_terminal', { p_id: form.id || null, p_branch_id: form.branchId, p_code: form.code, p_name: form.name, p_type: form.type, p_status: 'CREATED', p_device_identifier: null });
 export const transitionTerminal = (id, action, device) => supabase.rpc('transition_pos_terminal', { p_terminal_id: id, p_action: action, p_device_identifier: device || null });
 export const reassignTerminal = (id, branchId) => supabase.rpc('reassign_pos_terminal', { p_terminal_id: id, p_branch_id: branchId });
+export const fetchCurrentCashierShift = () => supabase.rpc('current_terminal_cash_shift');
+export const openCashierShift = (openingFloat) => supabase.rpc('open_cashier_shift', { p_opening_float: openingFloat });
+export const fetchCashierShiftSummary = (id) => supabase.rpc('cashier_shift_summary', { p_shift_id: id });
+export const closeCashierShift = (id, actualCash, force = false, reason = null) => supabase.rpc('close_cashier_shift', { p_shift_id: id, p_actual_cash: actualCash, p_force: force, p_reason: reason });
+export const forceCloseCashierShift = (id, actualCash, reason) => supabase.rpc('force_close_cashier_shift', { p_shift_id: id, p_actual_cash: actualCash, p_reason: reason });
+export const createCashMovement = (id, type, amount, reason) => supabase.rpc('record_cash_movement', { p_shift_id: id, p_type: type, p_amount: amount, p_reason: reason });
+export const fetchCashierShifts = () => supabase.from('cashier_shifts').select('*,branches(code,name),pos_terminals(terminal_code,name),opened_by:profiles!cashier_shifts_opened_by_staff_id_fkey(name),closed_by:profiles!cashier_shifts_closed_by_staff_id_fkey(name)').order('opened_at',{ascending:false}).limit(200);
 export const assignBranchStaff = (userId, branchId, isPrimary = false) => supabase.rpc('assign_user_branch', { p_user_id: userId, p_branch_id: branchId, p_is_primary: isPrimary });
 export const setStaffAssignmentStatus = (assignmentId, status) => supabase.rpc('set_staff_branch_assignment_status', { p_assignment_id: assignmentId, p_status: status });
 export const setPrimaryStaffBranch = (assignmentId) => supabase.rpc('set_primary_staff_branch', { p_assignment_id: assignmentId });
