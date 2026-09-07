@@ -8,7 +8,7 @@ if (!baseUrl || !anonKey || !serviceKey) throw new Error('Staging URL and keys a
 
 const suffix = crypto.randomUUID().slice(0, 8);
 const password = `Performance-${suffix}-Pass!`;
-const fixture = { users: [], categories: [], products: [], orders: [] };
+const fixture = { users: [], terminalIds: [], categories: [], products: [], orders: [] };
 const measurements = {};
 
 function percentile(values, p) {
@@ -54,6 +54,37 @@ async function createStaff(ordinal) {
   return { id, email, token: login.payload.access_token, refreshToken: login.payload.refresh_token, login };
 }
 
+function jwtClaims(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
+async function bindStaffToMain(staff, branch) {
+  const device = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const terminal = (await request('/rest/v1/pos_terminals', {
+    method: 'POST', key: serviceKey,
+    body: {
+      branch_id: branch.id, company_id: branch.company_id,
+      terminal_code: `PERF-${suffix}-${fixture.terminalIds.length + 1}`,
+      name: 'Performance QA terminal', status: 'ACTIVE', terminal_type: 'POS',
+      registration_status: 'REGISTERED', device_identifier: device,
+      access_mode: 'ALL_BRANCH_STAFF', allowed_roles: ['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN'],
+    },
+  })).payload[0];
+  fixture.terminalIds.push(terminal.id);
+  await request('/rest/v1/staff_branch_assignments', {
+    method: 'POST', key: serviceKey,
+    body: { staff_id: staff.id, branch_id: branch.id, status: 'ACTIVE', is_primary: true },
+  });
+  await request(`/rest/v1/profiles?id=eq.${staff.id}`, {
+    method: 'PATCH', key: serviceKey,
+    body: { branch_id: branch.id, default_branch_id: branch.id },
+  });
+  await request('/rest/v1/rpc/begin_terminal_staff_session', {
+    method: 'POST', key: serviceKey,
+    body: { p_actor: staff.id, p_staff_id: staff.id, p_device_identifier: device, p_auth_session_id: jwtClaims(staff.token).session_id },
+  });
+}
+
 async function sample(count, operation) {
   const rows = [];
   for (let index = 0; index < count; index += 1) rows.push(await operation(index));
@@ -91,6 +122,11 @@ async function cleanup() {
     await request(`/rest/v1/products?id=in.(${fixture.products.slice(index, index + 100).join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
   }
   for (const id of fixture.categories) await request(`/rest/v1/categories?id=eq.${id}`, { method: 'DELETE', key: serviceKey, allowError: true });
+  if (fixture.terminalIds.length) {
+    await request(`/rest/v1/terminal_staff_sessions?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+    await request(`/rest/v1/terminal_staff_access?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+    await request(`/rest/v1/pos_terminals?id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+  }
   for (const id of fixture.users) await request(`/auth/v1/admin/users/${id}`, { method: 'DELETE', key: serviceKey, allowError: true });
 }
 
@@ -99,6 +135,9 @@ try {
   const users = [];
   for (let index = 1; index <= 10; index += 1) users.push(await createStaff(index));
   const manager = users[0];
+  const branch = (await request('/rest/v1/branches?code=eq.MAIN&select=id,company_id', { key: serviceKey })).payload[0];
+  assert.ok(branch?.id, 'The staging MAIN branch is missing');
+  for (const user of users) await bindStaffToMain(user, branch);
   measurements.login = await sample(5, () => request('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: manager.email, password } }));
 
   const categoryRows = [];

@@ -10,7 +10,7 @@ if (!baseUrl || !anonKey || !serviceKey) {
 
 const suffix = crypto.randomUUID().slice(0, 8);
 const password = `Concurrency-${suffix}-Pass!`;
-const fixture = { users: [], categoryId: null, productIds: [], tableIds: [], orderIds: [] };
+const fixture = { users: [], terminalIds: [], categoryId: null, productIds: [], tableIds: [], orderIds: [] };
 const results = {};
 
 async function request(path, { method = 'GET', key = anonKey, token = key, body, allowError = false } = {}) {
@@ -46,6 +46,38 @@ async function createStaff(role, ordinal) {
     method: 'POST', body: { email, password },
   });
   return { id: userId, token: login.payload.access_token, refreshToken: login.payload.refresh_token };
+}
+
+function jwtClaims(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
+async function bindStaffToBranch(staff, branch) {
+  const device = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const [terminal] = (await request('/rest/v1/pos_terminals', {
+    method: 'POST', key: serviceKey,
+    body: {
+      branch_id: branch.id, company_id: branch.company_id,
+      terminal_code: `QA-${suffix}-${fixture.terminalIds.length + 1}`,
+      name: 'Concurrency QA terminal', status: 'ACTIVE', terminal_type: 'POS',
+      registration_status: 'REGISTERED', device_identifier: device,
+      access_mode: 'ALL_BRANCH_STAFF', allowed_roles: ['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN'],
+    },
+  })).payload;
+  fixture.terminalIds.push(terminal.id);
+  await request('/rest/v1/staff_branch_assignments', {
+    method: 'POST', key: serviceKey,
+    body: { staff_id: staff.id, branch_id: branch.id, status: 'ACTIVE', is_primary: true },
+  });
+  await request(`/rest/v1/profiles?id=eq.${staff.id}`, {
+    method: 'PATCH', key: serviceKey,
+    body: { branch_id: branch.id, default_branch_id: branch.id },
+  });
+  await request('/rest/v1/rpc/begin_terminal_staff_session', {
+    method: 'POST', key: serviceKey,
+    body: { p_actor: staff.id, p_staff_id: staff.id, p_device_identifier: device, p_auth_session_id: jwtClaims(staff.token).session_id },
+  });
+  return { ...staff, terminalId: terminal.id, device };
 }
 
 async function removeOrphanQaUsers() {
@@ -117,6 +149,11 @@ async function cleanup() {
     await request(`/rest/v1/table_activity_logs?restaurant_table_id=eq.${tableId}`, { method: 'DELETE', key: serviceKey, allowError: true });
     await request(`/rest/v1/restaurant_tables?id=eq.${tableId}`, { method: 'DELETE', key: serviceKey, allowError: true });
   }
+  if (fixture.terminalIds.length) {
+    await request(`/rest/v1/terminal_staff_sessions?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+    await request(`/rest/v1/terminal_staff_access?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+    await request(`/rest/v1/pos_terminals?id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
+  }
   for (const productId of fixture.productIds) {
     await request(`/rest/v1/products?id=eq.${productId}`, { method: 'DELETE', key: serviceKey, allowError: true });
   }
@@ -162,6 +199,14 @@ try {
   fixture.productIds.push(...products.map(({ id }) => id));
   const branch = (await rows('branches', 'code=eq.MAIN&select=id'))[0];
   assert.ok(branch?.id, 'The staging MAIN branch is missing');
+  branch.company_id = (await rows('branches', `id=eq.${branch.id}&select=company_id`))[0].company_id;
+  waiterA = await bindStaffToBranch(waiterA, branch);
+  waiterB = await bindStaffToBranch(waiterB, branch);
+  kitchenA = await bindStaffToBranch(kitchenA, branch);
+  kitchenB = await bindStaffToBranch(kitchenB, branch);
+  cashierA = await bindStaffToBranch(cashierA, branch);
+  cashierB = await bindStaffToBranch(cashierB, branch);
+  manager = await bindStaffToBranch(manager, branch);
   const tables = (await request('/rest/v1/restaurant_tables', {
     method: 'POST', key: serviceKey,
     body: Array.from({ length: 5 }, (_, index) => ({
