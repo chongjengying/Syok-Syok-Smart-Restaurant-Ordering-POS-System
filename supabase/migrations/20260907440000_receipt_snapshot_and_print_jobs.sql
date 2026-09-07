@@ -6,7 +6,7 @@ alter table public.receipts add column if not exists company_id uuid references 
  add column if not exists print_count integer not null default 0,
  add column if not exists last_printed_at timestamptz,
  add column if not exists last_printed_by uuid references public.profiles(id) on delete set null;
-update public.receipts r set company_id=o.company_id where o.id=r.order_id and r.company_id is null;
+update public.receipts r set company_id=o.company_id from public.orders o where o.id=r.order_id and r.company_id is null;
 create index if not exists receipts_company_branch_issued_idx on public.receipts(company_id,branch_id,issued_at desc);
 
 create or replace function public.next_branch_receipt_number(p_branch_id uuid) returns text language plpgsql security definer set search_path=public as $$
