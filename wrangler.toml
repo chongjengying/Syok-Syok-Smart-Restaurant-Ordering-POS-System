@@ -7,7 +7,9 @@ compatibility_date = "2026-08-26"
 [assets]
 directory = "./dist"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
+# Hash-versioned assets must return 404 when stale. The application uses hash
+# routes, so the document fallback is not needed for client-side navigation.
+not_found_handling = "404-page"
 
 [env.staging]
 name = "syok-syok-pos-staging"
