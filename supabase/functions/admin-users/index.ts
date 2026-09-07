@@ -122,7 +122,17 @@ Deno.serve(async (request) => {
     const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name, name } });
     if (inviteError || !invited.user) {
       console.error('Staff invitation failed', inviteError);
-      return json(inviteError?.message?.toLowerCase().includes('already') ? 409 : 500, { error: inviteError?.message?.toLowerCase().includes('already') ? 'A staff account already uses this email.' : 'Unable to invite staff.' });
+      const message = inviteError?.message?.toLowerCase() || '';
+      if (message.includes('already') || inviteError?.code === 'email_exists') {
+        return json(409, { error: 'A staff account already uses this email.', code: 'EMAIL_EXISTS' });
+      }
+      if (inviteError?.status === 429 || inviteError?.code === 'over_email_send_rate_limit') {
+        return json(429, { error: 'Invitation email delivery is temporarily rate-limited. Please try again later.', code: 'INVITE_EMAIL_RATE_LIMITED' });
+      }
+      if (inviteError?.status === 400) {
+        return json(400, { error: 'The invitation email could not be accepted by the authentication service.', code: 'INVITE_EMAIL_INVALID' });
+      }
+      return json(502, { error: 'The authentication service could not send the staff invitation.', code: 'INVITE_EMAIL_FAILED' });
     }
     const enablePosAccess = body.enablePosAccess !== false;
     const additionalBranches = Array.isArray(body.additionalBranches) ? body.additionalBranches.filter((value): value is string => typeof value === 'string') : [];
