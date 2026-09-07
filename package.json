@@ -23,6 +23,7 @@
     "test:qr-payment-local": "node scripts/smoke-table-to-payment-local.mjs --screen-payment --qr && node scripts/smoke-table-to-payment-local.mjs --screen-payment --qr --partial",
     "test:system-health": "node scripts/test-system-health.mjs && node scripts/test-system-health-contracts.mjs",
     "test:system-administration": "node scripts/test-system-administration.mjs && node scripts/test-system-administration-contracts.mjs",
+    "test:branch-terminal-staff-local": "node scripts/test-branch-terminal-staff-local.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:split-payment-local": "node scripts/smoke-split-payment-local.mjs",
