@@ -35,7 +35,7 @@ async function createUser(role) {
     service: true,
     body: { email, name: `${role} branch test`, role_name: role, status: 'ACTIVE' },
   });
-  return { ...auth.user, email, password };
+  return { ...auth.user, access_token: auth.access_token, email, password };
 }
 
 const admin = await createUser('ADMIN');
@@ -71,6 +71,8 @@ assert.equal(assignedProfile.branch_id, branch.id);
 assert.equal(assignedProfile.default_branch_id, branch.id);
 assert.equal(assignedProfile.role_name, 'WAITER');
 assert.equal(assignedProfile.status, 'ACTIVE');
+const activeAssignments = await request(`/rest/v1/staff_branch_assignments?staff_id=eq.${staff.id}&status=eq.ACTIVE&select=branch_id`, { service: true });
+assert.deepEqual(activeAssignments.map((item) => item.branch_id), [branch.id], 'Moving a staff member must remove their old active branch assignment.');
 
 await rpc('save_terminal_access', {
   p_terminal_id: terminal.id,

@@ -182,7 +182,17 @@ Deno.serve(async (request) => {
     if (auditError) console.error('Unable to audit PIN setup requirement', auditError);
     return json(200, { data: { pinSetupRequired: true, temporaryPin: resetData?.temporaryPin || null } });
   }
-  const payload = { name: body.name, username: body.username, role: body.role, status: body.status, branchId: body.branchId };
+  const additionalBranches = Array.isArray(body.additionalBranches)
+    ? body.additionalBranches.filter((value): value is string => typeof value === 'string')
+    : undefined;
+  const payload = {
+    name: body.name,
+    username: body.username,
+    role: body.role,
+    status: body.status,
+    branchId: body.branchId,
+    ...(additionalBranches === undefined ? {} : { additionalBranches }),
+  };
   const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: userId, p_payload: payload });
   if (error) {
     const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'USER_UPDATE_FAILED';

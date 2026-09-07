@@ -46,6 +46,7 @@ import VoucherManagement from "./VoucherManagement";
 import PromotionManagement from "./PromotionManagement";
 import DiscountActivity from "./DiscountActivity";
 import CashShiftManagement from "./CashShiftManagement";
+import StaffSelectionPage from "./StaffSelectionPage";
 import { getSystemSettings } from "../../services/systemSettings.service";
 
 const groups = [
@@ -189,8 +190,10 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
       }
       if (
         items.some((item) => item[0] === route.section && allowed.has(item[2]))
-      )
+      ) {
         setSection(route.section);
+        setRouteKey((current) => current + 1);
+      }
     };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
@@ -236,7 +239,9 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
         canManage={allowed.has("inventory.manage")}
       />
     ),
-    users: (
+    users: activeParams.get("assignBranchId") ? (
+      <StaffSelectionPage branchId={activeParams.get("assignBranchId")} />
+    ) : (
       <UserManagement
         canCreate={allowed.has("user.create")}
         canEdit={allowed.has("user.edit")}
@@ -262,7 +267,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
     "payment-providers": <PaymentProviders />,
     terminals: <TerminalManagement permissions={permissions} />,
     company: <OrganizationManagement mode="company" permissions={permissions} />,
-    branches: <OrganizationManagement mode="branch" permissions={permissions} />,
+    branches: <OrganizationManagement mode="branch" permissions={permissions} initialBranchId={activeParams.get("branchId") || ""} />,
     "system-health": <SystemHealthPage state={healthState} />,
     "system-administration": <SystemAdministrationPage lang={lang} />,
     einvoice: <EinvoiceOverview />,

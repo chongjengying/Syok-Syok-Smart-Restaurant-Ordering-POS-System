@@ -61,12 +61,12 @@ function CompanySetup({ company, permissions }) {
   </section>;
 }
 
-export default function OrganizationManagement({ mode = 'company', permissions = [] }) {
+export default function OrganizationManagement({ mode = 'company', permissions = [], initialBranchId = '' }) {
   const state = useOrganization(mode);
   const [form, setForm] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(mode === 'branch' ? initialBranchId || null : null);
   const canEdit = permissions.includes(mode === 'company' ? 'company.update' : 'branch.update');
-  useEffect(() => { setForm(null); setSelected(null); }, [mode]);
+  useEffect(() => { setForm(null); setSelected(mode === 'branch' ? initialBranchId || null : null); }, [initialBranchId, mode]);
   useEffect(() => { if (mode === 'company' && state.rows[0]) setForm(state.rows[0]); }, [mode, state.rows]);
   const save = async event => { event.preventDefault(); if (await state.save(form)) { if (mode === 'branch') setForm(null); } };
   if (mode === 'company') return form ? <CompanySetup company={form} permissions={permissions} /> : <p role="status">{state.loading ? 'Loading company…' : 'Company setup is unavailable.'}</p>;
