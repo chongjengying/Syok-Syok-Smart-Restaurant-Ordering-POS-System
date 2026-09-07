@@ -17,6 +17,7 @@ import type { ApiResult } from '../types/api';
 import type { RestaurantTable, RestaurantTableRecord, TableFilters, TableInput, TableStatus } from '../types/table';
 
 function mapTable(table: RestaurantTableRecord): RestaurantTable {
+  const status = table.status === 'OUT_OF_SERVICE' ? 'DISABLED' : table.status;
   const visibleOrders = Array.isArray(table.orders)
     ? table.orders.filter((order) => {
       const financiallyActive = ['UNPAID', 'PARTIALLY_PAID'].includes(order.payment_status)
@@ -44,7 +45,7 @@ function mapTable(table: RestaurantTableRecord): RestaurantTable {
     tableNumber: table.table_number,
     tableName: table.table_name,
     capacity: table.capacity,
-    status: table.status,
+    status,
     area: table.area,
     qrCode: table.qr_code,
     isActive: table.is_active,

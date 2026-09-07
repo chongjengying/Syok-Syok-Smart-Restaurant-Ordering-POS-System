@@ -3,7 +3,10 @@ import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared
 import { TableRepository } from '../_shared/repositories/tableRepository.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, PATCH, DELETE, OPTIONS');
-const statuses = new Set(['AVAILABLE', 'OCCUPIED', 'RESERVED', 'CLEANING', 'DISABLED']);
+// Accept the pre-canonical lifecycle name on reads/transition requests so a
+// rolling deployment cannot break table selection. The database trigger
+// canonicalizes OUT_OF_SERVICE to DISABLED.
+const statuses = new Set(['AVAILABLE', 'OCCUPIED', 'RESERVED', 'CLEANING', 'DISABLED', 'OUT_OF_SERVICE']);
 
 const jsonResponse = (status: number, body?: Record<string, unknown>) =>
   createJsonResponse(status, body, corsHeaders);
@@ -55,7 +58,7 @@ function validateTable(body: Record<string, unknown>, partial = false, allowOper
     if (!['AVAILABLE', 'RESERVED', 'DISABLED'].includes(body.status.toUpperCase())) {
       return { data: null, error: 'A new table must start as AVAILABLE, RESERVED, or DISABLED.' };
     }
-    output.status = body.status.toUpperCase();
+    output.status = body.status.toUpperCase() === 'OUT_OF_SERVICE' ? 'DISABLED' : body.status.toUpperCase();
     output.is_active = output.status !== 'DISABLED';
   }
   if (body.qrCode !== undefined) {
@@ -241,6 +244,7 @@ Deno.serve(async (request) => {
     const validation = validateTable(body.data!, false, true);
     if (validation.error) return jsonResponse(400, { error: validation.error });
     const branchId = String(body.data?.branchId || callerProfile.branch_id || '');
+    if (!branchId) return jsonResponse(409, { error: 'The staff profile is not assigned to a branch.', code: 'BRANCH_REQUIRED' });
     const { data: scoped } = await caller.rpc('can_access_branch', { p_branch_id: branchId });
     if (!scoped) return jsonResponse(403, { error: 'Branch access denied.' });
     const { data, error } = await adminRepository.create({ ...validation.data!, branch_id: branchId });

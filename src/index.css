@@ -45,6 +45,22 @@
   .pos-status-danger { border-color:#FECDCA; background:#FEF3F2; color:#B42318; }
   .pos-status-info { border-color:#B2DDFF; background:#EFF8FF; color:#175CD3; }
   .pos-status-neutral { border-color:#E4E7EC; background:#F9FAFB; color:#475467; }
+
+  /* Admin workspace design system */
+  .admin-shell { --admin-space: 8px; }
+  .admin-content > section, .admin-content > div > section { max-width: 1440px; margin-inline: auto; }
+  .admin-content h1, .admin-content h2, .admin-content h3 { letter-spacing: -.02em; }
+  .admin-content .rounded-xl.border, .admin-content .rounded-2xl.border, .admin-content .rounded-3xl.border { border-color: var(--color-border); box-shadow: var(--shadow-card); }
+  .admin-content table thead { color: #667085; letter-spacing: .06em; }
+  .admin-content table tbody tr { min-height: 56px; border-color: #F0F2F5; }
+  .admin-content table tbody tr:hover { background: #FAFBFC; }
+  .admin-content table th { font-size: .6875rem; font-weight: 800; }
+  .admin-content table td { padding-block: 14px; }
+  .admin-content input:not([type="checkbox"]):not([type="radio"]), .admin-content select, .admin-content textarea { border-color: #D0D5DD; border-radius: var(--radius-md); background: white; }
+  .admin-content input:not([type="checkbox"]):not([type="radio"]):focus, .admin-content select:focus, .admin-content textarea:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(197,154,42,.14); outline: none; }
+  .admin-nav-item.is-active { background: var(--color-primary); color: #18181B; }
+  .admin-sidebar { border-right: 1px solid #242424; }
+  .admin-topbar { border-color: var(--color-border); }
 }
 
 /* Custom Scrollbar */

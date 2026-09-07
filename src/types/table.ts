@@ -1,6 +1,8 @@
 import type { OrderStatus, PaymentStatus } from './order';
 
-export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'DISABLED';
+// OUT_OF_SERVICE is kept for compatibility with older deployed database
+// migrations. New writes use DISABLED, but reads must still be safe.
+export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'DISABLED' | 'OUT_OF_SERVICE';
 
 export interface ActiveTableOrderRecord {
   id: string;

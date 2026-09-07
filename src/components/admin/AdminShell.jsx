@@ -269,7 +269,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
   }[section];
 
   const sidebar = (
-    <aside className="h-full w-64 overflow-y-auto bg-[#121212] p-4 text-white">
+    <aside className="admin-sidebar h-full w-64 overflow-y-auto bg-[#121212] p-4 text-white">
       <div className="flex justify-between">
         <button
           onClick={() => {
@@ -293,7 +293,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
           <X size={20} />
         </button>
       </div>
-      <div className="mb-6 flex items-center gap-2 text-lg font-black text-[#D4AF37]">
+      <div className="mb-6 flex items-center gap-2 text-lg font-black text-[#C59A2A]">
         <ChartNoAxesCombined />
         <span className="truncate" title={businessLabel}>{businessLabel}</span>
       </div>
@@ -310,7 +310,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
               <React.Fragment key={id}>
                 <button
                   onClick={() => navigate(id)}
-                  className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section === id ? "bg-[#D4AF37] text-black" : "text-gray-300 hover:bg-white/10"}`}
+                    className={`admin-nav-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section === id ? "is-active" : "text-gray-300 hover:bg-white/10"}`}
                 >
                   <Icon size={17} />
                   {text}
@@ -351,7 +351,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
             )}
           </div>
         )}
-        <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white/95 p-3 backdrop-blur">
+        <div className="admin-topbar sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold lg:hidden"
@@ -372,7 +372,7 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
             </button>}
           </div>
         </div>
-        <div key={routeKey} className="p-4 sm:p-6">
+        <div key={routeKey} className="admin-content p-4 sm:p-6 lg:p-8">
           {content}
         </div>
       </main>
