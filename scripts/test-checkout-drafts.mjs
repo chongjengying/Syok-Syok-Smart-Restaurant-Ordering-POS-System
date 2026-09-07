@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 
 // Exercise the hook with deterministic state and API responses, without a DOM.
 const source = readFileSync(new URL('../src/hooks/useCheckout.js', import.meta.url), 'utf8')
-  .replace(/^import .*;\n/gm, '')
+  // The source file uses CRLF in the Windows checkout; support both newline styles
+  // so the harness actually removes ESM imports before evaluating the hook.
+  .replace(/^import .*;\r?\n/gm, '')
   .replace('export function useCheckout', 'function useCheckout');
 let slots = [], cursor = 0;
 const storage = new Map();
