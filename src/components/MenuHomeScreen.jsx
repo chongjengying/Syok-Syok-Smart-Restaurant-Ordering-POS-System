@@ -17,6 +17,8 @@ export default function MenuHomeScreen({
   searchQuery,
   setSearchQuery,
   cart,
+  activeOrder = null,
+  operationalContext = null,
   orderHistory = [],
   operationError = '',
   onOpenCustomization,
@@ -55,6 +57,13 @@ export default function MenuHomeScreen({
   const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name || tr('allProducts');
 
   const cartPreview = calculateCartPreviewTotals(cart);
+  const authoritativeSummary = activeOrder ? {
+    subtotal: Number(activeOrder.subtotal || 0),
+    discount: Number(activeOrder.discount || 0),
+    tax: Number(activeOrder.tax || 0),
+    serviceCharge: Number(activeOrder.serviceCharge || 0),
+    total: Number(activeOrder.total || 0),
+  } : { ...cartPreview, discount: 0 };
   const totalItemCount = getCartItemCount(cart);
   const historyTotal = orderHistory.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -84,7 +93,10 @@ export default function MenuHomeScreen({
             </div>
             <div className="hidden sm:block leading-tight">
               <div className="font-extrabold text-sm tracking-wide text-white">AURA POS</div>
-              <div className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-semibold">Fine Dining</div>
+              <div className="max-w-72 truncate text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">
+                {[operationalContext?.branchCode, operationalContext?.terminalCode, operationalContext?.staffName, activeOrder?.orderNumber]
+                  .filter(Boolean).join(' · ') || 'Fine Dining'}
+              </div>
             </div>
           </button>
 
@@ -419,10 +431,10 @@ export default function MenuHomeScreen({
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-600 font-medium">
                 <span>Preview {t.subtotal.toLowerCase()}</span>
-                <span className="font-bold text-[#121212]">{formatMoney(cartPreview.subtotal)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(authoritativeSummary.subtotal)}</span>
               </div>
               <p className="text-[11px] text-gray-400">
-                Taxes (6% SST) & Service Charge (10%) calculated at checkout.
+                Tax, service charge and rounding are calculated by the branch pricing engine.
               </p>
             </div>
 
@@ -441,7 +453,7 @@ export default function MenuHomeScreen({
             >
               <span>{t.checkout}</span>
               <div className="flex items-center gap-2">
-                <span className="text-lg">{formatMoney(cartPreview.subtotal)}</span>
+                <span className="text-lg">{formatMoney(authoritativeSummary.total)}</span>
                 <ChevronRight className="w-5 h-5" />
               </div>
             </button>

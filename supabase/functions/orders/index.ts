@@ -9,6 +9,7 @@ const allowedDiningModes = new Set(['dine-in', 'takeaway']);
 const allowedOrderStatuses = new Set(['CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED']);
 
 type OrderItemInput = {
+  orderItemId?: string | null;
   productId: string;
   quantity: number;
   optionIds: string[];
@@ -55,6 +56,14 @@ function validateCreateOrder(value: unknown):
     }
 
     const candidate = item as Record<string, unknown>;
+    const orderItemId = candidate.orderItemId == null || candidate.orderItemId === ''
+      ? null
+      : typeof candidate.orderItemId === 'string' && /^[0-9a-f-]{36}$/i.test(candidate.orderItemId)
+        ? candidate.orderItemId
+        : undefined;
+    if (orderItemId === undefined) {
+      return { data: null, error: `items[${index}].orderItemId is invalid.` };
+    }
     if (typeof candidate.productId !== 'string' || !candidate.productId.trim() || candidate.productId.length > 128) {
       return { data: null, error: `items[${index}].productId is invalid.` };
     }
@@ -63,6 +72,7 @@ function validateCreateOrder(value: unknown):
     }
 
     items.push({
+      orderItemId,
       productId: candidate.productId.trim(),
       quantity: candidate.quantity as number,
       optionIds: Array.isArray(candidate.optionIds)
@@ -353,6 +363,28 @@ Deno.serve(async (request) => {
   }
 
   if (orderId) {
+    if (orderAction === 'items' && orderResourceId && orderResourceAction === 'void') {
+      const candidate = body as Record<string, unknown>;
+      const reason = typeof candidate.reason === 'string' ? candidate.reason.trim().slice(0, 500) : '';
+      if (!/^[0-9a-f-]{36}$/i.test(orderResourceId) || reason.length < 3) {
+        return jsonResponse(400, { error: 'A valid order item and reason of at least 3 characters are required.', code: 'INVALID_ITEM_VOID' });
+      }
+      const { data, error } = await supabase.rpc('void_submitted_order_item', {
+        p_order_id: orderId,
+        p_order_item_id: orderResourceId,
+        p_reason: reason,
+      });
+      if (error) {
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'ORDER_ITEM_VOID_FAILED';
+        const statusCode = code === 'ORDER_NOT_FOUND' || code === 'ORDER_ITEM_NOT_FOUND'
+          ? 404
+          : code === 'INSUFFICIENT_PERMISSION'
+            ? 403
+            : 409;
+        return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data });
+    }
     if (orderAction === 'takeaway-packaging') {
       const candidate = body as Record<string, unknown>;
       const packaging = Array.isArray(candidate?.packaging) ? candidate.packaging : null;

@@ -5,6 +5,7 @@ import type { OrderRecord } from '../types/order';
 
 export interface PersistedOrderInput {
   items: Array<{
+    orderItemId?: string | null;
     productId: string;
     quantity: number;
     optionIds: string[];
@@ -50,6 +51,14 @@ export function appendOrderItems(
     path: `${orderId}/items`,
     body: input,
   }) as Promise<ApiResult<OrderRecord>>;
+}
+
+export function voidPersistedSubmittedOrderItem(orderId: string, orderItemId: string, reason: string) {
+  return apiRequest('orders', {
+    method: 'POST',
+    path: `${orderId}/items/${orderItemId}/void`,
+    body: { reason },
+  }) as Promise<ApiResult<Record<string, unknown>>>;
 }
 
 export function fetchOrder(orderId: string, { signal }: RequestOptions = {}) {

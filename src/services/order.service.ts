@@ -13,6 +13,7 @@ import {
   submitOrderDraft,
   subscribeToOrderChanges,
   updateTakeawayPackaging,
+  voidPersistedSubmittedOrderItem,
   type PersistedOrderInput,
 } from '../repositories/order.repository';
 import type { ApiResult, RequestOptions } from '../types/api';
@@ -33,6 +34,7 @@ function buildOrderItems(cart: CreateOrderInput['cart']): PersistedOrderInput['i
       throw new Error(`Cart item ${index + 1} has an invalid quantity.`);
     }
     return {
+      orderItemId: typeof item.orderItemId === 'string' ? item.orderItemId : null,
       productId,
       quantity: item.quantity,
       optionIds: (item.selectedOptions || []).map((option) => option.id),
@@ -90,6 +92,20 @@ function mapOrderItem(item: OrderItemRecord, batchIdentities = new Map<string, B
     quantity: item.quantity,
     unitPrice: Number(item.unit_price || 0),
     subtotal: Number(item.subtotal || 0),
+    productCode: item.product_code_snapshot || '',
+    baseUnitPrice: Number(item.base_unit_price ?? item.unit_price ?? 0),
+    modifierTotal: Number(item.modifier_total || 0),
+    grossAmount: Number(item.gross_amount ?? item.subtotal ?? 0),
+    discountAmount: Number(item.discount_amount || 0),
+    taxName: item.tax_name_snapshot || 'Tax',
+    taxRate: Number(item.tax_rate || 0),
+    taxMode: item.tax_mode_snapshot || 'EXCLUSIVE',
+    taxAmount: Number(item.tax_amount || 0),
+    serviceChargeRate: Number(item.service_charge_rate || 0),
+    serviceChargeAmount: Number(item.service_charge_amount || 0),
+    lineTotal: Number(item.line_total ?? item.subtotal ?? 0),
+    pricingSource: item.pricing_source || '',
+    priceSnapshotAt: item.price_snapshot_at || null,
     specialRequest: item.special_request || '',
     batchId: item.batch_id || null,
     batchNo: batch?.batchNo || null,
@@ -102,6 +118,9 @@ function mapOrderItem(item: OrderItemRecord, batchIdentities = new Map<string, B
       name: option.option_name,
       groupName: option.option_group_name,
       priceAdjustment: Number(option.price_adjustment || 0),
+      unitPrice: Number(option.unit_price ?? option.price_adjustment ?? 0),
+      quantity: Number(option.quantity || item.quantity || 1),
+      totalPrice: Number(option.total_price ?? Number(option.price_adjustment || 0) * item.quantity),
     })),
   };
 }
@@ -121,6 +140,14 @@ export function saveOrderDraftItems(orderId: string, cart: CreateOrderInput['car
 
 export function submitOrder(orderId: string, idempotencyKey: string) {
   return submitOrderDraft(orderId, idempotencyKey);
+}
+
+export function voidSubmittedOrderItem(orderId: string, orderItemId: string, reason: string) {
+  const normalized = reason.trim();
+  if (!orderId || !orderItemId || normalized.length < 3) {
+    return Promise.resolve({ data: null, error: new Error('Order, item, and a void reason are required.') });
+  }
+  return voidPersistedSubmittedOrderItem(orderId, orderItemId, normalized.slice(0, 500));
 }
 
 export function saveTakeawayPackaging(orderId: string, packaging: string[]) {

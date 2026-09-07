@@ -108,7 +108,7 @@ export default function App() {
   const [orderNotice, setOrderNotice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
-  const canStartOrder = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canStartOrder = permissionState.hasPermission('order.create') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
   const canAccessCashShift = permissionState.hasPermission('cash.shift.view');
   const canMoveCash = permissionState.hasPermission('cash.movement');
   const canAccessUnpaidOrders = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
@@ -777,6 +777,12 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           cart={cart}
+          activeOrder={activeOrder}
+          operationalContext={{
+            branchCode: terminalContext?.branchCode,
+            terminalCode: terminalContext?.terminalCode,
+            staffName: profile?.name,
+          }}
           orderHistory={orderHistory}
           operationError={orderSubmitError}
           onOpenCustomization={handleOpenCustomization}

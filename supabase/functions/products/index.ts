@@ -1,9 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
-import { CategoryRepository } from '../_shared/repositories/categoryRepository.ts';
-import { ProductRepository } from '../_shared/repositories/productRepository.ts';
-import { CategoryService } from '../_shared/services/categoryService.ts';
-import { ProductService } from '../_shared/services/productService.ts';
 
 const corsHeaders = buildCorsHeaders('GET, OPTIONS');
 const jsonResponse = (status: number, body: Record<string, unknown>) =>
@@ -45,22 +41,19 @@ Deno.serve(async (request) => {
   const pathParts = url.pathname.split('/').filter(Boolean);
   const functionIndex = pathParts.lastIndexOf('products');
   const resource = functionIndex >= 0 ? pathParts[functionIndex + 1] || null : null;
-  const categoryService = new CategoryService(new CategoryRepository(supabase));
-  const productService = new ProductService(new ProductRepository(supabase));
-
   if (resource === 'categories') {
-    const activeOnly = url.searchParams.get('activeOnly') === 'true';
-    const result = await categoryService.getCategories(activeOnly);
-    if (result.error) return jsonResponse(500, { error: 'Unable to load categories.' });
-    return jsonResponse(200, { data: result.data });
+    const { data, error } = await supabase.rpc('get_current_branch_menu_categories');
+    if (error) return jsonResponse(error.message.includes('ACTIVE_STAFF_SESSION_REQUIRED') ? 401 : 403, { error: 'Unable to load categories.', code: error.message.match(/[A-Z][A-Z_]+/)?.[0] });
+    return jsonResponse(200, { data });
   }
 
   if (resource) {
     if (resource.length > 128) return jsonResponse(400, { error: 'Product ID is invalid.' });
-    const result = await productService.getProduct(resource);
-    if (result.error) return jsonResponse(500, { error: 'Unable to load the product.' });
-    if (!result.data) return jsonResponse(404, { error: 'Product was not found or is unavailable.' });
-    return jsonResponse(200, { data: result.data });
+    const { data, error } = await supabase.rpc('get_current_branch_menu', { p_product_id: resource, p_limit: 1, p_offset: 0 });
+    if (error) return jsonResponse(403, { error: 'Unable to load the product.', code: error.message.match(/[A-Z][A-Z_]+/)?.[0] });
+    const product = data?.products?.[0] || null;
+    if (!product) return jsonResponse(404, { error: 'Product was not found or is unavailable.' });
+    return jsonResponse(200, { data: product });
   }
 
   const categoryId = url.searchParams.get('categoryId')?.trim() || null;
@@ -73,16 +66,19 @@ Deno.serve(async (request) => {
   if (limit.error) return jsonResponse(400, { error: `limit ${limit.error}.` });
   if (offset.error) return jsonResponse(400, { error: `offset ${offset.error}.` });
 
-  const result = await productService.getProducts({
-    categoryId,
-    search,
-    limit: limit.value!,
-    offset: offset.value!,
-    availableOnly,
+  const { data, error } = await supabase.rpc('get_current_branch_menu', {
+    p_category_id: categoryId,
+    p_search: search,
+    p_limit: limit.value!,
+    p_offset: offset.value!,
   });
-  if (result.error) {
-    console.error('Unable to load product listing', result.error);
-    return jsonResponse(500, { error: 'Unable to load the product listing.' });
+  if (error) {
+    console.error('Unable to load product listing', error);
+    const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'MENU_LOAD_FAILED';
+    return jsonResponse(code === 'ACTIVE_STAFF_SESSION_REQUIRED' ? 401 : 403, { error: 'Unable to load the branch menu.', code });
   }
-  return jsonResponse(200, { data: result.data });
+  const filtered = availableOnly && data
+    ? { ...data, products: (data.products || []).filter((product: { isAvailable?: boolean }) => product.isAvailable) }
+    : data;
+  return jsonResponse(200, { data: filtered });
 });

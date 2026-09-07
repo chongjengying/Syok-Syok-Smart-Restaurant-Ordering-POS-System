@@ -30,6 +30,13 @@ export default function CartReviewScreen({
   const tr = (key, variables) => translate(lang, key, variables);
 
   const previewTotals = calculateCartPreviewTotals(cart);
+  const summaryTotals = activeOrder ? {
+    subtotal: Number(activeOrder.subtotal || 0),
+    discount: Number(activeOrder.discount || 0),
+    tax: Number(activeOrder.tax || 0),
+    serviceCharge: Number(activeOrder.serviceCharge || 0),
+    total: Number(activeOrder.total || 0),
+  } : { ...previewTotals, discount: 0 };
   const [voucherCode, setVoucherCode] = useState('');
   const [voucherMessage, setVoucherMessage] = useState('');
   const [voucherBusy, setVoucherBusy] = useState(false);
@@ -282,22 +289,23 @@ export default function CartReviewScreen({
         <div className="pos-cart-review-summary w-[360px] md:w-[380px] bg-white rounded-xl p-6 border border-[#E9ECEF] card-elevation-low flex flex-col justify-between shrink-0">
           <div>
             <h2 className="font-extrabold text-base tracking-wide text-[#121212] uppercase pb-4 border-b border-gray-100 mb-6">
-              {tr('previewOnly')} {t.orderSummary}
+              {activeOrder ? t.orderSummary : `${tr('previewOnly')} ${t.orderSummary}`}
             </h2>
 
             {/* Calculations Breakdown */}
             <div className="space-y-4 text-sm font-medium text-gray-600">
               <div className="flex justify-between items-center">
                 <span>{t.subtotal}</span>
-                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.subtotal)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(summaryTotals.subtotal)}</span>
               </div>
+              {summaryTotals.discount > 0 && <div className="flex justify-between items-center text-emerald-700"><span>{t.discount}</span><span className="font-bold">-{formatMoney(summaryTotals.discount)}</span></div>}
               <div className="flex justify-between items-center">
                 <span>{t.sst}</span>
-                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.tax)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(summaryTotals.tax)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>{t.serviceCharge}</span>
-                <span className="font-bold text-[#121212]">{formatMoney(previewTotals.serviceCharge)}</span>
+                <span className="font-bold text-[#121212]">{formatMoney(summaryTotals.serviceCharge)}</span>
               </div>
 
               <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
@@ -305,7 +313,7 @@ export default function CartReviewScreen({
                   {t.total}
                 </span>
                 <span className="text-2xl font-black text-[#B8952B]">
-                  {formatMoney(previewTotals.total)}
+                  {formatMoney(summaryTotals.total)}
                 </span>
               </div>
             </div>

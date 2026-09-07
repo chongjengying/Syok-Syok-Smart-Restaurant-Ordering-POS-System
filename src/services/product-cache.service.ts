@@ -1,8 +1,8 @@
 import type { Product } from '../types/product';
 
-// v2 invalidates empty/legacy entries produced when older Product Functions
-// omitted availability flags and the frontend incorrectly filtered every row.
-export const PRODUCT_CACHE_KEY = 'pos.available-products.v2';
+// v3 invalidates legacy company-wide prices after menu resolution became
+// branch-scoped and server-authoritative.
+export const PRODUCT_CACHE_KEY = 'pos.available-products.v3';
 export const PRODUCT_CACHE_STALE_TIME_MS = 2 * 60 * 1000;
 export const PRODUCT_CACHE_GC_TIME_MS = 30 * 60 * 1000;
 

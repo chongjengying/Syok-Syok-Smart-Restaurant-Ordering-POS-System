@@ -26,7 +26,7 @@ async function loadProductCatalogue(): Promise<Product[]> {
 
 function matchesSearch(product: Product, normalizedSearch: string): boolean {
   if (!normalizedSearch) return true;
-  return [product.name, product.description, product.categoryName]
+  return [product.name, product.code, product.description, product.categoryName]
     .filter((value): value is string => typeof value === 'string')
     .some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
 }

@@ -42,6 +42,7 @@ function pendingOrderView(order) {
 
 function draftCartView(order) {
   return (order.items || []).filter((item) => item.itemStatus === 'DRAFT').map((item) => ({
+    orderItemId: item.id,
     dish: {
       id: item.productId, name: item.name, price: item.unitPrice,
       description: '', optionGroups: [], isActive: true, isAvailable: true,

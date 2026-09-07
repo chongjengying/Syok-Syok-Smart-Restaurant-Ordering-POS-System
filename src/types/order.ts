@@ -9,6 +9,9 @@ export interface OrderItemOptionRecord {
   option_name: string;
   option_group_name: string;
   price_adjustment?: number | string;
+  unit_price?: number | string;
+  quantity?: number;
+  total_price?: number | string;
   product_option_id?: string | null;
 }
 
@@ -19,6 +22,22 @@ export interface OrderItemRecord {
   quantity: number;
   unit_price: number | string;
   subtotal: number | string;
+  product_code_snapshot?: string | null;
+  base_unit_price?: number | string | null;
+  modifier_total?: number | string;
+  gross_amount?: number | string | null;
+  discount_amount?: number | string;
+  tax_name_snapshot?: string | null;
+  tax_rate?: number | string;
+  tax_mode_snapshot?: 'INCLUSIVE' | 'EXCLUSIVE';
+  tax_amount?: number | string;
+  service_charge_rate?: number | string;
+  service_charge_amount?: number | string;
+  line_subtotal?: number | string | null;
+  line_total?: number | string | null;
+  created_by_staff_id?: string | null;
+  pricing_source?: string | null;
+  price_snapshot_at?: string | null;
   special_request?: string | null;
   batch_id?: string | null;
   sent_at?: string;
@@ -103,6 +122,20 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  productCode: string;
+  baseUnitPrice: number;
+  modifierTotal: number;
+  grossAmount: number;
+  discountAmount: number;
+  taxName: string;
+  taxRate: number;
+  taxMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  taxAmount: number;
+  serviceChargeRate: number;
+  serviceChargeAmount: number;
+  lineTotal: number;
+  pricingSource: string;
+  priceSnapshotAt: string | null;
   specialRequest: string;
   batchId: string | null;
   batchNo: number | null;
@@ -115,6 +148,9 @@ export interface OrderItem {
     name: string;
     groupName: string;
     priceAdjustment: number;
+    unitPrice: number;
+    quantity: number;
+    totalPrice: number;
   }>;
 }
 

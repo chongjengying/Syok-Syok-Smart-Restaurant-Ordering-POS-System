@@ -68,6 +68,8 @@ export function subscribeToCatalogChanges(
     .channel(`catalog-${crypto.randomUUID()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'branch_products' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'branch_product_options' }, onChange)
     .subscribe((status) => onStatus?.(status));
 
   return () => { void supabase.removeChannel(channel); };

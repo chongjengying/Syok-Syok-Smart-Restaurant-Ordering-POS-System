@@ -15,6 +15,8 @@ export interface CartAddOn extends SelectedProductOption {
 }
 
 export interface CartItem {
+  /** Persisted DRAFT line identity; omitted for a newly selected product. */
+  orderItemId?: string | null;
   /** Product snapshot used to render the application-state cart. */
   dish: Product;
   selectedOptions: SelectedProductOption[];

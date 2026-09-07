@@ -36,7 +36,8 @@ export function getCartItemPreviewTotal(item: CartItem): number {
 /** Display-only estimate. Order placement recalculates every value in PostgreSQL. */
 export function calculateCartPreviewTotals(cart: CartItem[]): CartPreviewTotals {
   const subtotal = roundCurrency(cart.reduce((sum, item) => sum + getCartItemPreviewTotal(item), 0));
-  const tax = roundCurrency(subtotal * 0.06);
-  const serviceCharge = roundCurrency(subtotal * 0.10);
-  return { subtotal, tax, serviceCharge, total: roundCurrency(subtotal + tax + serviceCharge) };
+  // Tax/service charge are branch-configured and therefore intentionally not
+  // guessed in JavaScript. Persisted order totals from PostgreSQL are rendered
+  // by the order screens as soon as the draft save completes.
+  return { subtotal, tax: 0, serviceCharge: 0, total: subtotal };
 }

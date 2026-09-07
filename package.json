@@ -19,6 +19,8 @@
     "test:cash-shifts-contracts": "node scripts/test-cash-shifts-contracts.mjs",
     "test:split-money": "node scripts/test-split-money.mjs",
     "test:checkout-drafts": "node scripts/test-checkout-drafts.mjs",
+    "test:start-order-contracts": "node scripts/test-start-order-contracts.mjs",
+    "test:branch-menu-pricing-contracts": "node scripts/test-branch-menu-pricing-contracts.mjs",
     "test:table-to-payment-local": "node scripts/smoke-table-to-payment-local.mjs",
     "test:payment-screen-local": "node scripts/smoke-table-to-payment-local.mjs --screen-payment && node scripts/smoke-table-to-payment-local.mjs --screen-payment --partial",
     "test:qr-payment-local": "node scripts/smoke-table-to-payment-local.mjs --screen-payment --qr && node scripts/smoke-table-to-payment-local.mjs --screen-payment --qr --partial",
