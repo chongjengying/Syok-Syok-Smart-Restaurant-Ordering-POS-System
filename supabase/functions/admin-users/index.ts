@@ -4,7 +4,9 @@ import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const cors = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
 const json = (status: number, body: Record<string, unknown>) => respond(status, body, cors);
-const roles = new Set(['ADMIN', 'MANAGER', 'CASHIER', 'WAITER', 'KITCHEN']);
+// WAITER is the canonical front-of-house role in the current RBAC catalog;
+// CASHIER is kept only as a legacy terminal capability, not a staff role.
+const roles = new Set(['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN']);
 
 async function bodyOf(request: Request) {
   try {
@@ -27,7 +29,7 @@ Deno.serve(async (request) => {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: userResult, error: userError } = await caller.auth.getUser();
   if (userError || !userResult.user) return json(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await caller.from('profiles').select('status,role_name,branch_id').eq('id', userResult.user.id).single();
+  const { data: callerProfile } = await caller.from('profiles').select('status,role_name,branch_id,company_id').eq('id', userResult.user.id).single();
   if (!callerProfile || callerProfile.status !== 'ACTIVE') return json(403, { error: 'An active staff profile is required.' });
   const permission = request.method === 'GET' ? 'user.view' : request.method === 'POST' ? 'user.create' : 'user.edit';
   const { data: allowed } = await caller.rpc('has_pos_permission', { p_permission: permission });
@@ -39,15 +41,29 @@ Deno.serve(async (request) => {
     const page = Math.max(1, Number(requestUrl.searchParams.get('page')) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('pageSize')) || 25));
     let profilesQuery = admin.from('profiles')
-      .select('id,name,username,email,role_name,status,branch_id,created_at,updated_at')
+      .select('id,name,username,email,role_name,status,branch_id,company_id,created_at,updated_at')
+      .eq('company_id', callerProfile.company_id)
       .order('created_at', { ascending: false });
-    if (callerProfile.role_name !== 'ADMIN') profilesQuery = profilesQuery.eq('branch_id', callerProfile.branch_id);
+    if (callerProfile.role_name !== 'ADMIN') {
+      const { data: assignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userResult.user.id).eq('status', 'ACTIVE');
+      const allowedBranches = [...new Set((assignments || []).map((item) => item.branch_id).filter(Boolean))];
+      if (!allowedBranches.length) return json(200, { data: { users: [], pagination: { page, pageSize, total: 0 } } });
+      profilesQuery = profilesQuery.in('branch_id', allowedBranches);
+    }
     const { data: profiles, error: profileError } = await profilesQuery;
     if (profileError) {
       console.error('Admin profile listing failed', profileError);
       return json(500, { error: 'Unable to load staff accounts.' });
     }
 
+    const { data: assignmentRows } = await admin.from('staff_branch_assignments').select('staff_id,branch_id,status,is_primary,branches(code,name)').eq('status', 'ACTIVE');
+    const assignmentsByStaff = new Map<string, { branch_id: string; is_primary: boolean; code?: string; name?: string }[]>();
+    for (const assignment of assignmentRows || []) {
+      const branch = Array.isArray(assignment.branches) ? assignment.branches[0] : assignment.branches;
+      const list = assignmentsByStaff.get(assignment.staff_id) || [];
+      list.push({ branch_id: assignment.branch_id, is_primary: assignment.is_primary, code: branch?.code, name: branch?.name });
+      assignmentsByStaff.set(assignment.staff_id, list);
+    }
     const authUsers = [];
     for (let authPage = 1; authPage <= 10; authPage += 1) {
       const { data: authPageData, error: authError } = await admin.auth.admin.listUsers({ page: authPage, perPage: 1000 });
@@ -65,6 +81,7 @@ Deno.serve(async (request) => {
       const authUser = authById.get(profile.id);
       return {
         ...profile,
+        branches: assignmentsByStaff.get(profile.id) || [],
         auth_linked: Boolean(authUser),
         email_confirmed: Boolean(authUser?.email_confirmed_at),
         email_confirmed_at: authUser?.email_confirmed_at || null,
@@ -72,26 +89,9 @@ Deno.serve(async (request) => {
         auth_created_at: authUser?.created_at || null,
       };
     });
-    for (const authUser of authUsers) {
-      if (callerProfile.role_name !== 'ADMIN') continue;
-      if (profileById.has(authUser.id)) continue;
-      linkedUsers.push({
-        id: authUser.id,
-        name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Auth user',
-        username: '',
-        email: authUser.email || '',
-        role_name: null,
-        status: 'MISSING_PROFILE',
-        branch_id: null,
-        created_at: authUser.created_at,
-        updated_at: authUser.updated_at || authUser.created_at,
-        auth_linked: true,
-        email_confirmed: Boolean(authUser.email_confirmed_at),
-        email_confirmed_at: authUser.email_confirmed_at || null,
-        last_sign_in_at: authUser.last_sign_in_at || null,
-        auth_created_at: authUser.created_at,
-      });
-    }
+    // Do not enumerate unlinked auth.users here: an auth user has no trusted
+    // company scope until a profile is created, so returning those rows would
+    // leak identities across tenants. Invitation flow creates both records.
 
     const normalizedSearch = search.toLowerCase();
     const filtered = normalizedSearch
@@ -155,8 +155,14 @@ Deno.serve(async (request) => {
 
   const userId = typeof body.userId === 'string' ? body.userId : '';
   if (!userId) return json(400, { error: 'userId is required.' });
-  const { data: targetScope } = await admin.from('profiles').select('branch_id').eq('id',userId).maybeSingle();
-  if (callerProfile.role_name !== 'ADMIN' && targetScope?.branch_id !== callerProfile.branch_id) return json(403, { error: 'Branch access denied.' });
+  const { data: targetScope } = await admin.from('profiles').select('branch_id,company_id').eq('id',userId).maybeSingle();
+  if (!targetScope || targetScope.company_id !== callerProfile.company_id) return json(403, { error: 'Staff account is outside your company.' });
+  if (callerProfile.role_name !== 'ADMIN') {
+    const { data: targetAssignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userId).eq('status', 'ACTIVE');
+    const { data: callerAssignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userResult.user.id).eq('status', 'ACTIVE');
+    const allowed = new Set((callerAssignments || []).map((item) => item.branch_id));
+    if (!(targetAssignments || []).some((item) => allowed.has(item.branch_id))) return json(403, { error: 'Branch access denied.' });
+  }
   if (body.action === 'reset-password') {
     const { data: target } = await admin.from('profiles').select('email').eq('id', userId).single();
     if (!target?.email) return json(404, { error: 'Staff account was not found.' });
