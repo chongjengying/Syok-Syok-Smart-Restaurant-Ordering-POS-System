@@ -6,6 +6,7 @@ export const getBranchManagement = repository.fetchBranchManagement;
 export const saveBranchConfiguration = repository.persistBranchConfiguration;
 export const listTerminals = repository.fetchTerminals;
 export const changeTerminalStatus = repository.transitionTerminal;
+export const reassignTerminal = repository.reassignTerminal;
 export const saveTerminalAccess = (terminalId, accessMode, roles, staffIds = []) => supabase.rpc('save_terminal_access', { p_terminal_id: terminalId, p_access_mode: accessMode, p_allowed_roles: roles, p_staff_ids: staffIds });
 export const assignStaffBranch = repository.assignBranchStaff;
 export const setStaffAssignmentStatus = repository.setStaffAssignmentStatus;
