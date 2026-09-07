@@ -363,6 +363,49 @@ Deno.serve(async (request) => {
   }
 
   if (orderId) {
+    if (orderAction === 'manual-discount') {
+      const candidate = body as Record<string, unknown>;
+      const discountType = typeof candidate.discountType === 'string' ? candidate.discountType.toUpperCase() : '';
+      const value = Number(candidate.value);
+      const reason = typeof candidate.reason === 'string' ? candidate.reason.trim().slice(0, 500) : '';
+      const managerId = typeof candidate.managerId === 'string' ? candidate.managerId : '';
+      const pin = typeof candidate.pin === 'string' ? candidate.pin : '';
+      if (!['PERCENTAGE', 'FIXED_AMOUNT'].includes(discountType) || !Number.isFinite(value) || value <= 0 || reason.length < 3) {
+        return jsonResponse(400, { error: 'A valid manual discount type, value, and reason are required.', code: 'INVALID_MANUAL_DISCOUNT' });
+      }
+      // A normal cashier request remains authenticated as that cashier.  PIN
+      // approval is an explicit, narrowly scoped server action and never
+      // changes the active terminal session/operator.
+      if (!managerId && !pin) {
+        const { data, error } = await supabase.rpc('apply_manual_order_discount', {
+          p_order_id: orderId, p_discount_type: discountType, p_value: value, p_reason: reason,
+        });
+        if (error) {
+          const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'MANUAL_DISCOUNT_FAILED';
+          return jsonResponse(code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+        }
+        return jsonResponse(200, { data });
+      }
+      if (!serviceRoleKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
+      if (!/^[0-9a-f-]{36}$/i.test(managerId) || !/^\d{6}$/.test(pin)) {
+        return jsonResponse(400, { error: 'A manager and six-digit PIN are required for approval.', code: 'INVALID_MANAGER_APPROVAL' });
+      }
+      const limit = await consumeRateLimit(`${userData.user.id}:${managerId}`, 'manager-discount-approval', 8, 300);
+      if (!limit.allowed) return jsonResponse(limit.error === 'RATE_LIMIT_EXCEEDED' ? 429 : 503, { error: limit.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many PIN attempts. Try again later.' : 'Approval is temporarily unavailable.', code: limit.error || 'RATE_LIMIT_UNAVAILABLE' });
+      const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: verification, error: verificationError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: managerId, p_pin: pin });
+      if (verificationError) return jsonResponse(500, { error: 'PIN verification is temporarily unavailable.', code: 'SERVER_ERROR' });
+      if (!verification?.ok) return jsonResponse(verification?.code === 'PIN_LOCKED' ? 423 : 401, { error: verification?.code === 'PIN_LOCKED' ? 'This PIN is temporarily locked. Try again in five minutes.' : 'The manager PIN is incorrect.', code: verification?.code === 'PIN_LOCKED' ? 'PIN_LOCKED' : 'INVALID_PIN' });
+      const { data, error } = await admin.rpc('approve_manual_order_discount', {
+        p_order_id: orderId, p_requested_by: userData.user.id, p_manager_id: managerId,
+        p_discount_type: discountType, p_value: value, p_reason: reason,
+      });
+      if (error) {
+        const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'MANUAL_DISCOUNT_APPROVAL_FAILED';
+        return jsonResponse(409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+      }
+      return jsonResponse(200, { data });
+    }
     if (orderAction === 'items' && orderResourceId && orderResourceAction === 'void') {
       const candidate = body as Record<string, unknown>;
       const reason = typeof candidate.reason === 'string' ? candidate.reason.trim().slice(0, 500) : '';
@@ -403,14 +446,17 @@ Deno.serve(async (request) => {
       return jsonResponse(200, { data });
     }
     if (orderAction === 'batches') {
-      if (!orderResourceId || !orderResourceAction || !['start', 'ready'].includes(orderResourceAction)) {
+      if (!orderResourceId || !orderResourceAction || !['acknowledge', 'start', 'ready', 'complete', 'fail', 'recover', 'reprint'].includes(orderResourceAction)) {
         return jsonResponse(404, { error: 'Kitchen batch action was not found.' });
       }
-      const rpcName = orderResourceAction === 'start' ? 'start_kitchen_batch' : 'ready_kitchen_batch';
-      const { data, error } = await supabase.rpc(rpcName, {
-        p_order_id: orderId,
-        p_batch_id: orderResourceId,
-      });
+      const candidate = body as Record<string, unknown>;
+      const reason = typeof candidate?.reason === 'string' ? candidate.reason.trim().slice(0, 500) : '';
+      const rpcName = ({ acknowledge: 'acknowledge_kitchen_ticket', start: 'start_kitchen_batch', ready: 'ready_kitchen_batch', complete: 'complete_kitchen_ticket', fail: 'fail_kitchen_ticket', recover: 'recover_kitchen_ticket', reprint: 'reprint_kitchen_ticket' } as Record<string, string>)[orderResourceAction];
+      const args = ['fail', 'reprint'].includes(orderResourceAction)
+        ? { p_order_id: orderId, p_batch_id: orderResourceId, p_reason: reason || null }
+        : { p_order_id: orderId, p_batch_id: orderResourceId };
+      if (orderResourceAction === 'fail' && reason.length < 3) return jsonResponse(400, { error: 'A failure reason is required.', code: 'FAILURE_REASON_REQUIRED' });
+      const { data, error } = await supabase.rpc(rpcName, args);
       if (error) {
         const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'KITCHEN_BATCH_UPDATE_FAILED';
         const statusCode = code === 'ORDER_NOT_FOUND' || code === 'KITCHEN_BATCH_NOT_FOUND'

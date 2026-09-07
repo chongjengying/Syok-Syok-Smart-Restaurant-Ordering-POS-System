@@ -1,4 +1,5 @@
 import { supabase } from '../infrastructure/supabase/client';
+import { requestManualOrderDiscount } from '../repositories/order.repository';
 
 export const DISCOUNT_KINDS = Object.freeze(['VOUCHER', 'PROMOTION', 'MANUAL', 'MEMBER', 'STAFF', 'ITEM', 'CATEGORY']);
 
@@ -37,4 +38,16 @@ export async function applyVoucherToOrder(orderId, code) {
 export async function removeVoucherFromOrder(orderId) {
   const { data, error } = await supabase.rpc('remove_voucher_from_order', { p_order_id: orderId });
   return error ? { data: null, error: new Error(friendly(error)) } : { data, error: null };
+}
+
+export function requestManualDiscount(orderId, { discountType, value, reason, managerId, pin } = {}) {
+  const type = String(discountType || '').toUpperCase();
+  const amount = Number(value);
+  if (!orderId || !['PERCENTAGE', 'FIXED_AMOUNT'].includes(type) || !Number.isFinite(amount) || amount <= 0 || String(reason || '').trim().length < 3) {
+    return Promise.resolve({ data: null, error: new Error('Enter a valid discount type, value, and reason.') });
+  }
+  return requestManualOrderDiscount(orderId, {
+    discountType: type, value: amount, reason: String(reason).trim(),
+    ...(managerId ? { managerId } : {}), ...(pin ? { pin } : {}),
+  });
 }

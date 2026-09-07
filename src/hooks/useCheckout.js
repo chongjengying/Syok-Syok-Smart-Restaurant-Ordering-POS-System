@@ -284,7 +284,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     return cancelOrder(activeOrder.id, 'Draft discarded before submission');
   }, [activeOrder]);
 
-  const submitPayment = useCallback(async ({ paymentMethod, finalAmount, receivedAmount, submitTakeaway = false, paymentReference = '' }) => {
+  const submitPayment = useCallback(async ({ paymentMethod, finalAmount, receivedAmount, submitTakeaway = false, paymentReference = '', providerId = null }) => {
     if (!pendingOrder?.id) {
       return { data: null, error: new Error('No unpaid order is available for payment.') };
     }
@@ -311,6 +311,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
       receivedAmount,
       submitTakeaway,
       paymentReference,
+      providerId,
     );
     if (paymentResult.error) {
       const reconciled = await getOrder(pendingOrder.id);

@@ -77,6 +77,7 @@ export function processPayment(
   receivedAmount?: number,
   submitTakeaway = false,
   paymentReference?: string,
+  providerId?: string | null,
 ) {
   const normalized = String(paymentMethod || '').toUpperCase().replace(/[-_ ]/g, '');
   const method = normalized === 'EWALLET' ? 'EWALLET' : normalized;
@@ -91,7 +92,8 @@ export function processPayment(
   if (receivedAmount !== undefined && (!Number.isFinite(receivedAmount) || receivedAmount < finalAmount)) {
     return Promise.resolve({ data: null, error: new Error('The received amount is insufficient.') });
   }
-  return submitPayment(orderId, method as PaymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference);
+  if (['QR', 'EWALLET'].includes(method) && !providerId) return Promise.resolve({ data: null, error: new Error('Select the QR / E-wallet provider.') });
+  return submitPayment(orderId, method as PaymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference, providerId);
 }
 
 export function processBillPayment(billId: string, payments: Array<{ method: string; amount: number; receivedAmount?: number }>, idempotencyKey: string) {

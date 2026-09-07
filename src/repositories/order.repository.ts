@@ -34,6 +34,14 @@ export function submitOrderDraft(orderId: string, idempotencyKey: string) {
   return apiRequest('orders', { method: 'POST', path: `${orderId}/submit`, body: { idempotencyKey } }) as Promise<ApiResult<OrderRecord>>;
 }
 
+export function requestManualOrderDiscount(orderId: string, input: {
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; reason: string; managerId?: string; pin?: string;
+}) {
+  return apiRequest('orders', {
+    method: 'POST', path: `${orderId}/manual-discount`, body: input,
+  }) as Promise<ApiResult<Record<string, unknown>>>;
+}
+
 export function updateTakeawayPackaging(orderId: string, packaging: string[]) {
   return apiRequest('orders', {
     method: 'POST',
@@ -115,12 +123,13 @@ export function startPersistedKitchenOrder(orderId: string) {
 export function updatePersistedKitchenBatch(
   orderId: string,
   batchId: string,
-  action: 'start' | 'ready',
+  action: 'acknowledge' | 'start' | 'ready' | 'complete' | 'fail' | 'recover' | 'reprint',
+  reason?: string,
 ) {
   return apiRequest('orders', {
     method: 'POST',
     path: `${orderId}/batches/${batchId}/${action}`,
-    body: {},
+    body: reason ? { reason } : {},
   }) as Promise<ApiResult<Record<string, unknown>>>;
 }
 

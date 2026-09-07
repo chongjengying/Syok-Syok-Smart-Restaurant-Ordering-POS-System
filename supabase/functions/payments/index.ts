@@ -197,9 +197,9 @@ Deno.serve(async (request) => {
   if (paymentAction === 'receipt' && pathParts[functionIndex + 2] === 'reprint') {
     const receiptId = typeof body.receiptId === 'string' ? body.receiptId.trim() : '';
     const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
-    const deviceContext = body.deviceContext && typeof body.deviceContext === 'object' && !Array.isArray(body.deviceContext) ? body.deviceContext : {};
     if (!receiptId || reason.length < 3) return jsonResponse(400, { error: 'receiptId and reason are required.', code: 'REPRINT_DETAILS_REQUIRED' });
-    const { data, error } = await supabase.rpc('reprint_pos_receipt', { p_receipt_id: receiptId, p_reason: reason, p_device_context: deviceContext });
+    const printerId = typeof body.printerId === 'string' ? body.printerId.trim().slice(0, 100) : null;
+    const { data, error } = await supabase.rpc('request_receipt_print', { p_receipt_id: receiptId, p_printer_id: printerId, p_reason: reason });
     if (error) {
       const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'RECEIPT_REPRINT_FAILED';
       return jsonResponse(code === 'RECEIPT_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
@@ -311,61 +311,44 @@ Deno.serve(async (request) => {
   const finalAmount = typeof body.finalAmount === 'number' ? body.finalAmount : Number.NaN;
   const receivedAmount = typeof body.receivedAmount === 'number' ? body.receivedAmount : finalAmount;
   const paymentReference = typeof body.paymentReference === 'string' ? body.paymentReference.trim().slice(0, 150) : '';
+  const providerId = typeof body.providerId === 'string' ? body.providerId.trim().toUpperCase() : '';
   const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
   const submitTakeaway = body.submitTakeaway === true;
   if (!orderId || orderId.length > 128) return jsonResponse(400, { error: 'orderId is invalid.' });
   if (!methods.has(method)) return jsonResponse(400, { error: 'paymentMethod is invalid.' });
+  if (['QR', 'EWALLET'].includes(method) && !providerId) return jsonResponse(400, { error: 'providerId is required.', code: 'PAYMENT_PROVIDER_REQUIRED' });
   if (!Number.isFinite(finalAmount) || finalAmount <= 0) return jsonResponse(400, { error: 'finalAmount is invalid.' });
   if (!Number.isFinite(receivedAmount) || (method === 'CASH' && receivedAmount < finalAmount)) {
     return jsonResponse(400, { error: 'receivedAmount is invalid.', code: 'INSUFFICIENT_CASH_RECEIVED' });
   }
   if (!idempotencyKey || idempotencyKey.length > 128) return jsonResponse(400, { error: 'idempotencyKey is invalid.' });
 
-  if (method === 'QR') {
-    const { data, error } = await supabase.rpc('confirm_manual_qr_payment', {
-      p_order_id: orderId,
-      p_final_amount: finalAmount,
-      p_idempotency_key: idempotencyKey,
-      p_payment_reference: paymentReference || null,
-      p_submit_takeaway: submitTakeaway,
-    });
-    if (error) {
-      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'QR_PAYMENT_FAILED';
-      const statusCode = ['INSUFFICIENT_PERMISSION', 'AUTHENTICATION_REQUIRED'].includes(code) ? 403 : code === 'ORDER_NOT_FOUND' ? 404 : 409;
-      return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
-    }
-    return jsonResponse(200, { data });
-  }
-
-  const paymentRequest: PaymentRequest = {
-    orderId,
-    amount: finalAmount,
-    method: method as PaymentRequest['method'],
-    idempotencyKey,
-  };
-  const provider = createPaymentProvider(paymentRequest.method);
-  const result = await provider.process(paymentRequest);
-
-  if (!result.confirmed) {
-    return jsonResponse(503, {
-      error: result.error || 'Payment provider did not confirm the transaction.',
-      code: 'PAYMENT_PROVIDER_UNAVAILABLE',
-      retryable: result.retryable || false,
-    });
+  const { error: attemptError } = await supabase.rpc('begin_pos_payment_attempt', {
+    p_order_id: orderId, p_payment_method: method, p_requested_amount: finalAmount,
+    p_received_amount: receivedAmount, p_idempotency_key: idempotencyKey, p_provider_id: providerId || null,
+  });
+  if (attemptError) {
+    const code = attemptError.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_ATTEMPT_FAILED';
+    return jsonResponse(code === 'ORDER_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
   }
 
   const { data, error } = await supabase.rpc(
-    submitTakeaway ? 'complete_takeaway_payment_and_submit' : 'complete_payment', {
+    submitTakeaway ? 'complete_pos_takeaway_payment_and_submit' : 'complete_pos_payment', {
     p_order_id: orderId,
     p_payment_method: method,
-    p_final_amount: finalAmount,
+    p_requested_amount: finalAmount,
     p_idempotency_key: idempotencyKey,
-    p_provider: result.provider,
-    p_transaction_reference: result.transactionReference,
+    p_provider_id: providerId || null,
+    p_payment_reference: paymentReference || null,
     p_received_amount: receivedAmount,
   });
   if (error) {
     const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_COMPLETION_FAILED';
+    const conflict = ['ORDER_ALREADY_PAID', 'PAYMENT_EXCEEDS_BALANCE', 'PAYMENT_AMOUNT_MISMATCH', 'ORDER_BRANCH_MISMATCH'].includes(code);
+    await supabase.rpc('resolve_pos_payment_attempt', {
+      p_idempotency_key: idempotencyKey, p_status: conflict ? 'CONFLICT' : 'FAILED',
+      p_failure_code: code, p_failure_reason: error.message || code,
+    });
     const statusCode = code === 'ORDER_NOT_FOUND'
       ? 404
       : ['AUTHENTICATION_REQUIRED', 'INSUFFICIENT_PERMISSION'].includes(code)
@@ -373,6 +356,10 @@ Deno.serve(async (request) => {
         : 409;
     return jsonResponse(statusCode, { error: code.replaceAll('_', ' ').toLowerCase(), code });
   }
+
+  await supabase.rpc('resolve_pos_payment_attempt', {
+    p_idempotency_key: idempotencyKey, p_status: 'COMPLETED', p_failure_code: null, p_failure_reason: null,
+  });
 
   return jsonResponse(200, { data });
 });

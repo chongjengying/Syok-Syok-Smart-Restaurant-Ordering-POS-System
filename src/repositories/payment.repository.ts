@@ -34,10 +34,11 @@ export function submitPayment(
   receivedAmount?: number,
   submitTakeaway = false,
   paymentReference?: string,
+  providerId?: string | null,
 ) {
   return apiRequest('payments', {
     method: 'POST',
-    body: { orderId, paymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference },
+    body: { orderId, paymentMethod, finalAmount, idempotencyKey, receivedAmount, submitTakeaway, paymentReference, providerId },
   }) as Promise<ApiResult<unknown>>;
 }
 

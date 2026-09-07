@@ -20,7 +20,7 @@ export interface KitchenAction {
 }
 
 export function getKitchenAction(ticket: Pick<KitchenTicket, 'status'>): KitchenAction | null {
-  if (ticket.status === 'PENDING') {
+  if (['PENDING', 'RECEIVED', 'ACKNOWLEDGED'].includes(ticket.status)) {
     return { kind: 'START', target: 'PREPARING', label: 'START' };
   }
   if (ticket.status === 'PREPARING') return { kind: 'STATUS', target: 'READY', label: 'READY' };
@@ -70,7 +70,7 @@ export function mapKitchenOrder(order: OrderRecord): KitchenOrder {
 export function mapKitchenTickets(order: OrderRecord): KitchenTicket[] {
   const items = order.order_items || [];
   return (order.order_item_batches || [])
-    .filter((batch) => ['PENDING', 'PREPARING', 'READY'].includes(batch.status))
+    .filter((batch) => ['PENDING', 'RECEIVED', 'ACKNOWLEDGED', 'PREPARING', 'READY', 'FAILED'].includes(batch.status))
     .sort((left, right) => left.batch_no - right.batch_no)
     .map((batch) => ({
       id: batch.id,
@@ -119,12 +119,13 @@ export function startKitchenOrder(orderId: string) {
 export function updateKitchenBatch(
   orderId: string,
   batchId: string,
-  action: 'start' | 'ready',
+  action: 'acknowledge' | 'start' | 'ready' | 'complete' | 'fail' | 'recover' | 'reprint',
+  reason?: string,
 ) {
   if (!orderId || !batchId) {
     return Promise.resolve({ data: null, error: new Error('Order ID and kitchen batch ID are required.') });
   }
-  return updatePersistedKitchenBatch(orderId, batchId, action);
+  return updatePersistedKitchenBatch(orderId, batchId, action, reason);
 }
 
 export const subscribeToKitchenQueue = subscribeToKitchenChanges;

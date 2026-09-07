@@ -13,6 +13,9 @@ const filterKeys = [
   "diningMode",
   "dateFrom",
   "dateTo",
+  "action",
+  "entityType",
+  "eventStatus",
 ] as const;
 const routeFilters = () => {
   const query = (globalThis.location?.hash || "").split("?")[1] || "";
@@ -56,7 +59,7 @@ export function useAdminOperations(kind: string) {
         ? await getAdminOrders(filters)
         : kind === "payments"
           ? await getAdminPayments(filters)
-          : await getAuditLogs(String(filters.search || ""));
+          : await getAuditLogs(filters);
     const payload = r.data as any;
     setRows(kind === "audit" ? payload || [] : payload?.rows || []);
     setTotal(

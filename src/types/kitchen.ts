@@ -2,7 +2,7 @@ import type { DiningMode } from './order';
 
 export type KitchenQueueStatus = 'CONFIRMED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED';
 export type KitchenItemStatus = 'SUBMITTED' | 'PREPARING' | 'READY' | 'SERVED';
-export type KitchenBatchStatus = 'PENDING' | 'PREPARING' | 'READY';
+export type KitchenBatchStatus = 'PENDING' | 'RECEIVED' | 'ACKNOWLEDGED' | 'PREPARING' | 'READY' | 'FAILED';
 
 export interface KitchenOrderItem {
   id: string;

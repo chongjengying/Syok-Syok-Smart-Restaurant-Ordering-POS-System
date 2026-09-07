@@ -53,11 +53,8 @@ export const requireStaffPinSetup = (userId: string) => supabase.rpc('require_st
   p_user_id: userId,
 }) as unknown as Promise<ApiResult<{ temporaryPin: string }>>;
 
-export function fetchAuditLogs(search = '', limit = 100) {
-  let query = supabase.from('audit_logs').select('id,actor_id,action,entity_type,entity_id,reason,metadata,old_value,new_value,request_id,created_at').order('created_at', { ascending: false }).limit(limit);
-  if (search.trim()) query = query.or(`action.ilike.%${search.trim().replaceAll('%', '')}%,entity_type.ilike.%${search.trim().replaceAll('%', '')}%`);
-  return query as unknown as Promise<ApiResult<Record<string, unknown>[]>>;
-}
+export const fetchAuditLogs = (filters: Record<string, unknown> = {}) =>
+  supabase.rpc('list_pos_audit_events', { p_filters: { ...filters, limit: 100 } }) as unknown as Promise<ApiResult<Record<string, unknown>[]>>;
 
 export function fetchAdminOrders(filters: Record<string, unknown> = {}) {
   return supabase.rpc('list_admin_orders', {
