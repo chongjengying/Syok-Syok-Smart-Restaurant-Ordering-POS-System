@@ -141,7 +141,10 @@ try {
   measurements.login = await sample(5, () => request('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: manager.email, password } }));
 
   const categoryRows = [];
-  for (let index = 1; index <= 10; index += 1) categoryRows.push({ name: `Performance ${suffix} ${index}`, description: 'Temporary performance fixture', status: true });
+  for (let index = 1; index <= 10; index += 1) categoryRows.push({
+    name: `Performance ${suffix} ${index}`, description: 'Temporary performance fixture', status: true,
+    company_id: branch.company_id, branch_id: branch.id,
+  });
   const insertedCategories = (await request('/rest/v1/categories', { method: 'POST', key: serviceKey, body: categoryRows })).payload;
   fixture.categories.push(...insertedCategories.map(({ id }) => id));
 
@@ -150,6 +153,7 @@ try {
       category_id: fixture.categories[Math.floor((start + offset) / 50)],
       product_name: `Perf ${suffix} ${String(start + offset + 1).padStart(3, '0')}`,
       description: 'Temporary performance product', cost_price: 1, sell_price: 5, status: true, is_available: true,
+      company_id: branch.company_id, branch_id: branch.id,
     }));
     const inserted = (await request('/rest/v1/products', { method: 'POST', key: serviceKey, body: rows })).payload;
     fixture.products.push(...inserted.map(({ id }) => id));
@@ -228,9 +232,9 @@ try {
 
   console.log(JSON.stringify({ suffix, dataset: { products: 500, categories: 10, activeOrders: 101, users: 10 }, measurements }, null, 2));
 } finally {
+  // Preserve staging hygiene even if Realtime channel teardown stalls.
+  await cleanup();
   for (const client of realtimeClients) {
-    await Promise.all(client.getChannels().map((channel) => client.removeChannel(channel)));
     client.realtime.disconnect();
   }
-  await cleanup();
 }

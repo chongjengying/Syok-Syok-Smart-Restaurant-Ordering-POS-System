@@ -1,4 +1,6 @@
 import { accountSupabase, operatorSupabase, supabase, setOperatorMode, isOperatorMode } from '../infrastructure/supabase/client';
+// Kept only for Admin terminal-registration UI compatibility. It is not used
+// for operational authentication, which is bound to pos_terminals.auth_user_id.
 const deviceKey = 'pos.registered-device.v1';
 export function getDeviceIdentifier() {
   let id = globalThis.localStorage.getItem(deviceKey);
@@ -6,7 +8,7 @@ export function getDeviceIdentifier() {
   return id;
 }
 export async function resolveTerminal() {
-  return accountSupabase.rpc('resolve_registered_terminal', { p_device_identifier: getDeviceIdentifier() });
+  return accountSupabase.rpc('resolve_authenticated_terminal');
 }
 export async function endOperatorSession() {
   if (isOperatorMode()) {

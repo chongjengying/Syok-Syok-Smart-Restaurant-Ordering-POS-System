@@ -1,5 +1,4 @@
 import { supabase, accountSupabase, operatorSupabase, setOperatorMode, subscribeEffectiveAuth } from '../../infrastructure/supabase/client';
-import { getDeviceIdentifier } from '../../services/terminal-context.service';
 import { env } from '../../config/env';
 
 const profileColumns = 'id, name, username, email, role_name, status, created_at, updated_at, roles(name)';
@@ -21,21 +20,28 @@ export function fetchMyStaffSession() {
 }
 
 export function fetchSelectableStaff() {
-  return accountSupabase.rpc('list_terminal_branch_staff', { p_device_identifier: getDeviceIdentifier() });
+  return accountSupabase.rpc('list_authenticated_terminal_staff');
 }
 
 export function requestStaffPinExchange(userId, pin) {
-  return accountSupabase.functions.invoke('staff-pin-session', { body: { userId, pin, deviceIdentifier: getDeviceIdentifier() } });
+  return accountSupabase.functions.invoke('staff-pin-session', { body: { staffId: userId, pin } });
 }
 
-export function persistOwnStaffPin(pin) {
-  return supabase.rpc('set_own_staff_pin', { p_pin: pin });
+export function persistOwnStaffPin(staffId, pin) {
+  return supabase.rpc('set_authenticated_terminal_staff_pin', { p_staff_id: staffId, p_pin: pin });
 }
 
-export async function verifyStaffPinToken(session) {
-  const result = await operatorSupabase.auth.setSession(session);
+export async function verifyStaffPinToken() {
+  const { data, error } = await accountSupabase.auth.getSession();
+  if (error || !data.session) return { data: null, error: error || new Error('TERMINAL_SESSION_EXPIRED') };
+  // This is intentionally the terminal token, never a staff Auth token.
+  const result = await operatorSupabase.auth.setSession(data.session);
   if (!result.error) setOperatorMode(true);
   return result;
+}
+
+export function fetchTerminalContext() {
+  return accountSupabase.rpc('resolve_authenticated_terminal');
 }
 
 export async function probeAuthHealth(signal) {

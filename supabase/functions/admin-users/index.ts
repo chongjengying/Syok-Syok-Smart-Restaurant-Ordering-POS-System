@@ -1,202 +1,54 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
-import {consumeRateLimit} from '../_shared/rateLimit.ts';
+import { consumeRateLimit } from '../_shared/rateLimit.ts';
 
-const cors = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
+const cors = buildCorsHeaders('GET, POST, OPTIONS');
 const json = (status: number, body: Record<string, unknown>) => respond(status, body, cors);
-// WAITER is the canonical front-of-house role in the current RBAC catalog;
-// CASHIER is kept only as a legacy terminal capability, not a staff role.
-const roles = new Set(['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN']);
-
-async function bodyOf(request: Request) {
-  try {
-    const value = await request.json();
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-  } catch { return null; }
-}
+const roles = new Set(['MANAGER', 'CASHIER', 'WAITER', 'KITCHEN']);
+const temporaryPin = () => Array.from(crypto.getRandomValues(new Uint32Array(1)))[0].toString().padStart(10, '0').slice(-6);
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (!['GET', 'POST', 'PATCH'].includes(request.method)) return json(405, { error: 'Method not allowed.' });
+  if (!['GET', 'POST'].includes(request.method)) return json(405, { error: 'Method not allowed.' });
   const authorization = request.headers.get('Authorization');
-  const url = Deno.env.get('SUPABASE_URL');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!authorization?.startsWith('Bearer ')) return json(401, { error: 'Authentication is required.' });
-  if (!url || !anonKey || !serviceKey) return json(500, { error: 'Server configuration is incomplete.' });
-
+  const url = Deno.env.get('SUPABASE_URL'), anonKey = Deno.env.get('SUPABASE_ANON_KEY'), serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authorization?.startsWith('Bearer ') || !url || !anonKey || !serviceKey) return json(401, { error: 'Authentication is required.' });
   const caller = createClient(url, anonKey, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } });
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-  const { data: userResult, error: userError } = await caller.auth.getUser();
-  if (userError || !userResult.user) return json(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await caller.from('profiles').select('status,role_name,branch_id,company_id').eq('id', userResult.user.id).single();
-  if (!callerProfile || callerProfile.status !== 'ACTIVE') return json(403, { error: 'An active staff profile is required.' });
-  const permission = request.method === 'GET' ? 'user.view' : request.method === 'POST' ? 'user.create' : 'user.edit';
-  const { data: allowed } = await caller.rpc('has_pos_permission', { p_permission: permission });
-  if (!allowed) return json(403, { error: 'You do not have permission to manage staff.' });
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: auth, error: authError } = await caller.auth.getUser();
+  if (authError || !auth.user) return json(401, { error: 'The session is invalid or expired.' });
+  const { data: profile } = await caller.from('profiles').select('company_id,status,role_name').eq('id', auth.user.id).maybeSingle();
+  if (!profile || profile.status !== 'ACTIVE' || profile.role_name !== 'ADMIN') return json(403, { error: 'Administrator access is required.' });
 
   if (request.method === 'GET') {
-    const requestUrl = new URL(request.url);
-    const search = requestUrl.searchParams.get('search')?.trim().slice(0, 100) || '';
-    const page = Math.max(1, Number(requestUrl.searchParams.get('page')) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('pageSize')) || 25));
-    let profilesQuery = admin.from('profiles')
-      .select('id,name,username,email,role_name,status,branch_id,company_id,created_at,updated_at')
-      .eq('company_id', callerProfile.company_id)
-      .order('created_at', { ascending: false });
-    if (callerProfile.role_name !== 'ADMIN') {
-      const { data: assignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userResult.user.id).eq('status', 'ACTIVE');
-      const allowedBranches = [...new Set((assignments || []).map((item) => item.branch_id).filter(Boolean))];
-      if (!allowedBranches.length) return json(200, { data: { users: [], pagination: { page, pageSize, total: 0 } } });
-      profilesQuery = profilesQuery.in('branch_id', allowedBranches);
-    }
-    const { data: profiles, error: profileError } = await profilesQuery;
-    if (profileError) {
-      console.error('Admin profile listing failed', profileError);
-      return json(500, { error: 'Unable to load staff accounts.' });
-    }
-
-    const { data: assignmentRows } = await admin.from('staff_branch_assignments').select('staff_id,branch_id,status,is_primary,branches(code,name)').eq('status', 'ACTIVE');
-    const assignmentsByStaff = new Map<string, { branch_id: string; is_primary: boolean; code?: string; name?: string }[]>();
-    for (const assignment of assignmentRows || []) {
-      const branch = Array.isArray(assignment.branches) ? assignment.branches[0] : assignment.branches;
-      const list = assignmentsByStaff.get(assignment.staff_id) || [];
-      list.push({ branch_id: assignment.branch_id, is_primary: assignment.is_primary, code: branch?.code, name: branch?.name });
-      assignmentsByStaff.set(assignment.staff_id, list);
-    }
-    const authUsers = [];
-    for (let authPage = 1; authPage <= 10; authPage += 1) {
-      const { data: authPageData, error: authError } = await admin.auth.admin.listUsers({ page: authPage, perPage: 1000 });
-      if (authError) {
-        console.error('Admin Auth user listing failed', authError);
-        return json(500, { error: 'Unable to verify staff authentication accounts.' });
-      }
-      authUsers.push(...authPageData.users);
-      if (authPageData.users.length < 1000) break;
-    }
-
-    const authById = new Map(authUsers.map((authUser) => [authUser.id, authUser]));
-    const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
-    const linkedUsers = (profiles || []).map((profile) => {
-      const authUser = authById.get(profile.id);
-      return {
-        ...profile,
-        branches: assignmentsByStaff.get(profile.id) || [],
-        auth_linked: Boolean(authUser),
-        email_confirmed: Boolean(authUser?.email_confirmed_at),
-        email_confirmed_at: authUser?.email_confirmed_at || null,
-        last_sign_in_at: authUser?.last_sign_in_at || null,
-        auth_created_at: authUser?.created_at || null,
-      };
-    });
-    // Do not enumerate unlinked auth.users here: an auth user has no trusted
-    // company scope until a profile is created, so returning those rows would
-    // leak identities across tenants. Invitation flow creates both records.
-
-    const normalizedSearch = search.toLowerCase();
-    const filtered = normalizedSearch
-      ? linkedUsers.filter((user) => [user.name, user.email, user.username, user.role_name]
-        .some((value) => String(value || '').toLowerCase().includes(normalizedSearch)))
-      : linkedUsers;
-    filtered.sort((left, right) => String(right.created_at || '').localeCompare(String(left.created_at || '')));
-    const start = (page - 1) * pageSize;
-    return json(200, {
-      data: {
-        users: filtered.slice(start, start + pageSize),
-        pagination: { page, pageSize, total: filtered.length },
-      },
-    });
+    const search = new URL(request.url).searchParams.get('search')?.trim().toLowerCase() || '';
+    const { data: staff, error } = await admin.from('staff').select('id,staff_code,name,company_id,branch_id,active,created_at,roles(name),branches(code,name),staff_pin_credentials_v2(status)').eq('company_id', profile.company_id).order('created_at', { ascending: false });
+    if (error) return json(500, { error: 'Unable to load staff.' });
+    const users = (staff || []).map((row: Record<string, unknown>) => {
+      const role = Array.isArray(row.roles) ? row.roles[0] : row.roles;
+      const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+      const credential = Array.isArray(row.staff_pin_credentials_v2) ? row.staff_pin_credentials_v2[0] : row.staff_pin_credentials_v2;
+      return { id: row.id, staff_code: row.staff_code, username: row.staff_code, name: row.name, role_name: (role as { name?: string } | null)?.name || '', branch_id: row.branch_id, branch: branch || null, status: row.active ? 'ACTIVE' : 'INACTIVE', pin_status: (credential as { status?: string } | null)?.status || 'SETUP_REQUIRED', auth_linked: false };
+    }).filter((row) => !search || [row.name,row.staff_code,row.role_name,(row.branch as { code?: string } | null)?.code].some(value => String(value || '').toLowerCase().includes(search)));
+    return json(200, { data: { users, pagination: { page: 1, pageSize: users.length, total: users.length } } });
   }
 
-  const rateLimit=await consumeRateLimit(userResult.user.id,'admin-user-mutation',20,60);
-  if(!rateLimit.allowed)return json(rateLimit.error==='RATE_LIMIT_EXCEEDED'?429:503,{error:rateLimit.error==='RATE_LIMIT_EXCEEDED'?'Too many staff changes. Try again shortly.':'Administrative protection is temporarily unavailable.',code:rateLimit.error||'RATE_LIMIT_UNAVAILABLE'});
-
-  const body = await bodyOf(request);
-  if (!body) return json(400, { error: 'A valid JSON body is required.' });
-
-  if (request.method === 'POST') {
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const role = typeof body.role === 'string' ? body.role.toUpperCase() : '';
-    if (!/^\S+@\S+\.\S+$/.test(email) || !name || name.length > 150 || !roles.has(role)) return json(400, { error: 'Valid name, email, and role are required.' });
-    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name, name } });
-    if (inviteError || !invited.user) {
-      console.error('Staff invitation failed', inviteError);
-      const message = inviteError?.message?.toLowerCase() || '';
-      if (message.includes('already') || inviteError?.code === 'email_exists') {
-        return json(409, { error: 'A staff account already uses this email.', code: 'EMAIL_EXISTS' });
-      }
-      if (inviteError?.status === 429 || inviteError?.code === 'over_email_send_rate_limit') {
-        return json(429, { error: 'Invitation email delivery is temporarily rate-limited. Please try again later.', code: 'INVITE_EMAIL_RATE_LIMITED' });
-      }
-      if (inviteError?.status === 400) {
-        return json(400, { error: 'The invitation email could not be accepted by the authentication service.', code: 'INVITE_EMAIL_INVALID' });
-      }
-      return json(502, { error: 'The authentication service could not send the staff invitation.', code: 'INVITE_EMAIL_FAILED' });
-    }
-    const enablePosAccess = body.enablePosAccess !== false;
-    const additionalBranches = Array.isArray(body.additionalBranches) ? body.additionalBranches.filter((value): value is string => typeof value === 'string') : [];
-    const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: invited.user.id, p_payload: { name, role, status: 'ACTIVE', branchId: body.branchId || callerProfile.branch_id, additionalBranches } });
-    if (error) {
-      console.error('Invited Auth user profile setup failed', error);
-      await admin.auth.admin.deleteUser(invited.user.id);
-      return json(500, { error: 'The staff invitation could not be completed.' });
-    }
-    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: invited.user.id, p_action: 'USER_CREATED' });
-    if (auditError) console.error('Unable to audit staff invitation', auditError);
-    let temporaryPin = null;
-    if (enablePosAccess) {
-      const { data: pinData, error: pinError } = await caller.rpc('require_staff_pin_setup', { p_user_id: invited.user.id });
-      if (pinError) console.error('Unable to enable POS PIN setup for invited user', pinError);
-      temporaryPin = pinData?.temporaryPin || null;
-    }
-    return json(201, { data: { ...data, temporaryPin } });
-  }
-
-  const userId = typeof body.userId === 'string' ? body.userId : '';
-  if (!userId) return json(400, { error: 'userId is required.' });
-  const { data: targetScope } = await admin.from('profiles').select('branch_id,company_id').eq('id',userId).maybeSingle();
-  if (!targetScope || targetScope.company_id !== callerProfile.company_id) return json(403, { error: 'Staff account is outside your company.' });
-  if (callerProfile.role_name !== 'ADMIN') {
-    const { data: targetAssignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userId).eq('status', 'ACTIVE');
-    const { data: callerAssignments } = await admin.from('staff_branch_assignments').select('branch_id').eq('staff_id', userResult.user.id).eq('status', 'ACTIVE');
-    const allowed = new Set((callerAssignments || []).map((item) => item.branch_id));
-    if (!(targetAssignments || []).some((item) => allowed.has(item.branch_id))) return json(403, { error: 'Branch access denied.' });
-  }
-  if (body.action === 'reset-password') {
-    const { data: target } = await admin.from('profiles').select('email').eq('id', userId).single();
-    if (!target?.email) return json(404, { error: 'Staff account was not found.' });
-    const { error } = await admin.auth.resetPasswordForEmail(target.email);
-    if (error) { console.error('Password reset request failed', error); return json(500, { error: 'Unable to send password reset instructions.' }); }
-    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: userId, p_action: 'USER_PASSWORD_RESET_REQUESTED' });
-    if (auditError) console.error('Unable to audit password reset request', auditError);
-    return json(200, { data: { resetRequested: true } });
-  }
-  if (body.action === 'require-pin-setup') {
-    const { data: resetData, error } = await caller.rpc('require_staff_pin_setup', { p_user_id: userId });
-    if (error) {
-      const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PIN_SETUP_FAILED';
-      return json(code === 'INSUFFICIENT_PERMISSION' ? 403 : code === 'USER_NOT_FOUND' ? 404 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
-    }
-    const { error: auditError } = await caller.rpc('record_user_admin_action', { p_user_id: userId, p_action: 'USER_PIN_SETUP_REQUIRED' });
-    if (auditError) console.error('Unable to audit PIN setup requirement', auditError);
-    return json(200, { data: { pinSetupRequired: true, temporaryPin: resetData?.temporaryPin || null } });
-  }
-  const additionalBranches = Array.isArray(body.additionalBranches)
-    ? body.additionalBranches.filter((value): value is string => typeof value === 'string')
-    : undefined;
-  const payload = {
-    name: body.name,
-    username: body.username,
-    role: body.role,
-    status: body.status,
-    branchId: body.branchId,
-    ...(additionalBranches === undefined ? {} : { additionalBranches }),
-  };
-  const { data, error } = await caller.rpc('admin_update_staff', { p_user_id: userId, p_payload: payload });
+  const rate = await consumeRateLimit(auth.user.id, 'admin-staff-create', 20, 60);
+  if (!rate.allowed) return json(rate.error === 'RATE_LIMIT_EXCEEDED' ? 429 : 503, { error: rate.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many staff changes. Try again shortly.' : 'Administrative protection is temporarily unavailable.' });
+  let body: Record<string, unknown>;
+  try { body = await request.json(); } catch { return json(400, { error: 'A valid JSON body is required.' }); }
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const staffCode = typeof body.staffCode === 'string' ? body.staffCode.trim().toUpperCase() : typeof body.username === 'string' ? body.username.trim().toUpperCase() : '';
+  const role = typeof body.role === 'string' ? body.role.toUpperCase() : '';
+  const branchId = typeof body.branchId === 'string' ? body.branchId : '';
+  if (!name || name.length > 150 || !/^[A-Z0-9_-]{2,50}$/.test(staffCode) || !roles.has(role) || !/^[0-9a-f-]{36}$/i.test(branchId)) return json(400, { error: 'Name, staff code, role, and branch are required.' });
+  const { data: branch } = await admin.from('branches').select('id').eq('id', branchId).eq('company_id', profile.company_id).eq('status', 'ACTIVE').maybeSingle();
+  if (!branch) return json(403, { error: 'The selected branch is not available in your company.' });
+  const pin = temporaryPin();
+  const { data, error } = await admin.rpc('create_admin_staff_record', { p_branch_id: branchId, p_staff_code: staffCode, p_name: name, p_role: role, p_temporary_pin: pin });
   if (error) {
-    const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'USER_UPDATE_FAILED';
-    return json(code === 'INSUFFICIENT_PERMISSION' ? 403 : code === 'USER_NOT_FOUND' ? 404 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
+    const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || '';
+    return json(code === 'STAFF_CODE_EXISTS' ? 409 : 400, { error: code === 'STAFF_CODE_EXISTS' ? 'That staff code already exists.' : 'Unable to create staff.', code: code || 'STAFF_CREATE_FAILED' });
   }
-  return json(200, { data });
+  return json(201, { data: { ...data, temporaryPin: pin } });
 });

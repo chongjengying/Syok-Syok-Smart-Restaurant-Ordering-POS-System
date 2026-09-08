@@ -4,6 +4,8 @@ Syok Syok is a restaurant ordering system for dine-in and takeaway service. Staf
 
 The application uses React and Vite with PostgreSQL, Supabase Auth, Supabase Realtime, Row Level Security, and authenticated Edge Functions.
 
+> Current-status note: Staging operational data was reset by an authorized migration. The current system still uses Auth-backed staff profiles and browser device registration; dedicated Terminal Auth with Auth-free staff records is planned, not implemented. See [AUTH_FLOW.md](AUTH_FLOW.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
 ## Core workflows
 
 - Dine-in and takeaway ordering with database-authoritative pricing.
@@ -65,5 +67,7 @@ Set the staging Supabase values (`VITE_SUPABASE_URL`,
 `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_APP_ENV=staging`) as Cloudflare
 Pages environment variables for the **staging/preview** environment only.
 Never put a Supabase service-role key in Pages variables.
+
+The repository also has a Worker-assets staging path: `npm run deploy:worker:staging`. Worker/Cloudflare deployment does not push Supabase migrations or Edge Functions; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Card and e-wallet providers remain unavailable until real gateway adapters and credentials are configured. Cash and QR use authenticated staff confirmation and persist provider and transaction references.

@@ -25,9 +25,10 @@ const [
 ]);
 
 const pinEndpoint = await read('supabase/functions/staff-pin-session/index.ts');
-assert.match(pinEndpoint, /verifyOtp\(\{\s*token_hash:\s*tokenHash,\s*type:\s*'email'\s*\}\)/, 'Server must verify PIN exchange token before returning credentials.');
-assert.match(pinEndpoint, /begin_terminal_staff_session/, 'PIN token must be bound to a terminal session.');
-assert.match(authRepository, /operatorSupabase.auth.setSession\(session\)/, 'Operator credentials must not replace the admin account session.');
+assert.match(pinEndpoint, /verify_authenticated_terminal_staff_pin/, 'Server must verify the selected staff PIN against terminal context.');
+assert.match(pinEndpoint, /begin_authenticated_terminal_staff_session/, 'PIN verification must create a server-side terminal staff session.');
+assert.doesNotMatch(pinEndpoint, /generateLink|verifyOtp|access_token|refresh_token/, 'PIN exchange must not mint staff Auth credentials.');
+assert.match(authRepository, /accountSupabase\.auth\.getSession\(\)/, 'Operator mode must reuse the terminal Auth session.');
 
 assert.match(adminUsersFunction, /temporaryPin\s*=\s*pinData\?\.temporaryPin\s*\|\|\s*null/,
   'Admin-created staff accounts must return the generated temporary PIN once.');

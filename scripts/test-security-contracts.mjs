@@ -66,7 +66,12 @@ for (const file of functions) {
   }
   assert.match(source, /Authorization/i, `${path.basename(path.dirname(file))} must require authorization.`);
   assert.match(source, /auth\.getUser\s*\(/, `${path.basename(path.dirname(file))} must validate the caller token.`);
-  assert.match(source, /status\s*!==\s*'ACTIVE'/, `${path.basename(path.dirname(file))} must reject inactive profiles.`);
+  if (path.basename(path.dirname(file)) === 'staff-pin-session') {
+    assert.match(source, /verify_authenticated_terminal_staff_pin/, 'Staff PIN boundary must delegate terminal and staff state checks to the database.');
+    assert.doesNotMatch(source, /generateLink|verifyOtp|access_token|refresh_token/, 'Staff PIN boundary must not issue staff Auth credentials.');
+  } else {
+    assert.match(source, /status\s*!==\s*'ACTIVE'/, `${path.basename(path.dirname(file))} must reject inactive profiles.`);
+  }
 }
 
 const paymentFunction = await readFile(

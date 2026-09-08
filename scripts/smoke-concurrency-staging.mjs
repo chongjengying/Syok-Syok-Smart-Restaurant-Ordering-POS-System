@@ -10,7 +10,7 @@ if (!baseUrl || !anonKey || !serviceKey) {
 
 const suffix = crypto.randomUUID().slice(0, 8);
 const password = `Concurrency-${suffix}-Pass!`;
-const fixture = { users: [], terminalIds: [], categoryId: null, productIds: [], tableIds: [], orderIds: [] };
+const fixture = { users: [], terminalIds: [], shiftIds: [], categoryId: null, productIds: [], tableIds: [], orderIds: [] };
 const results = {};
 
 async function request(path, { method = 'GET', key = anonKey, token = key, body, allowError = false } = {}) {
@@ -150,6 +150,8 @@ async function cleanup() {
     await request(`/rest/v1/restaurant_tables?id=eq.${tableId}`, { method: 'DELETE', key: serviceKey, allowError: true });
   }
   if (fixture.terminalIds.length) {
+    await request(`/rest/v1/cash_movements?shift_id=in.(${fixture.shiftIds.join(',') || crypto.randomUUID()})`, { method: 'DELETE', key: serviceKey, allowError: true });
+    await request(`/rest/v1/cashier_shifts?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
     await request(`/rest/v1/terminal_staff_sessions?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
     await request(`/rest/v1/terminal_staff_access?terminal_id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
     await request(`/rest/v1/pos_terminals?id=in.(${fixture.terminalIds.join(',')})`, { method: 'DELETE', key: serviceKey, allowError: true });
@@ -184,22 +186,25 @@ try {
   cashierB = await createStaff('MANAGER', 2);
   manager = await createStaff('MANAGER', 3);
 
+  const branch = (await rows('branches', 'code=eq.MAIN&select=id,company_id'))[0];
+  assert.ok(branch?.id, 'The staging MAIN branch is missing');
+
   const category = (await request('/rest/v1/categories', {
     method: 'POST', key: serviceKey,
-    body: { name: `Concurrency QA ${suffix}`, description: 'Temporary staging concurrency fixture', status: true },
+    body: {
+      name: `Concurrency QA ${suffix}`, description: 'Temporary staging concurrency fixture', status: true,
+      company_id: branch.company_id, branch_id: branch.id,
+    },
   })).payload[0];
   fixture.categoryId = category.id;
   const products = (await request('/rest/v1/products', {
     method: 'POST', key: serviceKey,
     body: [
-      { category_id: category.id, product_name: `QA Meal ${suffix}`, cost_price: 3, sell_price: 10, status: true, is_available: true },
-      { category_id: category.id, product_name: `QA Drink ${suffix}`, cost_price: 1, sell_price: 5, status: true, is_available: true },
+      { category_id: category.id, product_name: `QA Meal ${suffix}`, cost_price: 3, sell_price: 10, status: true, is_available: true, company_id: branch.company_id, branch_id: branch.id },
+      { category_id: category.id, product_name: `QA Drink ${suffix}`, cost_price: 1, sell_price: 5, status: true, is_available: true, company_id: branch.company_id, branch_id: branch.id },
     ],
   })).payload;
   fixture.productIds.push(...products.map(({ id }) => id));
-  const branch = (await rows('branches', 'code=eq.MAIN&select=id'))[0];
-  assert.ok(branch?.id, 'The staging MAIN branch is missing');
-  branch.company_id = (await rows('branches', `id=eq.${branch.id}&select=company_id`))[0].company_id;
   waiterA = await bindStaffToBranch(waiterA, branch);
   waiterB = await bindStaffToBranch(waiterB, branch);
   kitchenA = await bindStaffToBranch(kitchenA, branch);
@@ -207,6 +212,12 @@ try {
   cashierA = await bindStaffToBranch(cashierA, branch);
   cashierB = await bindStaffToBranch(cashierB, branch);
   manager = await bindStaffToBranch(manager, branch);
+  for (const cashier of [cashierA, cashierB]) {
+    const opened = await request('/rest/v1/rpc/open_cashier_shift', {
+      method: 'POST', token: cashier.token, body: { p_opening_float: 300 },
+    });
+    fixture.shiftIds.push(opened.payload.id);
+  }
   const tables = (await request('/rest/v1/restaurant_tables', {
     method: 'POST', key: serviceKey,
     body: Array.from({ length: 5 }, (_, index) => ({
@@ -353,10 +364,38 @@ try {
     edge('payments', cashierA.token, '', { method: 'POST', body: paymentBody(`pay-a-${suffix}`), allowError: true }),
     edge('payments', cashierB.token, '', { method: 'POST', body: paymentBody(`pay-b-${suffix}`), allowError: true }),
   ]);
-  assert.deepEqual(paymentRace.map(({ status }) => status).sort(), [200, 409]);
+  assert.deepEqual(
+    paymentRace.map(({ status }) => status).sort(),
+    [200, 409],
+    `Unexpected payment race responses: ${JSON.stringify(paymentRace.map(({ status, payload }) => ({ status, payload })))}`,
+  );
   assert.equal((await rows('payments', `order_id=eq.${paymentOrder.id}&status=eq.PAID&select=id`)).length, 1);
-  assert.equal((await rows('receipts', `order_id=eq.${paymentOrder.id}&select=id`)).length, 1);
+  const paidRows = await rows('payments', `order_id=eq.${paymentOrder.id}&status=eq.PAID&select=id,amount,cashier_shift_id`);
+  const receiptRows = await rows('receipts', `order_id=eq.${paymentOrder.id}&select=id,total,payments_snapshot`);
+  assert.equal(receiptRows.length, 1);
+  assert.equal(Number(paidRows[0].amount), Number(detail.total));
+  assert.equal(Number(receiptRows[0].total), Number(detail.total));
   results.paymentRace = true;
+  results.receiptReconciliation = true;
+
+  // A full cash refund is authorized once, replay-safe, audited, and reflected
+  // in the same cashier shift's expected cash.
+  const refundBody = { orderId: paymentOrder.id, reason: 'Concurrency regression refund', idempotencyKey: `refund-${suffix}` };
+  const refund = await edge('payments', cashierA.token, '/refund', { method: 'POST', body: refundBody });
+  const refundReplay = await edge('payments', cashierA.token, '/refund', { method: 'POST', body: refundBody });
+  assert.equal(refund.payload.data.replayed, false);
+  assert.equal(refundReplay.payload.data.replayed, true);
+  const refundRows = await rows('refunds', `order_id=eq.${paymentOrder.id}&select=id,amount,refund_number`);
+  assert.equal(refundRows.length, 1);
+  assert.equal(Number(refundRows[0].amount), Number(detail.total));
+  assert.match(refundRows[0].refund_number, /^REF-/);
+  assert.equal((await rows('audit_logs', `entity_id=eq.${paymentOrder.id}&action=eq.ORDER_REFUNDED&select=id`)).length, 1);
+  const shiftSummary = (await request('/rest/v1/rpc/cashier_shift_summary', {
+    method: 'POST', token: cashierA.token, body: { p_shift_id: paidRows[0].cashier_shift_id },
+  })).payload;
+  assert.equal(Number(shiftSummary.expectedCash), 300);
+  results.refundReconciliation = true;
+  results.shiftReconciliation = true;
 
   // Table move race: one source order cannot land at two destinations.
   const moveRace = await Promise.all([
@@ -392,11 +431,25 @@ try {
   }
   results.sequenceUniqueness = true;
 
+  for (const [cashier, shiftId] of [[cashierA, fixture.shiftIds[0]], [cashierB, fixture.shiftIds[1]]]) {
+    const summary = (await request('/rest/v1/rpc/cashier_shift_summary', {
+      method: 'POST', token: cashier.token, body: { p_shift_id: shiftId },
+    })).payload;
+    const closed = (await request('/rest/v1/rpc/close_cashier_shift', {
+      method: 'POST', token: cashier.token,
+      body: { p_shift_id: shiftId, p_actual_cash: Number(summary.expectedCash), p_force: false, p_reason: null },
+    })).payload;
+    assert.equal(closed.status, 'CLOSED');
+    assert.equal(Number(closed.cash_difference), 0);
+  }
+  results.shiftClose = true;
+
   console.log(JSON.stringify({ suffix, results, eventCounts: Object.fromEntries(Object.entries(events).map(([key, value]) => [key, value.length])) }));
 } finally {
+  // Delete the remote fixture before shutting down Realtime.  Channel teardown can
+  // occasionally stall on a transient network close; cleanup must not depend on it.
+  await cleanup();
   for (const client of realtimeClients) {
-    await Promise.all(client.getChannels().map((channel) => client.removeChannel(channel)));
     client.realtime.disconnect();
   }
-  await cleanup();
 }

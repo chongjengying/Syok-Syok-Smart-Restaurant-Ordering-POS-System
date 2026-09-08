@@ -8,6 +8,7 @@ import {
   fetchSelectableStaff,
   fetchProfile,
   fetchStaffProfiles,
+  fetchTerminalContext,
   patchAuthMetadata,
   persistOwnStaffPin,
   replacePassword,
@@ -110,8 +111,10 @@ export async function signIn(email, password) {
     return { data: null, error: mapAuthenticationError(staffResult.error) };
   }
   if (!staff) {
+    const terminal = await fetchTerminalContext();
+    if (terminal.data?.ok) return { data: { ...result.data, staff: { id: result.data.user.id, name: terminal.data.terminalCode, status: 'ACTIVE', role: 'TERMINAL', terminal: terminal.data } }, error: null };
     await destroyAuthSession();
-    return { data: null, error: authError(AUTH_ERROR_CODES.PROFILE_REQUIRED, 'A staff profile is required. Contact a manager for access.') };
+    return { data: null, error: authError(AUTH_ERROR_CODES.PROFILE_REQUIRED, 'An Administrator account or a registered terminal is required.') };
   }
   if (staff.status !== 'ACTIVE') {
     await destroyAuthSession();
@@ -171,6 +174,10 @@ export async function getValidatedSession() {
   if (staffResult.error) {
     return { data: { session: null }, error: mapAuthenticationError(staffResult.error) };
   }
+  if (!staffResult.data) {
+    const terminal = await fetchTerminalContext();
+    if (terminal.data?.ok) return { data: { session: sessionResult.data.session, staff: { id: userResult.data.user.id, name: terminal.data.terminalCode, status: 'ACTIVE', role: 'TERMINAL', terminal: terminal.data } }, error: null };
+  }
   if (!staffResult.data || staffResult.data.status !== 'ACTIVE') {
     await destroyAuthSession();
     const status = staffResult.data?.status;
@@ -204,9 +211,11 @@ export async function getUserProfile() {
 export async function getProfile() {
   const userResult = await currentUser();
   if (userResult.error) return userResult;
-  const { data, error } = await fetchProfile(userResult.data.id);
-  if (error) return { data: null, error };
-  return { data: mapProfile(data, userResult.data), error: null };
+  const staff = await fetchMyStaffSession();
+  if (staff.data) return { data: mapProfile(staff.data, userResult.data), error: null };
+  const terminal = await fetchTerminalContext();
+  if (terminal.data?.ok) return { data: { id: userResult.data.id, name: terminal.data.terminalCode, username: '', email: userResult.data.email || '', role: 'TERMINAL', status: 'ACTIVE', created_at: userResult.data.created_at, terminal: terminal.data }, error: null };
+  return { data: null, error: staff.error || new Error('No authorised identity context was found.') };
 }
 
 export async function getStaffSession() {
@@ -223,7 +232,7 @@ export async function listSelectableStaff() {
 export async function startStaffPinSession(userId, pin) {
   if (!userId || !/^\d{6}$/.test(pin)) return validationError('Enter your six-digit PIN.');
   const exchange = await requestStaffPinExchange(userId, pin);
-  const tokenHash = exchange.data?.data?.session;
+  const tokenHash = exchange.data?.data?.staffSession;
   const pinResetRequired = Boolean(exchange.data?.data?.pinResetRequired);
   if (exchange.error || !tokenHash) {
     const context = exchange.error?.context;
@@ -243,7 +252,7 @@ export async function startStaffPinSession(userId, pin) {
         : 'Unable to verify the PIN. Check the connection and try again.';
     return { data: null, error: authError(code || 'PIN_EXCHANGE_FAILED', message) };
   }
-  const verified = await verifyStaffPinToken(tokenHash);
+  const verified = await verifyStaffPinToken();
   if (verified.error) return { data: null, error: mapAuthenticationError(verified.error) };
   const staff = await fetchMyStaffSession();
   if (staff.error || staff.data?.status !== 'ACTIVE') {
@@ -255,17 +264,18 @@ export async function startStaffPinSession(userId, pin) {
   return { data: { session: verified.data.session, staff: staff.data, pinResetRequired }, error: null };
 }
 
-export function setOwnStaffPin(pin) {
+export function setOwnStaffPin(staffId, pin) {
+  if (!staffId) return Promise.resolve({ data: null, error: new Error('Staff selection is required.') });
   if (!/^\d{6}$/.test(pin)) return Promise.resolve({ data: null, error: new Error('PIN must contain exactly six digits.') });
   if (/^(\d)\1{5}$/.test(pin) || ['012345', '123456', '234567', '345678', '456789', '567890', '987654', '876543', '765432', '654321', '543210'].includes(pin)) {
     return Promise.resolve({ data: null, error: new Error('Choose a less predictable six-digit PIN. Repeated or sequential digits are not allowed.') });
   }
-  return persistOwnStaffPin(pin).then((result) => {
+  return persistOwnStaffPin(staffId, pin).then((result) => {
     if (!result.error) return result;
     const message = String(result.error.message || '');
     if (message.includes('STAFF_PIN_ALREADY_IN_USE')) return { data: null, error: new Error('That PIN is already assigned to another staff account. Choose a different PIN.') };
     if (message.includes('INVALID_STAFF_PIN')) return { data: null, error: new Error('Choose a less predictable six-digit PIN. Repeated or sequential digits are not allowed.') };
-    if (message.includes('ACTIVE_PROFILE_REQUIRED')) return { data: null, error: new Error('Your staff profile is not active. Ask an administrator to enable POS access.') };
+    if (message.includes('STAFF_SESSION_MISMATCH') || message.includes('ACTIVE_STAFF_SESSION_REQUIRED')) return { data: null, error: new Error('Verify this staff member’s temporary PIN on this terminal before setting a new PIN.') };
     if (message.includes('JWT') || message.includes('session') || message.includes('authentication')) return { data: null, error: new Error('Your session expired. Sign in again before setting the PIN.') };
     return { data: null, error: new Error(`Unable to save the PIN${result.error.code ? ` (${result.error.code})` : ''}. Please try again.`) };
   });

@@ -43,7 +43,7 @@ export function useStaffHandoff(enabled, currentUserId) {
     }
     setIsSubmitting(true);
     setError('');
-    const result = await setOwnStaffPin(pin);
+    const result = await setOwnStaffPin(selected.id, pin);
     setIsSubmitting(false);
     if (result.error) {
       setError(result.error.message);
