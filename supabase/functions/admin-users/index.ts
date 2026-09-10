@@ -17,8 +17,11 @@ Deno.serve(async (request) => {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: auth, error: authError } = await caller.auth.getUser();
   if (authError || !auth.user) return json(401, { error: 'The session is invalid or expired.' });
-  const { data: profile } = await caller.from('profiles').select('company_id,status,role_name').eq('id', auth.user.id).maybeSingle();
-  if (!profile || profile.status !== 'ACTIVE' || profile.role_name !== 'ADMIN') return json(403, { error: 'Administrator access is required.' });
+  const { data: profile } = await caller.from('profiles').select('company_id,status').eq('id', auth.user.id).maybeSingle();
+  if (!profile || profile.status !== 'ACTIVE') return json(403, { error: 'An active administrator profile is required.' });
+  const permission = request.method === 'GET' ? 'user.view' : 'user.create';
+  const { data: allowed } = await caller.rpc('has_pos_permission', { p_permission: permission });
+  if (!allowed) return json(403, { error: 'Staff management permission is required.' });
 
   if (request.method === 'GET') {
     const search = new URL(request.url).searchParams.get('search')?.trim().toLowerCase() || '';

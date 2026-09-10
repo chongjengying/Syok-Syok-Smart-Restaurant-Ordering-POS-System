@@ -30,9 +30,11 @@ assert.match(pinEndpoint, /begin_authenticated_terminal_staff_session/, 'PIN ver
 assert.doesNotMatch(pinEndpoint, /generateLink|verifyOtp|access_token|refresh_token/, 'PIN exchange must not mint staff Auth credentials.');
 assert.match(authRepository, /accountSupabase\.auth\.getSession\(\)/, 'Operator mode must reuse the terminal Auth session.');
 
-assert.match(adminUsersFunction, /temporaryPin\s*=\s*pinData\?\.temporaryPin\s*\|\|\s*null/,
-  'Admin-created staff accounts must return the generated temporary PIN once.');
-assert.match(adminUsersFunction, /data:\s*\{\s*\.\.\.data,\s*temporaryPin\s*\}/,
+assert.match(adminUsersFunction, /const pin\s*=\s*temporaryPin\(\)/,
+  'Admin-created staff accounts must generate a temporary PIN at the server boundary.');
+assert.match(adminUsersFunction, /p_temporary_pin:\s*pin/,
+  'The generated temporary PIN must be passed only to the controlled provisioning RPC.');
+assert.match(adminUsersFunction, /data:\s*\{\s*\.\.\.data,\s*temporaryPin:\s*pin\s*\}/,
   'Create staff response must include the temporary PIN for admin handoff.');
 
 assert.match(pinMigration, /status\s+text\s+not\s+null\s+default\s+'SETUP_REQUIRED'[\s\S]*'TEMPORARY_RESET'[\s\S]*'ACTIVE'/,

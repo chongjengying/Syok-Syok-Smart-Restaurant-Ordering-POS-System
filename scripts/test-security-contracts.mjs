@@ -134,10 +134,23 @@ assert.match(adminPhaseB, /old_value[\s\S]*new_value/i,
 const adminUsersFunction = await readFile(path.join(root, 'supabase', 'functions', 'admin-users', 'index.ts'), 'utf8');
 assert.equal((adminUsersFunction.match(/import\s*\{\s*createClient\s*\}/g) || []).length, 1,
   'The Admin user Edge Function must have exactly one createClient import.');
-assert.match(adminUsersFunction, /auth\.admin\.inviteUserByEmail/i,
-  'Staff creation must use the server-side Auth Admin API.');
+assert.doesNotMatch(adminUsersFunction, /auth\.admin\.inviteUserByEmail/i,
+  'Terminal PIN staff creation must not create a separate Supabase Auth identity.');
 assert.match(adminUsersFunction, /has_pos_permission/i,
   'The Admin user boundary must verify database permissions.');
+assert.match(adminUsersFunction, /p_permission:\s*permission/i,
+  'The Admin user boundary must pass the operation-specific permission to PostgreSQL.');
+assert.match(adminUsersFunction, /admin\.rpc\('create_admin_staff_record'/i,
+  'Staff creation must use the controlled server-side staff provisioning RPC.');
+
+const adminStaffMigration = await readFile(
+  path.join(root, 'supabase', 'migrations', '20260908123200_admin_staff_management.sql'),
+  'utf8',
+);
+assert.match(adminStaffMigration, /grant execute on function public\.create_admin_staff_record\([^)]*\) to service_role/i,
+  'Staff provisioning must be executable only by the service role.');
+assert.match(adminStaffMigration, /crypt\(p_temporary_pin,gen_salt\('bf',12\)\)/i,
+  'Temporary staff PINs must be stored only as bcrypt hashes.');
 
 const einvoiceFunction = await readFile(path.join(root, 'supabase', 'functions', 'einvoice-submit', 'index.ts'), 'utf8');
 assert.match(einvoiceFunction, /has_pos_permission[\s\S]*einvoice\.retry/i,
