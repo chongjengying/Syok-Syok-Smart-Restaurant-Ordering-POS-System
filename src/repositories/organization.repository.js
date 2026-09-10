@@ -1,4 +1,5 @@
 import { supabase } from '../infrastructure/supabase/client';
+import { apiRequest } from '../infrastructure/supabase/functionsClient';
 export const fetchCompanies = () => supabase.from('companies').select('*').order('created_at');
 export const fetchBranches = () => supabase.from('branches').select('*,companies(name,code,currency_code,timezone)').order('code');
 export const persistCompany = (payload) => supabase.rpc('save_company', { p_payload: payload });
@@ -13,6 +14,7 @@ export const fetchTerminals = (branchId) => {
 export const persistTerminal = (form) => supabase.rpc('save_pos_terminal', { p_id: form.id || null, p_branch_id: form.branchId, p_code: form.code, p_name: form.name, p_type: form.type, p_status: 'CREATED', p_device_identifier: null });
 export const transitionTerminal = (id, action, device) => supabase.rpc('transition_pos_terminal', { p_terminal_id: id, p_action: action, p_device_identifier: device || null });
 export const reassignTerminal = (id, branchId) => supabase.rpc('reassign_pos_terminal', { p_terminal_id: id, p_branch_id: branchId });
+export const bindTerminalAccount = (terminalId, email) => apiRequest('terminal-account-binding', { method: 'POST', body: { terminalId, email } });
 export const fetchCurrentCashierShift = () => supabase.rpc('current_terminal_cash_shift');
 export const openCashierShift = (openingFloat) => supabase.rpc('open_cashier_shift', { p_opening_float: openingFloat });
 export const fetchCashierShiftSummary = (id) => supabase.rpc('cashier_shift_summary', { p_shift_id: id });

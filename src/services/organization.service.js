@@ -7,6 +7,7 @@ export const saveBranchConfiguration = repository.persistBranchConfiguration;
 export const listTerminals = repository.fetchTerminals;
 export const changeTerminalStatus = repository.transitionTerminal;
 export const reassignTerminal = repository.reassignTerminal;
+export const bindTerminalAccount = repository.bindTerminalAccount;
 export const getCurrentCashierShift = repository.fetchCurrentCashierShift;
 export const openCashierShift = repository.openCashierShift;
 export const getCashierShiftSummary = repository.fetchCashierShiftSummary;
