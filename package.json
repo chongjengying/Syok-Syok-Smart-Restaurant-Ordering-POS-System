@@ -14,6 +14,7 @@
     "deploy:worker:staging": "npm run build:staging && npx wrangler deploy --config wrangler.toml --env staging",
     "lint": "oxlint src",
     "test:login-flow": "node scripts/test-login-flow.mjs",
+    "test:preview-routing": "node --test tests/preview/worker-routing.test.mjs",
     "test:integration-contracts": "node scripts/test-integration-contracts.mjs",
     "test:security-contracts": "node scripts/test-security-contracts.mjs",
     "test:cash-shifts-contracts": "node scripts/test-cash-shifts-contracts.mjs",

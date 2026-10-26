@@ -1,5 +1,7 @@
 # Validation evidence — 26 October 2026
 
+This records the initial preview verification. The later production Worker routing review, regression fix and expanded checks are recorded in [REVIEW.md](REVIEW.md).
+
 Environment: local Windows checkout, Node/npm, installed Google Chrome through Playwright. No live Supabase, database, printer, order, kitchen, provider or payment operations were used. Development server: `http://127.0.0.1:5180`; compiled preview was tested separately on port 5181.
 
 | Check                                                                                | Status                 | Command / observable evidence                                                                                                                                                                                                                                                                                      |

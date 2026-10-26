@@ -8,8 +8,10 @@ compatibility_date = "2026-08-26"
 directory = "./dist"
 binding = "ASSETS"
 # Hash-versioned assets must return 404 when stale. The application uses hash
-# routes, so the document fallback is not needed for client-side navigation.
+# routes except for the isolated preview, whose exact URLs are handled by the
+# Worker. Force those navigations through it even with asset-first routing.
 not_found_handling = "404-page"
+run_worker_first = ["/pos/preview", "/pos/preview/"]
 
 [env.staging]
 name = "syok-syok-pos-staging"

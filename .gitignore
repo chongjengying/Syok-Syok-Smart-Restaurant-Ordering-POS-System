@@ -15,6 +15,7 @@ dist/
 dist-ssr/
 playwright-report/
 test-results/
+.wrangler/
 
 # Supabase CLI local runtime state and generated secrets
 supabase/.temp/

@@ -55,13 +55,14 @@ Takeaway example: New order → Takeaway → Continue → add Coffee → cart �
 
 ## File inventory
 
-Only **`src/main.jsx`** was modified for this task outside new preview/documentation/test files. It now imports the route selector; `src/app/App.jsx` and original components, logic, endpoints, schemas, permissions and styles were not edited. Pre-existing dirty changes are retained.
+The initial preview changed **`src/main.jsx`** to import the isolated route selector. The follow-up review also registers the two exact preview URLs in `worker.js` / `wrangler.toml`, adds the routing test command in `package.json`, and ignores local `.wrangler/` runtime artifacts. `src/app/App.jsx` and original components, business logic, endpoints, schemas, permissions and styles were not edited. Pre-existing dirty changes are retained. See [REVIEW.md](REVIEW.md) for the reproduced deployment issue and current verification results.
 
 ```text
 docs/pos-preview/
   AUDIT.md                    Existing workflow, source map, audit limits
   README.md                   Access, design, screens, files, integration plan
   VALIDATION.md               Commands, results, scope and limitations
+  REVIEW.md                   Follow-up production routing fix and checks
 src/preview/
   PreviewRoute.jsx            Exact-path loader; original routes keep App.jsx
   PreviewApp.jsx              Preview shell and screen composition
@@ -93,6 +94,8 @@ src/preview/
 tests/preview/
   playwright.config.js        Independent browser config; no staging server
   preview.spec.js             Workflow, network, storage and layout QA
+  original-entry.spec.js      Original sign-in/language and CSS isolation
+  worker-routing.test.mjs     Worker unit and optional local runtime tests
 ```
 
 No dependency or lockfile changes were needed. Existing React, Lucide, jsPDF and ExcelJS dependencies are reused. Report export libraries load only when exporting.
@@ -121,9 +124,12 @@ Next phase, only after explicit approval: implement the real adapter in an appro
 
 ```powershell
 node --test src/preview/tests/mockPosService.test.mjs
+npm run test:preview-routing
 npm run lint
-npm run build:local
+npm run build
 npx playwright test --config tests/preview/playwright.config.js
 ```
 
 Browser tests expect the local server on port 5180. Override `POS_PREVIEW_BASE_URL` for a separately started built preview. On Windows the independent config uses the installed Google Chrome; other platforms use Playwright Chromium. No authenticated staging scripts are part of these checks.
+
+The original sign-in regression uses module mocking and runs only against the default Vite development server. Built-preview overrides intentionally skip it. To include the Worker HTTP regression, start Wrangler locally and set `POS_WORKER_BASE_URL` to its loopback URL before running `npm run test:preview-routing`. A standalone type-check command is not currently configured.
