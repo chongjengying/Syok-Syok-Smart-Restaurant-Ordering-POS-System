@@ -1,8 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
-
-type Status = 'HEALTHY' | 'DEGRADED' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
-type Check = { component:string; label:string; status:Status; operationalStatus?:string; critical:boolean; latencyMs?:number; message:string; lastCheckedAt:string; lastSuccessfulAt?:string; metadata?:Record<string,unknown> };
+import { FUNCTION_PROBES, probeFunction, summarizeFunctionProbes, type Check, type Status } from '../_shared/healthProbe.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, OPTIONS');
 const jsonResponse = (status:number, body:Record<string,unknown>) => createJsonResponse(status, body, corsHeaders);
@@ -13,7 +11,7 @@ const BACKUP_CRITICAL_HOURS = Number(Deno.env.get('BACKUP_CRITICAL_HOURS') || 48
 const KDS_ONLINE_SECONDS = Number(Deno.env.get('KDS_ONLINE_SECONDS') || 30);
 const KDS_WARNING_SECONDS = Number(Deno.env.get('KDS_WARNING_SECONDS') || 60);
 const CACHE_MS = 15_000;
-let cached: { at:number; data:Record<string,unknown> } | null = null;
+let cached: { at:number; userId:string; data:Record<string,unknown> } | null = null;
 const rateBuckets=new Map<string,{windowStarted:number;gets:number;posts:number}>();
 
 const latencyStatus = (ms:number):Status => ms < HEALTHY_MS ? 'HEALTHY' : ms <= WARNING_MS ? 'WARNING' : 'DEGRADED';
@@ -43,15 +41,6 @@ async function timed<T>(operation:()=>Promise<T>, timeoutMs=5_000) {
   } catch (cause) {
     return { result:null, latencyMs:Math.round(performance.now()-started), error:cause instanceof Error?cause:new Error('UNKNOWN') };
   } finally { clearTimeout(timer); }
-}
-
-async function probeFunction(baseUrl:string, anonKey:string, authorization:string, name:string):Promise<Check> {
-  const checkedAt=new Date().toISOString();
-  const probe=await timed(()=>fetch(`${baseUrl}/functions/v1/${name}?health=probe`, {headers:{apikey:anonKey,Authorization:authorization}}));
-  if (probe.error) return {component:`edge-${name}`,label:name,status:'CRITICAL',critical:['orders','payments'].includes(name),latencyMs:probe.latencyMs,message:`Function probe ${probe.error.message==='TIMEOUT'?'timed out':'failed'}.`,lastCheckedAt:checkedAt};
-  const response=probe.result as Response;
-  const ok=response.ok;
-  return {component:`edge-${name}`,label:name,status:ok?latencyStatus(probe.latencyMs):response.status>=500?'CRITICAL':'WARNING',critical:['orders','payments'].includes(name),latencyMs:probe.latencyMs,message:ok?`Function responded in ${probe.latencyMs} ms.`:`Function returned HTTP ${response.status}.`,lastCheckedAt:checkedAt,...(ok?{lastSuccessfulAt:checkedAt}:{})};
 }
 
 Deno.serve(async request => {
@@ -99,7 +88,7 @@ Deno.serve(async request => {
 
   const {data:allowed}=await caller.rpc('has_pos_permission',{p_permission:'system.health.view'});
   if(!allowed) return jsonResponse(403,{error:'System health permission is required.',code:'INSUFFICIENT_PERMISSION',correlationId});
-  if(cached&&Date.now()-cached.at<CACHE_MS) return jsonResponse(200,{data:{...cached.data,correlationId,cached:true}});
+  if(cached&&cached.userId===authResult.data.user.id&&Date.now()-cached.at<CACHE_MS) return jsonResponse(200,{data:{...cached.data,correlationId,cached:true}});
 
   const checkedAt=new Date().toISOString();
   const [coreChecks,edgeChecks]=await Promise.all([
@@ -108,7 +97,7 @@ Deno.serve(async request => {
       timed(()=>caller.rpc('system_health_db_probe')),
       timed(()=>caller.rpc('get_system_health_metrics')),
     ]),
-    Promise.all(['orders','tables','products','payments'].map(name=>probeFunction(url,anonKey,authorization,name))),
+    Promise.all(FUNCTION_PROBES.map(target=>probeFunction(url,anonKey,authorization,target,{healthyMs:HEALTHY_MS,warningMs:WARNING_MS}))),
   ]);
   const [supabaseProbe,dbProbe,metricsResult]=coreChecks;
   const supabaseResponse=supabaseProbe.result as Response|null;
@@ -127,7 +116,7 @@ Deno.serve(async request => {
   const infrastructureErrors=recentErrors.filter(event=>Number(event.status_code)>=500 || ['NETWORK_ERROR','TIMEOUT','INTERNAL_ERROR'].includes(String(event.error_type)));
   const affectedServices=[...new Set(infrastructureErrors.map(event=>cleanText(event.service,60)))].join(', ');
   const latestFailure=infrastructureErrors[0]?.occurred_at;
-  const apiCheck:Check={component:'api',label:'API Requests',status:!metricsOk||total===0?'UNKNOWN':failureRate>=0.05?'CRITICAL':failureRate>=0.01?'WARNING':'HEALTHY',critical:false,message:!metricsOk?'API telemetry could not be loaded.':total===0?'No telemetry has been received in the last 24 hours.':`${failed} infrastructure failures across ${total} observed requests in the last 24 hours (${(failureRate*100).toFixed(2)}%).${affectedServices?` Affected services: ${affectedServices}.`:''}${latestFailure?` Latest recorded failure: ${cleanText(latestFailure,40)}.`:''} Historical failures remain counted after recovery; live function checks are shown separately.`,lastCheckedAt:checkedAt,metadata:{failureRate,windowHours:24,affectedServices,latestFailure:latestFailure||null}};
+  const apiCheck:Check={component:'api',label:'API Reliability (24h)',status:!metricsOk||total===0?'UNKNOWN':failureRate>=0.05?'CRITICAL':failureRate>=0.01?'WARNING':'HEALTHY',critical:false,message:!metricsOk?'API telemetry could not be loaded.':total===0?'No telemetry has been received in the last 24 hours.':`${failed} infrastructure failures across ${total} observed requests in the last 24 hours (${(failureRate*100).toFixed(2)}%).${affectedServices?` Affected services: ${affectedServices}.`:''}${latestFailure?` Latest recorded failure: ${cleanText(latestFailure,40)}.`:''} Historical failures remain counted after recovery; live function checks are shown separately.`,lastCheckedAt:checkedAt,metadata:{failureRate,windowHours:24,affectedServices,latestFailure:latestFailure||null}};
   const payment=(metrics.payment||{}) as Record<string,unknown>;
   const paymentCheck:Check={component:'payment',label:'Payment Gateway',status:'UNKNOWN',operationalStatus:'NOT_CONFIGURED',critical:false,message:'No external payment gateway is configured; cash and manual QR remain available.',lastCheckedAt:checkedAt,metadata:{provider:'UNCONFIGURED',mode:'MANUAL',lastSuccessfulTransaction:String(payment.lastSuccessfulTransaction||''),lastFailedTransaction:String(payment.lastFailedTransaction||'')}};
   const devices=Array.isArray(metrics.devices)?metrics.devices as Record<string,unknown>[]:[];
@@ -141,9 +130,9 @@ Deno.serve(async request => {
   const backupStatus:Status=!Number.isFinite(backupAge)?'UNKNOWN':backup?.status!=='SUCCEEDED'||backupAge>BACKUP_CRITICAL_HOURS?'CRITICAL':backupAge>=BACKUP_WARNING_HOURS?'WARNING':'HEALTHY';
   const backupCheck:Check={component:'backup',label:'Database Backup',status:backupStatus,critical:false,message:!backup?'No authoritative backup record is available.':`Latest verified ${String(backup.status).toLowerCase()} backup is ${backupAge.toFixed(1)} hours old.`,lastCheckedAt:checkedAt,...(backup?.completed_at?{lastSuccessfulAt:String(backup.completed_at)}:{}),metadata:backup?{provider:String(backup.provider),nextScheduledAt:String(backup.next_scheduled_at||'')}:undefined};
   const realtimeCheck:Check={component:'realtime',label:'Realtime',status:'UNKNOWN',critical:false,message:'Realtime connectivity is measured by the active browser session.',lastCheckedAt:checkedAt};
-  const components=[supabaseCheck,databaseCheck,realtimeCheck,{component:'edge-functions',label:'Edge Functions',status:overall(edgeChecks),critical:true,message:'Independent probes for orders, tables, products and payments.',lastCheckedAt:checkedAt,metadata:{checks:edgeChecks}},observabilityCheck,apiCheck,paymentCheck,...deviceChecks,kdsCheck,backupCheck];
+  const components=[supabaseCheck,databaseCheck,realtimeCheck,{component:'edge-functions',label:'Live API Connections',status:summarizeFunctionProbes(edgeChecks),critical:true,message:'Authenticated checks for orders, tables, products, payments, staff and payment providers. Permission-restricted checks remain unknown.',lastCheckedAt:checkedAt,metadata:{checks:edgeChecks}},observabilityCheck,apiCheck,paymentCheck,...deviceChecks,kdsCheck,backupCheck];
   const data={overallStatus:overall(components),environment:environment(),version:{appVersion:Deno.env.get('APP_VERSION')||'unknown',commitSha:Deno.env.get('GIT_COMMIT_SHA')||'',buildId:Deno.env.get('BUILD_ID')||'',buildTimestamp:Deno.env.get('BUILD_TIMESTAMP')||''},components,api:{totalRequests:total,failedRequests:failed,failureRate,clientErrors:Number(api.clientErrors||0),serverErrors:Number(api.serverErrors||0),timeouts:Number(api.timeouts||0),recentErrors:Array.isArray(api.recentErrors)?api.recentErrors:[]},incidents:Array.isArray(metrics.incidents)?metrics.incidents:[],checkedAt};
-  cached={at:Date.now(),data};
+  cached={at:Date.now(),userId:authResult.data.user.id,data};
   console.info(JSON.stringify({timestamp:checkedAt,level:'INFO',service:'system-health',operation:'check',correlationId,status:data.overallStatus}));
   return jsonResponse(200,{data:{...data,correlationId,cached:false}});
 });

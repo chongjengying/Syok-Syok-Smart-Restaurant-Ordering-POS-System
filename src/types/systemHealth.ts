@@ -11,7 +11,7 @@ export interface HealthCheck {
   message: string;
   lastCheckedAt: string;
   lastSuccessfulAt?: string;
-  metadata?: Record<string, string | number | boolean | null>;
+  metadata?: Record<string, string | number | boolean | null | HealthCheck[]>;
 }
 
 export interface ApiErrorEvent {

@@ -13,6 +13,7 @@ export function useAdminDashboard(enabled = true) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const mounted = useRef(true);
   const hasData = useRef(false);
+  const lastSnapshot = useRef<{ filters: DashboardFilters; loadedAt: number } | null>(null);
   const requestSequence = useRef(0);
   const realtimeTimer = useRef<number | undefined>(undefined);
   const { dateFrom, dateTo, diningMode, paymentMethod, paymentProviderId, staffId, branchId, granularity } = filters;
@@ -35,6 +36,7 @@ export function useAdminDashboard(enabled = true) {
       }
       setData(result.data);
       hasData.current = true;
+      lastSnapshot.current = { filters: queryFilters, loadedAt: Date.now() };
       setLastUpdated(new Date());
       setError('');
     } catch (cause) {
@@ -63,15 +65,12 @@ export function useAdminDashboard(enabled = true) {
     mounted.current = true;
     if (!enabled) {
       ++requestSequence.current;
-      hasData.current = false;
-      setData(null);
-      setLastUpdated(null);
-      setError('');
       setIsLoading(false);
       setIsRefreshing(false);
       return undefined;
     }
-    void refresh();
+    const snapshot = lastSnapshot.current;
+    if (!snapshot || snapshot.filters !== queryFilters || Date.now() - snapshot.loadedAt >= ADMIN_DASHBOARD_CONFIG.analyticsRefreshMs) void refresh();
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
     }, ADMIN_DASHBOARD_CONFIG.analyticsRefreshMs);
@@ -79,16 +78,20 @@ export function useAdminDashboard(enabled = true) {
       mounted.current = false;
       window.clearInterval(timer);
     };
-  }, [enabled, refresh]);
+  }, [enabled, queryFilters, refresh]);
 
   useEffect(() => {
     if (!enabled) return undefined;
-    return subscribeAdminDashboard(() => {
+    const unsubscribe = subscribeAdminDashboard(() => {
       window.clearTimeout(realtimeTimer.current);
       realtimeTimer.current = window.setTimeout(() => {
         if (document.visibilityState === 'visible') void refresh();
       }, ADMIN_DASHBOARD_CONFIG.realtimeDebounceMs);
     });
+    return () => {
+      window.clearTimeout(realtimeTimer.current);
+      unsubscribe();
+    };
   }, [enabled, refresh]);
 
   useEffect(() => () => window.clearTimeout(realtimeTimer.current), []);
