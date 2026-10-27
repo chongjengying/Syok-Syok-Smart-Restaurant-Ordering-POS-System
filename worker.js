@@ -12,7 +12,8 @@ export default {
     if (pathname.startsWith('/assets/')) {
       return env.ASSETS.fetch(request, { not_found_handling: '404' });
     }
-    const appRoute = ['/admin', '/admin/', '/admin/login', '/terminal/setup', '/pos', '/pos/setup', '/pos/login', '/pos/error'].includes(pathname);
+    const routePath = pathname.replace(/\/$/, '');
+    const appRoute = ['/admin', '/admin/login', '/terminal/setup', '/pos', '/pos/setup', '/pos/login', '/pos/error', '/pos/sales', '/pos/kitchen'].includes(routePath);
     const response = appRoute
       ? await env.ASSETS.fetch(new Request(new URL('/', request.url), request))
       : await env.ASSETS.fetch(request);

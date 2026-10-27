@@ -60,6 +60,13 @@ for (const pathname of [
   "/pos/setup",
   "/pos/login",
   "/pos/error",
+  "/pos/sales",
+  "/pos/kitchen",
+  "/pos/",
+  "/pos/sales/",
+  "/pos/kitchen/",
+  "/terminal/setup",
+  "/admin/login/",
 ]) {
   test(`live application route resolves the shell: ${pathname}`, async () => {
     const { env, calls } = assetsFixture();
@@ -138,7 +145,7 @@ test(
       ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname),
       "This test only contacts a local Worker.",
     );
-    for (const pathname of ["/admin", "/pos/setup"]) {
+    for (const pathname of ["/admin", "/pos/setup", "/pos/", "/pos/sales", "/pos/kitchen"]) {
       const response = await fetch(new URL(pathname, origin), {
         headers: { "Sec-Fetch-Mode": "navigate" },
         redirect: "manual",

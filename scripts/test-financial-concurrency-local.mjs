@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { getLocalSupabaseStatus } from './local-supabase-status.mjs';
+import { buildReportSummary } from '../src/features/reports/utils/reportSummary.js';
 
 const local = getLocalSupabaseStatus();
 assert.ok(['127.0.0.1', 'localhost'].includes(new URL(local.API_URL).hostname), 'Local Supabase only');
@@ -140,6 +141,24 @@ try {
   assert.equal((await rows('receipts', `order_id=eq.${sale.id}&select=id`)).length, 1);
   await pay(sale, `second-payment-${run}`, 409);
   await login(1);
+  const reportDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+  const managerCanReport = (await rpc(pos, 'has_pos_permission', { p_permission: 'report.view' })).payload;
+  for (const reportId of ['daily-sales', 'payments']) {
+    const args = { p_report_id: reportId, p_date_from: reportDate, p_date_to: reportDate };
+    const reportActor = managerCanReport ? pos : admin;
+    const [summary, page] = await Promise.all([
+      rpc(reportActor, 'get_pos_report_summary_v2', args),
+      rpc(reportActor, 'get_pos_report_page_v1', { ...args, p_search: null, p_sort_key: null, p_sort_direction: 'asc', p_limit: 50, p_offset: 0 }),
+    ]);
+    assert.ok(Array.isArray(page.payload.rows), `${reportId} authorized rows unavailable`);
+    assert.ok(summary.payload && Object.keys(summary.payload).length, `${reportId} authorized summary unavailable`);
+    const cards = buildReportSummary(reportId, page.payload.rows, summary.payload);
+    assert.ok(cards.length && cards.every(card => Number.isFinite(Number(card.value))), `${reportId} frontend summary cannot render the backend response`);
+    if (!managerCanReport) {
+      const denied = await rpc(pos, 'get_pos_report_summary_v2', args, [400, 403]);
+      assert.match(denied.payload.message, /INSUFFICIENT_PERMISSION/);
+    }
+  }
   await pos('/functions/v1/payments/refund', 'POST', {
     orderId: sale.id, reason: 'Excess amount must be rejected',
     idempotencyKey: `excess-refund-${run}`, amount: Number(sale.total) + 1, items: [],
@@ -214,7 +233,8 @@ try {
     paymentRace: 'one payment and receipt', refundRace: 'one refund', voidRace: 'one void',
     discountRace: 'one applied adjustment with distinct requester and approver', adminOrderVoid: 'approved and audited',
     shiftCloseRace: 'one closed shift and close ledger', authoritativeAmounts: true,
-    expectedCash: closed.expected_cash, cashDifference: closed.cash_difference }));
+    expectedCash: closed.expected_cash, cashDifference: closed.cash_difference,
+    reports: managerCanReport ? 'authorized terminal manager summary/page RPCs' : 'authorized administrator summary/page RPCs; terminal manager denied as configured' }));
 } finally {
   if (fixture.adminToken && fixture.branch) {
     const admin = actor(fixture.adminToken);

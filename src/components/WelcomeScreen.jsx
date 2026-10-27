@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, UtensilsCrossed, ReceiptText, Settings } from 'lucide-react';
+import { ChefHat, ArrowRight, BellRing, Download, Globe, ClipboardList, UtensilsCrossed, ReceiptText, Settings, BarChart3 } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translations, translate } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
 import { APP_VERSION } from '../config/appVersion';
@@ -8,7 +8,7 @@ export default function WelcomeScreen({
   onStartOrder,
   onOpenKitchen,
   onOpenReadyToServe,
-  onOpenReports: _onOpenReports,
+  onOpenReports,
   onOpenTables,
   onOpenUnpaidOrders,
   onOpenCashShift,
@@ -125,6 +125,11 @@ export default function WelcomeScreen({
               {canAccessTables && (
                 <button onClick={onOpenTables} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
                   <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> {tr('tableOperations')}
+                </button>
+              )}
+              {canAccessReports && (
+                <button onClick={onOpenReports} className="h-11 rounded-xl border border-white/20 bg-black/50 px-4 text-xs font-bold text-white flex items-center gap-2 hover:border-[#D4AF37]">
+                  <BarChart3 className="w-4 h-4 text-[#D4AF37]" /> {tr('salesReports')}
                 </button>
               )}
               {canAccessAdmin && (
