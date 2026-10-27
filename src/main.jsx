@@ -19,6 +19,8 @@ function render(App) {
 
 if (previewPath && import.meta.env.DEV) {
   void import('./preview/admin/AdminPreviewApp.jsx').then(({ default: AdminPreviewApp }) => render(AdminPreviewApp))
+} else if (import.meta.env.DEV && /^\/pos\/preview\/?$/.test(pathname)) {
+  void import('./preview/PreviewApp.jsx').then(({ default: PreviewApp }) => render(PreviewApp))
 } else {
   void import('./app/App.jsx').then(({ default: App }) => render(App))
 }

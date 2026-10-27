@@ -425,17 +425,7 @@ export default function AdminModulePage({ moduleId, notify, navigate }) {
                 { numeric: true },
               ) * (sort.direction === "asc" ? 1 : -1),
         ),
-    [
-      scoped,
-      query,
-      status,
-      category,
-      sort,
-      dateRange,
-      dateFrom,
-      dateTo,
-      moduleId,
-    ],
+    [scoped, query, status, category, sort],
   );
   const statusOptions = [
     ...new Set(

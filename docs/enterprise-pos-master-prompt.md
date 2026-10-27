@@ -171,9 +171,9 @@ Never treat a typical POS industry feature automatically as a contractual requir
 
 Separate requirements into:
 
-A. Confirmed customer requirements  
-B. Inferred requirements requiring customer confirmation  
-C. Recommended industry best practices  
+A. Confirmed customer requirements
+B. Inferred requirements requiring customer confirmation
+C. Recommended industry best practices
 D. Optional future enhancements
 
 Never declare overall customer acceptance based on assumptions alone.
@@ -681,15 +681,15 @@ Define realistic capacity targets based on customer branch count, terminal count
 
 Start with discovery in both audit and remediation modes. Apply the authorization boundaries in section 0.
 
-Phase 1: Discovery  
-Phase 2: Requirements Analysis  
-Phase 3: Static Code Review  
-Phase 4: Backend and Database Verification  
-Phase 5: Frontend Workflow Verification  
-Phase 6: Integration Testing  
-Phase 7: Security Testing  
-Phase 8: Financial and Concurrency Testing  
-Phase 9: Customer Acceptance Testing  
+Phase 1: Discovery
+Phase 2: Requirements Analysis
+Phase 3: Static Code Review
+Phase 4: Backend and Database Verification
+Phase 5: Frontend Workflow Verification
+Phase 6: Integration Testing
+Phase 7: Security Testing
+Phase 8: Financial and Concurrency Testing
+Phase 9: Customer Acceptance Testing
 Phase 10: Final Readiness Assessment
 
 Mandatory rules:
@@ -783,9 +783,9 @@ Use this structure:
 
 Separate the work into:
 
-P0 — Production blockers  
-P1 — Customer go-live requirements  
-P2 — Important improvements  
+P0 — Production blockers
+P1 — Customer go-live requirements
+P2 — Important improvements
 P3 — Optional future development
 
 For every item include:

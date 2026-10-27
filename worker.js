@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/preview/admin' || pathname.startsWith('/preview/admin/')) {
+    if (pathname === '/preview' || pathname.startsWith('/preview/') || pathname === '/pos/preview' || pathname.startsWith('/pos/preview/')) {
       return new Response('Not found', {
         status: 404,
         headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },

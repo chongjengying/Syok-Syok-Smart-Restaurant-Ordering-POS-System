@@ -9,7 +9,7 @@ directory = "./dist"
 binding = "ASSETS"
 run_worker_first = true
 # Hash-versioned assets must return 404 when stale. The application uses hash
-# routes, so the document fallback is not needed for client-side navigation.
+# routes. Preview URLs are explicitly rejected by the Worker.
 not_found_handling = "404-page"
 
 [env.staging]
