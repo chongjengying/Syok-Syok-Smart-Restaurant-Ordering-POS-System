@@ -4,7 +4,7 @@ import {
   getPaymentCapabilities,
   type PaymentRequest,
 } from '../_shared/paymentProviders.ts';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, OPTIONS');
@@ -24,12 +24,14 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !anonKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
 
   const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authorization } },
+    global: { headers: callerHeaders(request, authorization) },
     auth: { persistSession: false },
   });
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) return jsonResponse(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await supabase.from('profiles').select('role_name, status').eq('id', userData.user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role_name, status').eq('id', userData.user.id).maybeSingle();
+  const { data: terminalSession } = profile ? { data: null } : await supabase.rpc('current_terminal_staff_session');
+  const callerProfile = profile || (terminalSession?.id ? { role_name: terminalSession.role, status: 'ACTIVE' } : null);
   if (!callerProfile || callerProfile.status !== 'ACTIVE') {
     return jsonResponse(403, { error: 'An active staff profile is required.' });
   }
@@ -129,7 +131,8 @@ Deno.serve(async (request) => {
     )) } });
   }
 
-  if (!['ADMIN', 'MANAGER', 'CASHIER'].includes(callerProfile.role_name)) {
+  const { data: canUsePayments } = await supabase.rpc('has_pos_permission', { p_permission: 'payment.view' });
+  if (!canUsePayments) {
     return jsonResponse(403, {
       error: 'Cashier, manager or administrator access is required.',
       code: 'INSUFFICIENT_PERMISSION',
@@ -154,13 +157,23 @@ Deno.serve(async (request) => {
     const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    const amount = body.amount === undefined || body.amount === null ? null : Number(body.amount);
+    const items = Array.isArray(body.items) ? body.items : [];
     if (!orderId || reason.length < 3 || !idempotencyKey) {
       return jsonResponse(400, { error: 'orderId, reason and idempotencyKey are required.' });
+    }
+    if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+      return jsonResponse(400, { error: 'amount must be a positive number.', code: 'INVALID_REFUND_AMOUNT' });
+    }
+    if (items.some((item) => !item || typeof item !== 'object' || typeof item.orderItemId !== 'string' || !Number.isInteger(item.quantity) || item.quantity <= 0)) {
+      return jsonResponse(400, { error: 'items must contain valid order item IDs and quantities.', code: 'INVALID_REFUND_ITEMS' });
     }
     const { data, error } = await supabase.rpc('refund_pos_order', {
       p_order_id: orderId,
       p_reason: reason,
       p_idempotency_key: idempotencyKey,
+      p_amount: amount,
+      p_items: items,
     });
     if (error) {
       const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'REFUND_FAILED';
@@ -332,8 +345,8 @@ Deno.serve(async (request) => {
     return jsonResponse(code === 'ORDER_NOT_FOUND' ? 404 : code === 'INSUFFICIENT_PERMISSION' ? 403 : 409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
   }
 
-  const { data, error } = await supabase.rpc(
-    submitTakeaway ? 'complete_pos_takeaway_payment_and_submit' : 'complete_pos_payment', {
+  const completionFunction = submitTakeaway ? 'complete_pos_takeaway_payment_and_submit' : 'complete_pos_payment';
+  const completionArgs = {
     p_order_id: orderId,
     p_payment_method: method,
     p_requested_amount: finalAmount,
@@ -341,7 +354,13 @@ Deno.serve(async (request) => {
     p_provider_id: providerId || null,
     p_payment_reference: paymentReference || null,
     p_received_amount: receivedAmount,
-  });
+  };
+  let { data, error } = await supabase.rpc(completionFunction, completionArgs);
+  if (error && (error.code === '40P01' || error.message === 'ORDER_NOT_PAYABLE')) {
+    // A concurrent request with this key may have committed after this RPC's
+    // snapshot. Retry in a new transaction before recording a failed attempt.
+    ({ data, error } = await supabase.rpc(completionFunction, completionArgs));
+  }
   if (error) {
     const code = error.message.match(/[A-Z][A-Z_]+/)?.[0] || 'PAYMENT_COMPLETION_FAILED';
     const conflict = ['ORDER_ALREADY_PAID', 'PAYMENT_EXCEEDS_BALANCE', 'PAYMENT_AMOUNT_MISMATCH', 'ORDER_BRANCH_MISMATCH'].includes(code);

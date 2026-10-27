@@ -1,3 +1,4 @@
+import AccessibleDialog from './admin/AccessibleDialog';
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Trash2, Edit3, Plus, Minus, ChevronRight } from 'lucide-react';
 import { translate, translations } from '../utils/i18n';
@@ -184,7 +185,7 @@ export default function CartReviewScreen({
               cart.map((item, index) => (
                 <div
                   key={index}
-                  className="p-4 bg-[#F8F9FA] rounded-2xl border border-gray-200 flex items-center justify-between gap-4 hover:border-gray-300 transition-all"
+                  className="p-4 bg-[#F8F9FA] rounded-2xl border border-gray-200 flex flex-wrap items-center justify-between gap-4 hover:border-gray-300 transition-all"
                 >
                   {/* Dish Thumbnail Image */}
                   <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-200 shrink-0">
@@ -207,7 +208,7 @@ export default function CartReviewScreen({
                       {getDishName(item.dish)}
                     </h3>
                     {item.serviceMode === 'TAKEAWAY' && <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🥡 TAKEAWAY</span>}
-                    <p className="text-sm font-bold text-[#B8952B] mt-0.5">
+                    <p className="text-sm font-bold text-[#80600d] mt-0.5">
                       {formatMoney(item.finalPrice)} / unit
                     </p>
 
@@ -241,8 +242,9 @@ export default function CartReviewScreen({
                       {/* Stepper */}
                       <div className="flex items-center bg-white rounded-xl border border-gray-300 p-1 shadow-sm">
                         <button
+                          aria-label={`Decrease quantity: ${getDishName(item.dish)}`}
                           onClick={() => updateQuantity(index, -1)}
-                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-black font-bold cursor-pointer transition-all"
+                          className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-black font-bold cursor-pointer transition-all"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
@@ -250,8 +252,9 @@ export default function CartReviewScreen({
                           {item.quantity}
                         </span>
                         <button
+                          aria-label={`Increase quantity: ${getDishName(item.dish)}`}
                           onClick={() => updateQuantity(index, 1)}
-                          className="w-8 h-8 rounded-lg bg-[#D4AF37] hover:bg-[#B8952B] flex items-center justify-center text-black font-bold cursor-pointer transition-all"
+                          className="w-11 h-11 rounded-lg bg-[#D4AF37] hover:bg-[#B8952B] flex items-center justify-center text-black font-bold cursor-pointer transition-all"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -263,7 +266,7 @@ export default function CartReviewScreen({
                           soundFx.playTap();
                           onOpenCustomization(item.dish, item, index);
                         }}
-                        className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all cursor-pointer"
+                        className="min-h-11 min-w-11 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all cursor-pointer"
                         title={t.edit}
                       >
                         <Edit3 className="w-4 h-4" />
@@ -272,7 +275,7 @@ export default function CartReviewScreen({
                       {/* Delete Button */}
                       <button
                         onClick={() => removeItem(index)}
-                        className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-all cursor-pointer"
+                        className="min-h-11 min-w-11 p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-all cursor-pointer"
                         title={t.delete}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -312,7 +315,7 @@ export default function CartReviewScreen({
                 <span className="text-base font-extrabold text-[#121212] uppercase">
                   {t.total}
                 </span>
-                <span className="text-2xl font-black text-[#B8952B]">
+                <span className="text-2xl font-black text-[#80600d]">
                   {formatMoney(summaryTotals.total)}
                 </span>
               </div>
@@ -341,11 +344,11 @@ export default function CartReviewScreen({
           )}
           <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-xs font-black uppercase tracking-wider text-amber-900">Promotion / Voucher</p>
-            {voucher ? <div className="mt-2 flex items-center justify-between gap-3 text-sm"><div><strong>{voucher.code}</strong><span className="ml-2 text-emerald-700">-{formatMoney(voucher.discount)}</span></div><button disabled={voucherBusy} onClick={() => void removeVoucher()} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <div className="mt-3 flex gap-2"><button disabled={voucherBusy || !activeOrder?.id} onClick={() => setVoucherPickerOpen(true)} className="flex-1 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left text-sm font-bold">Select Voucher{availableVouchers.length ? ` · ${availableVouchers.length} available` : ''}</button><input value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} placeholder="Enter code" maxLength={60} className="w-28 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy || !activeOrder?.id} onClick={() => void applyVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>}
+            {voucher ? <div className="mt-2 flex items-center justify-between gap-3 text-sm"><div><strong>{voucher.code}</strong><span className="ml-2 text-emerald-700">-{formatMoney(voucher.discount)}</span></div><button disabled={voucherBusy} onClick={() => void removeVoucher()} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={voucherBusy || !activeOrder?.id} onClick={() => setVoucherPickerOpen(true)} className="flex-1 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left text-sm font-bold">Select Voucher{availableVouchers.length ? ` · ${availableVouchers.length} available` : ''}</button><input aria-label="Voucher code" value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} placeholder="Enter code" maxLength={60} className="w-28 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy || !activeOrder?.id} onClick={() => void applyVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>}
             {voucherMessage && <p role="status" className={`mt-2 text-xs font-semibold ${voucherMessage.includes('success') || voucherMessage === 'Voucher removed.' ? 'text-emerald-700' : 'text-red-700'}`}>{voucherMessage}</p>}
           </section>
           {voucher && activeOrder?.discount > 0 && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm"><div className="flex justify-between font-bold text-emerald-900"><span>Voucher {voucher.code}</span><span>-{formatMoney(activeOrder.discount)}</span></div><div className="mt-1 flex justify-between text-xs text-emerald-800"><span>Tax + service charge after voucher</span><span>{formatMoney(activeOrder.tax + activeOrder.serviceCharge)}</span></div></div>}
-          {voucherPickerOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-lg font-black">Vouchers for this order</h3><button onClick={() => setVoucherPickerOpen(false)}>✕</button></div><input autoFocus value={voucherSearch} onChange={(event) => setVoucherSearch(event.target.value)} placeholder="Search voucher code" className="mt-4 w-full rounded-xl border p-3"/><div className="mt-4 max-h-80 space-y-3 overflow-y-auto">{availableVouchers.map((entry) => <div key={entry.id} className="rounded-xl border p-3"><div className="flex justify-between"><strong>{entry.code}</strong><span>{entry.voucher_type === 'PERCENTAGE' ? `${entry.value}% OFF` : `RM ${entry.value} OFF`}</span></div><p className={`mt-1 text-xs font-semibold ${entry.status === 'AVAILABLE' ? 'text-emerald-700' : 'text-amber-700'}`}>{entry.statusLabel || entry.status}</p><p className="text-xs text-slate-500">{entry.customer_description || entry.description || 'Voucher'}</p><button disabled={entry.status !== 'AVAILABLE' || voucherBusy} className="mt-2 rounded-lg bg-[#121212] px-3 py-2 text-xs font-bold text-[#D4AF37] disabled:opacity-40" onClick={() => { setVoucherCode(entry.code); setVoucherPickerOpen(false); void applyVoucher(entry.code); }}>Apply</button></div>)}{!availableVouchers.length && <p className="py-6 text-center text-sm text-slate-500">No vouchers found.</p>}</div></div></div>}
+          {voucherPickerOpen && <AccessibleDialog title="Vouchers for this order" onClose={() => setVoucherPickerOpen(false)} className="max-w-lg"><div className="flex items-center justify-between"><h3 className="text-lg font-black">Vouchers for this order</h3><button aria-label="Close voucher picker" onClick={() => setVoucherPickerOpen(false)}>✕</button></div><input aria-label="Search voucher code" autoFocus value={voucherSearch} onChange={(event) => setVoucherSearch(event.target.value)} placeholder="Search voucher code" className="mt-4 w-full rounded-xl border p-3"/><div className="mt-4 max-h-80 space-y-3 overflow-y-auto">{availableVouchers.map((entry) => <div key={entry.id} className="rounded-xl border p-3"><div className="flex justify-between"><strong>{entry.code}</strong><span>{entry.voucher_type === 'PERCENTAGE' ? `${entry.value}% OFF` : `RM ${entry.value} OFF`}</span></div><p className={`mt-1 text-xs font-semibold ${entry.status === 'AVAILABLE' ? 'text-emerald-700' : 'text-amber-700'}`}>{entry.statusLabel || entry.status}</p><p className="text-xs text-slate-500">{entry.customer_description || entry.description || 'Voucher'}</p><button disabled={entry.status !== 'AVAILABLE' || voucherBusy} className="mt-2 rounded-lg bg-[#121212] px-3 py-2 text-xs font-bold text-[#D4AF37] disabled:opacity-40" onClick={() => { setVoucherCode(entry.code); setVoucherPickerOpen(false); void applyVoucher(entry.code); }}>Apply</button></div>)}{!availableVouchers.length && <p className="py-6 text-center text-sm text-slate-500">No vouchers found.</p>}</div></AccessibleDialog>}
           <button
             disabled={cart.length === 0}
             onClick={() => {

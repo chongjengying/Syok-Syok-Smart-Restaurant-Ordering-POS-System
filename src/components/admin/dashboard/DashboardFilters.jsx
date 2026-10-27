@@ -1,27 +1,155 @@
-import React from 'react';
-import { CalendarDays, Filter, X } from 'lucide-react';
+import React, { useState } from "react";
+import { CalendarDays, Filter, X } from "lucide-react";
 
-const presets=[['today','Today'],['yesterday','Yesterday'],['last7days','Last 7 Days'],['month','This Month'],['custom','Custom']];
+const presets = [
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
+  ["last7days", "Last 7 days"],
+  ["month", "This month"],
+  ["custom", "Custom"],
+];
 
-export default function DashboardFilters({ state, data }) {
-  const {filters,setFilter,setPreset}=state;
-  const options=data?.filterOptions||{};
-  const hasAdvanced=filters.diningMode||filters.paymentMethod||filters.paymentProviderId||filters.staffId||filters.branchId;
-  const clearAdvanced=()=>['diningMode','paymentMethod','paymentProviderId','staffId','branchId'].forEach(key=>setFilter(key,''));
-  return <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" aria-label="Dashboard filters">
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><CalendarDays size={16}/>Period</span>
-      {presets.map(([id,label])=><button key={id} onClick={()=>setPreset(id)} className={`rounded-lg px-3 py-2 text-xs font-bold ${filters.preset===id?'bg-slate-950 text-white':'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{label}</button>)}
-      {filters.preset==='custom'&&<><input aria-label="From date" type="date" value={filters.dateFrom} max={filters.dateTo} onChange={e=>setFilter('dateFrom',e.target.value)} className="rounded-lg border px-3 py-1.5 text-xs"/><span className="text-xs text-slate-400">to</span><input aria-label="To date" type="date" value={filters.dateTo} min={filters.dateFrom} onChange={e=>setFilter('dateTo',e.target.value)} className="rounded-lg border px-3 py-1.5 text-xs"/></>}
-    </div>
-    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-      <span className="mr-1 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Filter size={15}/>Scope</span>
-      <select aria-label="Branch" value={filters.branchId} onChange={e=>setFilter('branchId',e.target.value)} className="rounded-lg border bg-white px-3 py-2 text-xs"><option value="">All branches</option>{(options.branches||[]).map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</select>
-      <select aria-label="Order type" value={filters.diningMode} onChange={e=>setFilter('diningMode',e.target.value)} className="rounded-lg border bg-white px-3 py-2 text-xs"><option value="">All order types</option><option value="dine-in">Dine-in</option><option value="takeaway">Takeaway</option></select>
-      <select aria-label="Payment method" value={filters.paymentMethod} onChange={e=>setFilter('paymentMethod',e.target.value)} className="rounded-lg border bg-white px-3 py-2 text-xs"><option value="">All payment methods</option>{['CASH','QR','CARD','EWALLET'].map(method=><option key={method}>{method}</option>)}</select>
-      <select aria-label="Payment provider" value={filters.paymentProviderId} onChange={e=>setFilter('paymentProviderId',e.target.value)} className="rounded-lg border bg-white px-3 py-2 text-xs"><option value="">All providers</option>{(options.paymentProviders||[]).map(provider=><option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>)}</select>
-      {data?.access?.staffPerformance&&<select aria-label="Staff" value={filters.staffId} onChange={e=>setFilter('staffId',e.target.value)} className="rounded-lg border bg-white px-3 py-2 text-xs"><option value="">All staff</option>{(options.staff||[]).map(staff=><option key={staff.id} value={staff.id}>{staff.name} · {staff.role}</option>)}</select>}
-      {hasAdvanced&&<button onClick={clearAdvanced} className="flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold text-red-600 hover:bg-red-50"><X size={14}/>Clear scope</button>}
-    </div>
-  </section>;
+export default function DashboardFilters({ state, data, showBranch = true }) {
+  const [expanded, setExpanded] = useState(false);
+  const { filters, setFilter, setPreset } = state;
+  const options = data?.filterOptions || {};
+  const keys = [
+    "diningMode",
+    "paymentMethod",
+    "paymentProviderId",
+    "staffId",
+    ...(showBranch ? ["branchId"] : []),
+  ];
+  const activeCount = keys.filter((key) => filters[key]).length;
+  return (
+    <section
+      className="admin-surface admin-dashboard-filters"
+      aria-label="Dashboard filters"
+    >
+      <div className="admin-period-filters">
+        <span>
+          <CalendarDays size={15} aria-hidden="true" />
+          Period
+        </span>
+        {presets.map(([id, label]) => (
+          <button
+            type="button"
+            aria-pressed={filters.preset === id}
+            key={id}
+            onClick={() => setPreset(id)}
+            className={`admin-filter-preset ${filters.preset === id ? "is-active" : ""}`}
+          >
+            {label}
+          </button>
+        ))}
+        {filters.preset === "custom" && (
+          <div className="admin-custom-dates">
+            <input
+              aria-label="From date"
+              type="date"
+              value={filters.dateFrom}
+              max={filters.dateTo}
+              onChange={(event) => setFilter("dateFrom", event.target.value)}
+            />
+            <span>to</span>
+            <input
+              aria-label="To date"
+              type="date"
+              value={filters.dateTo}
+              min={filters.dateFrom}
+              onChange={(event) => setFilter("dateTo", event.target.value)}
+            />
+          </div>
+        )}
+        <button
+          type="button"
+          className="admin-button admin-button-secondary admin-more-filters"
+          aria-expanded={expanded}
+          aria-controls="admin-dashboard-advanced-filters"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Filter size={14} />
+          Filters{activeCount ? ` (${activeCount})` : ""}
+        </button>
+      </div>
+      {expanded && (
+        <div
+          id="admin-dashboard-advanced-filters"
+          className="admin-advanced-filters"
+        >
+          {showBranch && (
+            <select
+              aria-label="Branch"
+              value={filters.branchId}
+              onChange={(event) => setFilter("branchId", event.target.value)}
+            >
+              <option value="">All branches</option>
+              {(options.branches || []).map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            aria-label="Order type"
+            value={filters.diningMode}
+            onChange={(event) => setFilter("diningMode", event.target.value)}
+          >
+            <option value="">All order types</option>
+            <option value="dine-in">Dine-in</option>
+            <option value="takeaway">Takeaway</option>
+          </select>
+          <select
+            aria-label="Payment method"
+            value={filters.paymentMethod}
+            onChange={(event) => setFilter("paymentMethod", event.target.value)}
+          >
+            <option value="">All payment methods</option>
+            {["CASH", "QR", "CARD", "EWALLET"].map((method) => (
+              <option key={method}>{method}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Payment provider"
+            value={filters.paymentProviderId}
+            onChange={(event) =>
+              setFilter("paymentProviderId", event.target.value)
+            }
+          >
+            <option value="">All providers</option>
+            {(options.paymentProviders || []).map((provider) => (
+              <option key={provider.providerId} value={provider.providerId}>
+                {provider.displayName}
+              </option>
+            ))}
+          </select>
+          {data?.access?.staffPerformance && (
+            <select
+              aria-label="Staff"
+              value={filters.staffId}
+              onChange={(event) => setFilter("staffId", event.target.value)}
+            >
+              <option value="">All staff</option>
+              {(options.staff || []).map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.name} · {staff.role}
+                </option>
+              ))}
+            </select>
+          )}
+          {activeCount > 0 && (
+            <button
+              type="button"
+              className="admin-text-link"
+              onClick={() => keys.forEach((key) => setFilter(key, ""))}
+            >
+              <X size={14} />
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }

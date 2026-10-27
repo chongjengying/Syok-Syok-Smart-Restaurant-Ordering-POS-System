@@ -1,20 +1,39 @@
 import { accountSupabase, operatorSupabase, supabase, setOperatorMode, isOperatorMode } from '../infrastructure/supabase/client';
-// Kept only for Admin terminal-registration UI compatibility. It is not used
-// for operational authentication, which is bound to pos_terminals.auth_user_id.
+export { storeDeviceCredential, clearDeviceCredential } from '../infrastructure/supabase/deviceCredential';
+// Physical identity and the secret device proof are distinct after activation.
 const deviceKey = 'pos.registered-device.v1';
 export function getDeviceIdentifier() {
   let id = globalThis.localStorage.getItem(deviceKey);
-  if (!id) { id = crypto.randomUUID() + crypto.randomUUID(); globalThis.localStorage.setItem(deviceKey, id); }
+  if (!id || id.length < 32) {
+    id = crypto.randomUUID() + crypto.randomUUID();
+    globalThis.localStorage.setItem(deviceKey, id);
+  }
   return id;
 }
-export async function resolveTerminal() {
-  return accountSupabase.rpc('resolve_authenticated_terminal');
+export function getDeviceDisplayName() {
+  const nav = globalThis.navigator;
+  const agent = String(nav?.userAgent || '');
+  const browser = agent.includes('Edg/') ? 'Edge'
+    : agent.includes('Firefox/') ? 'Firefox'
+      : agent.includes('Chrome/') ? 'Chrome'
+        : agent.includes('Safari/') ? 'Safari'
+          : 'Browser';
+  const platform = nav?.userAgentData?.platform || (agent.includes('Mac OS') ? 'macOS'
+    : agent.includes('Windows') ? 'Windows'
+      : agent.includes('Android') ? 'Android'
+        : /iPhone|iPad/.test(agent) ? 'iOS'
+          : nav?.platform || 'Device');
+  return `${browser} / ${platform}`.slice(0, 120);
 }
-export async function endOperatorSession() {
+export async function resolveTerminal() {
+  return accountSupabase.rpc('resolve_authenticated_terminal', { p_device_identifier: getDeviceIdentifier() });
+}
+export async function endOperatorSession({ handoff = false } = {}) {
   if (isOperatorMode()) {
-    const result = await operatorSupabase.rpc('end_terminal_staff_session');
+    const result = await operatorSupabase.rpc(handoff ? 'switch_terminal_staff_session' : 'end_terminal_staff_session');
     if (result.error) return result;
-    await operatorSupabase.auth.signOut({ scope: 'local' });
+    // Both clients currently hold the terminal JWT. Revoking it would also log out the device.
+    await operatorSupabase.auth.stopAutoRefresh();
   }
   setOperatorMode(false);
   return { error: null };

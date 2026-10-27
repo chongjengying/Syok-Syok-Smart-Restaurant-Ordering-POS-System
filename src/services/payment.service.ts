@@ -102,11 +102,11 @@ export function processBillPayment(billId: string, payments: Array<{ method: str
   return submitBillPayment(billId, payments, idempotencyKey);
 }
 
-export function refundOrder(orderId: string, reason: string, idempotencyKey: string) {
+export function refundOrder(orderId: string, reason: string, idempotencyKey: string, amount?: number | null, items: Array<{ orderItemId: string; quantity: number }> = []) {
   if (!orderId || typeof reason !== 'string' || reason.trim().length < 3 || !idempotencyKey) {
     return Promise.resolve({ data: null, error: new Error('Refund details are incomplete.') });
   }
-  return submitRefund(orderId, reason.trim(), idempotencyKey);
+  return submitRefund(orderId, reason.trim(), idempotencyKey, amount, items);
 }
 
 export function voidPayment(paymentId: string, reason: string, idempotencyKey = crypto.randomUUID()) {

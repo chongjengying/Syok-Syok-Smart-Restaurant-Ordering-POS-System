@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Wifi, Battery, LogOut, Maximize2, User, UsersRound } from 'lucide-react';
+import React, { useState, useEffect, useId } from 'react';
+import { Wifi, LogOut, User, UsersRound, ArrowLeftRight, Clock } from 'lucide-react';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 import { env } from '../config/env';
 
-export default function IpadShell({ children, deviceMode, setDeviceMode, isOnline, onLogout, onLock = onLogout, onSwitchStaff, userEmail, onOpenProfile, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
+export default function IpadShell({ children, isOnline, onLogout, onLock = onLogout, onSwitchStaff, onChangeTerminal, userEmail, onOpenProfile, terminalContext, staffName, shiftStatus, onCurrentShift, lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES }) {
   const tr = (key) => translate(lang, key);
   const [time, setTime] = useState('');
+  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
+  const sessionActionsId = useId();
+  const adminWorkspace = globalThis.location?.pathname === '/admin' || globalThis.location?.hash?.startsWith('#admin/');
 
   useEffect(() => {
     const updateTime = () => {
@@ -18,99 +21,20 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-2 sm:p-4 text-white overflow-hidden select-none">
-      {/* Top Device Bar Mode Selector Controls */}
-      <div className="mb-3 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#1A1A1E] px-2 py-2 text-[10px] shadow-lg z-50 sm:gap-3 sm:rounded-full sm:px-4 sm:text-xs">
-        <span className="text-gray-400 font-medium">{tr('canvasMode')}</span>
-        <span className={`rounded-full border px-2.5 py-1 font-black uppercase tracking-wide ${
-          env.appEnv === 'staging'
-            ? 'border-amber-700/60 bg-amber-950 text-amber-300'
-            : 'border-sky-700/60 bg-sky-950 text-sky-300'
-        }`}>
-          {env.appEnv}
-        </span>
-        <button
-          onClick={() => setDeviceMode('11inch')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer font-medium ${
-            deviceMode === '11inch' ? 'bg-[#D4AF37] text-black font-bold shadow' : 'bg-white/5 text-gray-300 hover:bg-white/10'
-          }`}
-        >
-          <TabletIcon className="w-3.5 h-3.5" />
-          iPad 11" (1194×834pt)
-        </button>
-        <button
-          onClick={() => setDeviceMode('129inch')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer font-medium ${
-            deviceMode === '129inch' ? 'bg-[#D4AF37] text-black font-bold shadow' : 'bg-white/5 text-gray-300 hover:bg-white/10'
-          }`}
-        >
-          <TabletIcon className="w-4 h-4" />
-          iPad Pro 12.9" (1366×1024pt)
-        </button>
-        <button
-          onClick={() => setDeviceMode('fullscreen')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer font-medium ${
-            deviceMode === 'fullscreen' ? 'bg-[#D4AF37] text-black font-bold shadow' : 'bg-white/5 text-gray-300 hover:bg-white/10'
-          }`}
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-          Fullscreen Responsive
-        </button>
-
-        {/* Network Status Badge */}
-        <div className="h-4 w-px bg-white/20 mx-1" />
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold ${
-          isOnline ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' : 'bg-amber-950 text-amber-400 border border-amber-800/50'
-        }`}>
-          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-          {isOnline ? `🟢 ${tr('onlineStatus')}` : `🟠 ${tr('offlineStatus')}`}
-        </div>
-        {setLang && (
-          <>
-            <div className="h-4 w-px bg-white/20 mx-1" />
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 p-1">
-              {SUPPORTED_LANGUAGES.filter((code) => enabledLanguages.includes(code)).map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setLang(code)}
-                  className={`rounded-full px-3 py-1 font-semibold transition-all ${
-                    lang === code ? 'bg-[#D4AF37] text-black' : 'text-gray-300 hover:bg-white/10 hover:text-white'
-                  }`}
-                  title={LANGUAGE_LABELS[code]}
-                >
-                  {code === 'zh' ? '简' : code.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* iPad Outer Bezel & Canvas Frame */}
-      <div
-        className={`relative flex flex-col transition-all duration-300 overflow-hidden bg-[#F8F9FA] text-[#121212] ${
-          deviceMode === '11inch'
-            ? 'w-[calc(100vw-1rem)] h-[calc(100vh-5rem)] max-w-[1194px] max-h-[834px] aspect-[1194/834] rounded-[24px] sm:rounded-[36px] border-8 sm:border-[14px] border-[#1C1C1E] shadow-[0_25px_60px_rgba(0,0,0,0.8)]'
-            : deviceMode === '129inch'
-            ? 'w-[calc(100vw-1rem)] h-[calc(100vh-5rem)] max-w-[1366px] max-h-[1024px] aspect-[1366/1024] rounded-[28px] sm:rounded-[42px] border-8 sm:border-[16px] border-[#1C1C1E] shadow-[0_30px_70px_rgba(0,0,0,0.9)]'
-            : 'w-full max-w-[1400px] h-[92vh] rounded-2xl border-4 border-[#1C1C1E] shadow-2xl'
-        }`}
-      >
-        {/* iOS iPad Status Bar Header */}
-        <div className="h-8 bg-[#121212] text-white px-6 flex items-center justify-between text-xs font-semibold tracking-wide shrink-0 z-40 select-none">
+    <div className="h-dvh w-full overflow-hidden text-slate-900">
+      <div className={`pos-workspace ${adminWorkspace ? 'pos-admin-workspace' : ''} flex h-dvh w-full min-h-0 flex-col overflow-hidden bg-[#F5F6F8] text-[#18181B]`}>
+        {/* Operational context and session actions */}
+        <div className={`pos-workspace-toolbar ${adminWorkspace ? 'admin-context-toolbar' : 'bg-[#18181B]'} text-white px-3 py-2 flex flex-wrap gap-2 items-center justify-between text-xs font-semibold shrink-0 z-40`}>
           <div className="flex items-center gap-2">
-            <span>{time}</span>
-            <span className="text-[10px] text-gray-400 font-normal">{tr('landscapeMode')}</span>
+            <span className="hidden sm:inline">{time}</span>
+            <span className="rounded border border-white/20 px-2 py-1 text-xs text-slate-300">{env.appEnv}</span>
           </div>
 
-          {/* iPad Top Camera Notch Dot */}
-          <div className="w-3 h-3 bg-black rounded-full border border-gray-800 flex items-center justify-center">
-            <div className="w-1 h-1 bg-blue-900/60 rounded-full" />
-          </div>
-
-          <div className="flex items-center gap-3">
-            {userEmail && onLogout && (
+          <div className="flex flex-wrap items-center gap-2">
+            {(onCurrentShift || onLogout) && <button type="button" className="md:hidden rounded-lg border border-white/20" aria-expanded={sessionActionsOpen} aria-controls={sessionActionsId} onClick={() => setSessionActionsOpen((open) => !open)}>Session actions</button>}
+            <div id={sessionActionsId} className={`${sessionActionsOpen ? 'flex' : 'hidden'} order-last w-full flex-wrap items-center gap-2 md:order-none md:flex md:w-auto`}>
+            {onCurrentShift && <button type="button" title="Current Shift" aria-label="Current Shift" onClick={onCurrentShift} className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-300 hover:bg-white/10 hover:text-white"><Clock size={16}/> Current Shift</button>}
+            {onLogout && (userEmail || onChangeTerminal || onSwitchStaff) && (
               <>
                 {onOpenProfile && (
                   <>
@@ -125,9 +49,7 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                     <div className="h-3 w-px bg-white/20" />
                   </>
                 )}
-                <span className="text-[10px] text-gray-400 font-medium truncate max-w-[160px]">
-                  {userEmail}
-                </span>
+                {userEmail && <span className="text-[10px] text-gray-400 font-medium truncate max-w-[160px]">{userEmail}</span>}
                 {onSwitchStaff && (
                   <button
                     type="button"
@@ -141,10 +63,21 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                     Switch Staff
                   </button>
                 )}
+                {onChangeTerminal && (
+                  <button
+                    type="button"
+                    onClick={onChangeTerminal}
+                    className="flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Use an activation code to change this device terminal"
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    Change Terminal
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm('Log out of the terminal? Any unsent order changes may be discarded.')) onLogout();
+                    if (window.confirm('Sign out? Any unsent order changes may be discarded.')) onLogout();
                   }}
                   className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-100"
                   title={tr('logout')}
@@ -166,33 +99,20 @@ export default function IpadShell({ children, deviceMode, setDeviceMode, isOnlin
                 <div className="h-3 w-px bg-white/20" />
               </>
             )}
-            <Wifi className="w-3.5 h-3.5 text-gray-200" />
-            <div className="flex items-center gap-1 text-[11px]">
-              <span>100%</span>
-              <Battery className="w-4 h-4 text-emerald-400 fill-emerald-400" />
             </div>
+            <span role="status" className={`flex items-center gap-2 px-2 ${isOnline ? 'text-emerald-300' : 'text-amber-300'}`}><Wifi size={16}/>{isOnline ? tr('onlineStatus') : tr('offlineStatus')}</span>
+            {setLang && <select aria-label="Language" value={lang} onChange={(event) => setLang(event.target.value)} className="min-h-11 rounded-lg border border-white/20 bg-[#18181B] px-2 text-white">{SUPPORTED_LANGUAGES.filter((code) => enabledLanguages.includes(code)).map((code) => <option key={code} value={code}>{LANGUAGE_LABELS[code]}</option>)}</select>}
           </div>
         </div>
+        {terminalContext?.terminalId && <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-700"><span className="min-w-0 break-words"><strong>{terminalContext.branchName}</strong> · {terminalContext.terminalName} <span className="font-mono">{terminalContext.terminalCode}</span></span><span className="break-words">{staffName} · {shiftStatus}</span></div>}
 
-        {/* Main Tablet Screen App Content Area */}
-        <div className="flex-1 relative overflow-hidden flex flex-col bg-[#F8F9FA]">
+        {/* Application workspace */}
+        <div className="min-h-0 flex-1 relative overflow-hidden flex flex-col bg-[#F8F9FA]">
           {children}
         </div>
 
-        {/* iPad Home Indicator Bar */}
-        <div className="h-4 bg-[#121212] flex items-center justify-center shrink-0 z-40">
-          <div className="w-36 h-1 bg-white/40 rounded-full" />
-        </div>
+
       </div>
     </div>
-  );
-}
-
-function TabletIcon(props) {
-  return (
-    <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="18" cy="12" r="0.75" fill="currentColor" />
-    </svg>
   );
 }

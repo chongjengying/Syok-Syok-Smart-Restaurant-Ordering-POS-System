@@ -22,8 +22,8 @@ export function getCurrentLanguage() {
 export const translations = {
   en: {
     // Welcome Screen
-    welcomeTitle: "Experience Fine Dining at Your Fingertips",
-    welcomeSubtitle: "Handcrafted Culinary Excellence & Seamless iPad Ordering",
+    welcomeTitle: "Ready for service",
+    welcomeSubtitle: "Choose an operation to begin.",
     startOrder: "START ORDER",
     language: "Language",
     
@@ -105,15 +105,15 @@ export const translations = {
     done: "DONE / NEW ORDER",
     
     // PWA & Network Status
-    onlineStatus: "Online - Kitchen Connected",
-    offlineStatus: "Offline Mode - Orders Queued Locally",
+    onlineStatus: "Online",
+    offlineStatus: "Offline",
     installPwa: "Install iPad POS App"
   },
   
   zh: {
     // Welcome Screen
-    welcomeTitle: "指尖上的臻致餐饮体验",
-    welcomeSubtitle: "匠心烹饪美馔 · iPad 极速自主点餐",
+    welcomeTitle: "准备开始营业",
+    welcomeSubtitle: "请选择需要执行的操作。",
     startOrder: "开始点餐",
     language: "语言",
     
@@ -195,15 +195,15 @@ export const translations = {
     done: "完成 / 新订单",
     
     // PWA & Network Status
-    onlineStatus: "在线 - 厨房实时联网",
-    offlineStatus: "离线模式 - 订单本地暂存",
+    onlineStatus: "在线",
+    offlineStatus: "离线",
     installPwa: "安装 iPad POS 应用"
   },
   
   ms: {
     // Welcome Screen
-    welcomeTitle: "Pengalaman Makanan Mewah di Hujung Jari Anda",
-    welcomeSubtitle: "Kelezatan Seni Kulinari & Pesanan iPad Terpantas",
+    welcomeTitle: "Sedia untuk berkhidmat",
+    welcomeSubtitle: "Pilih operasi untuk bermula.",
     startOrder: "MULA PESANAN",
     language: "Bahasa",
     
@@ -285,8 +285,8 @@ export const translations = {
     done: "SELESAI / PESANAN BARU",
     
     // PWA & Network Status
-    onlineStatus: "Dalam Talian - Dapur Terhubung",
-    offlineStatus: "Mod Luar Talian - Pesanan Disimpan Lokal",
+    onlineStatus: "Dalam Talian",
+    offlineStatus: "Luar Talian",
     installPwa: "Pasang Aplikasi iPad POS"
   }
 };
@@ -419,7 +419,7 @@ Object.assign(translations.en, {
   currentSubmittedOrderLocked: 'The current submitted order must remain on its existing table. Reopen that table to add items.', selectTableBeforeContinuing: 'Select a table before continuing.',
   tableUnavailableForOrdering: 'This table is not available for ordering.', paymentRoleRequired: 'A cashier, manager or administrator must complete payment.',
   noActiveProgressOrder: 'This table does not have an active order in progress to check.', qrPayment: 'QR Payment', ewalletPayment: 'E-Wallet',
-  terminalBadge: 'Fine Dining POS PWA', appBrand: 'AURA POS', appBrandSubtitle: 'Fine Dining', footerVersion: 'Table Service iPad POS v2.4 • Smart Fine Dining',
+  terminalBadge: 'Restaurant POS', appBrand: 'AURA POS', appBrandSubtitle: 'Fine Dining', footerVersion: 'Restaurant POS',
   footerKitchenConnected: 'Kitchen Live Connected', footerTouchOptimized: 'Touch Screen Optimized (48pt+)', unpaidOrderAction: 'Unpaid Orders', salesReports: 'Sales Reports',
   transactionDetails: 'Transaction Details', transactionLoadFailed: 'Unable to load transaction details.', actions: 'Actions', view: 'View', close: 'Close', status: 'Status', items: 'Items',
   dailySalesSummary: 'Daily Sales Summary', productSalesReport: 'Product Sales Report', productReportDateHelp: 'Required date range · finalized paid orders by Malaysia business date', dailyReportDateHelp: 'Payment transactions within the selected date range', productsSold: 'Products Sold', unitsSold: 'Units Sold', productGrossSales: 'Product Gross Sales', loadingProductReport: 'Loading product sales report...', noProductSales: 'No finalized product sales were found for this date range.', productCode: 'Product Code', product: 'Product', category: 'Category', quantitySold: 'Quantity Sold', orderCount: 'Order Count', averagePrice: 'Average Price', grossSales: 'Gross Sales',
@@ -431,7 +431,7 @@ Object.assign(translations.zh, {
   paidStatusLine: '已付款 · {status}', notePrefix: '备注：{note}', sentAt: '已发送 {date}', loadingBackendOrder: '正在从后端加载已保存订单...', backendRefreshFailed: '订单已提交，但无法刷新最新后端详情。', backendOrderSynced: '已从后端同步订单',
   dineInDraftPaymentWarning: '堂食草稿商品必须先提交后才能付款。', orderNotPayableState: '此订单当前状态无法付款：{status} / {paymentStatus}。', currentSubmittedOrderLocked: '当前已提交订单必须保留在原餐桌。请重新打开该桌以加单。', selectTableBeforeContinuing: '请先选择餐桌。',
   tableUnavailableForOrdering: '此餐桌当前不可下单。', paymentRoleRequired: '必须由收银员、经理或管理员完成付款。', noActiveProgressOrder: '此餐桌目前没有可查看进度的进行中订单。', qrPayment: '二维码支付', ewalletPayment: '电子钱包',
-  terminalBadge: '精品餐饮 POS PWA', appBrand: 'AURA POS', appBrandSubtitle: '精品餐饮', footerVersion: '餐桌服务 iPad POS v2.4 • 智能精品餐饮', footerKitchenConnected: '厨房实时连接', footerTouchOptimized: '触控优化（48pt+）', unpaidOrderAction: '未付款订单', salesReports: '销售报表',
+  terminalBadge: '餐厅 POS', appBrand: 'AURA POS', appBrandSubtitle: '精品餐饮', footerVersion: '餐厅 POS', footerKitchenConnected: '厨房实时连接', footerTouchOptimized: '触控优化（48pt+）', unpaidOrderAction: '未付款订单', salesReports: '销售报表',
   transactionDetails: '交易详情', transactionLoadFailed: '无法加载交易详情。', actions: '操作', view: '查看', close: '关闭', status: '状态', items: '商品',
   dailySalesSummary: '每日销售摘要', productSalesReport: '商品销售报表', productReportDateHelp: '必须选择日期范围 · 按马来西亚营业日统计已完成付款订单', dailyReportDateHelp: '所选日期范围内的付款交易', productsSold: '已售商品种类', unitsSold: '售出数量', productGrossSales: '商品销售总额', loadingProductReport: '正在加载商品销售报表…', noProductSales: '此日期范围内没有已完成的商品销售。', productCode: '商品编号', product: '商品', category: '分类', quantitySold: '售出数量', orderCount: '订单数量', averagePrice: '平均价格', grossSales: '销售总额',
   splitBill: '拆分账单', configureSplit: '配置拆单', splitEqually: '平均拆分', splitByItem: '按商品拆分', numberOfBills: '账单数量', bill: '账单', createBills: '创建账单', selectBill: '选择账单', mixedPayment: '混合付款', remainingAmount: '剩余金额', paid: '已付款', paymentExceedsBalance: '付款金额不能超过剩余余额。',
@@ -443,7 +443,7 @@ Object.assign(translations.ms, {
   paidStatusLine: 'dibayar · {status}', notePrefix: 'Nota: {note}', sentAt: 'Dihantar {date}', loadingBackendOrder: 'Memuatkan pesanan tersimpan dari backend...', backendRefreshFailed: 'Pesanan telah dibuat, tetapi butiran backend terkini tidak dapat dimuat semula.', backendOrderSynced: 'Pesanan tersimpan diselaraskan dari backend',
   dineInDraftPaymentWarning: 'Item draf makan di sini mesti dihantar sebelum bayaran.', orderNotPayableState: 'Pesanan ini tidak boleh dibayar dalam keadaan semasa: {status} / {paymentStatus}.', currentSubmittedOrderLocked: 'Pesanan yang telah dihantar mesti kekal pada meja asal. Buka semula meja itu untuk menambah item.', selectTableBeforeContinuing: 'Pilih meja sebelum meneruskan.',
   tableUnavailableForOrdering: 'Meja ini tidak tersedia untuk pesanan.', paymentRoleRequired: 'Juruwang, pengurus atau pentadbir mesti melengkapkan bayaran.', noActiveProgressOrder: 'Meja ini tidak mempunyai pesanan aktif yang sedang berjalan untuk diperiksa.', qrPayment: 'Bayaran QR', ewalletPayment: 'E-Dompet',
-  terminalBadge: 'POS Santapan Mewah PWA', appBrand: 'AURA POS', appBrandSubtitle: 'Santapan Mewah', footerVersion: 'iPad POS Servis Meja v2.4 • Santapan Pintar', footerKitchenConnected: 'Dapur Bersambung Langsung', footerTouchOptimized: 'Dioptimumkan untuk Sentuhan (48pt+)', unpaidOrderAction: 'Pesanan Belum Dibayar', salesReports: 'Laporan Jualan',
+  terminalBadge: 'POS Restoran', appBrand: 'AURA POS', appBrandSubtitle: 'Santapan Mewah', footerVersion: 'POS Restoran', footerKitchenConnected: 'Dapur Bersambung Langsung', footerTouchOptimized: 'Dioptimumkan untuk Sentuhan (48pt+)', unpaidOrderAction: 'Pesanan Belum Dibayar', salesReports: 'Laporan Jualan',
   transactionDetails: 'Butiran Transaksi', transactionLoadFailed: 'Tidak dapat memuatkan butiran transaksi.', actions: 'Tindakan', view: 'Lihat', close: 'Tutup', status: 'Status', items: 'Item',
   dailySalesSummary: 'Ringkasan Jualan Harian', productSalesReport: 'Laporan Jualan Produk', productReportDateHelp: 'Julat tarikh diperlukan · pesanan berbayar muktamad mengikut hari perniagaan Malaysia', dailyReportDateHelp: 'Transaksi bayaran dalam julat tarikh dipilih', productsSold: 'Produk Terjual', unitsSold: 'Unit Terjual', productGrossSales: 'Jualan Kasar Produk', loadingProductReport: 'Memuatkan laporan jualan produk...', noProductSales: 'Tiada jualan produk muktamad untuk julat tarikh ini.', productCode: 'Kod Produk', product: 'Produk', category: 'Kategori', quantitySold: 'Kuantiti Terjual', orderCount: 'Bilangan Pesanan', averagePrice: 'Harga Purata', grossSales: 'Jualan Kasar',
   splitBill: 'Pecah Bil', configureSplit: 'Konfigurasi Pecahan', splitEqually: 'Pecah Sama Rata', splitByItem: 'Pecah Mengikut Item', numberOfBills: 'Bilangan Bil', bill: 'Bil', createBills: 'Cipta Bil', selectBill: 'Pilih Bil', mixedPayment: 'Bayaran Campuran', remainingAmount: 'Baki', paid: 'Dibayar', paymentExceedsBalance: 'Bayaran tidak boleh melebihi baki.',

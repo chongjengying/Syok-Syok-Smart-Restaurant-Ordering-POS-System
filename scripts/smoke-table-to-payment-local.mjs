@@ -16,14 +16,15 @@ async function request(path, { body, method = body ? 'POST' : 'GET', service = f
   return data;
 }
 const suffix = crypto.randomUUID().slice(0, 8);
-const [branch] = await request('/rest/v1/branches?code=eq.MAIN&select=id', { service: true });
-assert.ok(branch?.id, 'Seeded MAIN branch required');
+const [branch] = await request('/rest/v1/branches?status=eq.ACTIVE&select=id,company_id&order=created_at.asc&limit=1', { service: true });
+assert.ok(branch?.id, 'An active local branch is required');
 const auth = await request('/auth/v1/signup', { body: { email: `flow-${suffix}@example.com`, password: `Flow-${suffix}-Pass!` } });
-await request(`/rest/v1/profiles?id=eq.${auth.user.id}`, { method: 'PATCH', service: true, body: { role_name: 'ADMIN', status: 'ACTIVE', branch_id: branch.id } });
+const [adminRole] = await request('/rest/v1/roles?name=eq.ADMIN&select=id', { service: true });
+await request(`/rest/v1/profiles?id=eq.${auth.user.id}`, { method: 'PATCH', service: true, body: { role_id: adminRole.id, role_name: 'ADMIN', status: 'ACTIVE', branch_id: branch.id, default_branch_id: branch.id } });
 token = auth.access_token;
 await bindTestTerminal({ status, userId: auth.user.id, accessToken: token, branchId: branch.id });
-const [category] = await request('/rest/v1/categories', { service: true, expected: 201, body: { name: `Flow ${suffix}` } });
-const [product] = await request('/rest/v1/products', { service: true, expected: 201, body: { category_id: category.id, product_name: `Flow Meal ${suffix}`, sell_price: 12, cost_price: 3, status: true, is_available: true } });
+const [category] = await request('/rest/v1/categories', { service: true, expected: 201, body: { name: `Flow ${suffix}`, company_id: branch.company_id, branch_id: branch.id } });
+const [product] = await request('/rest/v1/products', { service: true, expected: 201, body: { category_id: category.id, company_id: branch.company_id, branch_id: branch.id, product_name: `Flow Meal ${suffix}`, sell_price: 12, cost_price: 3, status: true, is_available: true } });
 const [table] = await request('/rest/v1/restaurant_tables', { service: true, expected: 201, body: { branch_id: branch.id, table_number: `F-${suffix}`, capacity: 4, area: 'Flow Test', status: 'AVAILABLE', is_active: true } });
 const [destination] = await request('/rest/v1/restaurant_tables', { service: true, expected: 201, body: { branch_id: branch.id, table_number: `F-D-${suffix}`, capacity: 4, area: 'Flow Test', status: 'AVAILABLE', is_active: true } });
 const created = await request('/functions/v1/orders', { expected: 201, body: { draft: true, diningMode: 'dine-in', tableId: table.id, idempotencyKey: `draft-${suffix}` } });

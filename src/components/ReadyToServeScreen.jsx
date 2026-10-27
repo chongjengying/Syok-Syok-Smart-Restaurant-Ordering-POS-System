@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, BellRing, Clock, Loader2, RefreshCw, UtensilsCrossed } from 'lucide-react';
 import { useReadyToServeOrders } from '../hooks/useReadyToServeOrders';
 import { serveReadyOrder } from '../services/serving.service';
@@ -10,38 +10,46 @@ export default function ReadyToServeScreen({ onBack, lang = 'en' }) {
   const { orders, isLoading, error, refresh } = useReadyToServeOrders(true);
   const [servingId, setServingId] = useState(null);
   const [actionError, setActionError] = useState('');
+  const serving = useRef(false);
   const sortedOrders = useMemo(
     () => [...orders].sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
     [orders],
   );
 
   const serve = async (orderId) => {
-    if (servingId) return;
+    if (serving.current) return;
+    serving.current = true;
     setServingId(orderId);
     setActionError('');
-    const result = await serveReadyOrder(orderId);
-    if (result.error) setActionError(getUserErrorMessage(result.error, 'Unable to mark this order as served.'));
-    else await refresh({ silent: true });
-    setServingId(null);
+    try {
+      const result = await serveReadyOrder(orderId);
+      if (result.error) setActionError(getUserErrorMessage(result.error, 'Unable to mark this order as served.'));
+      await refresh({ silent: true });
+    } catch (cause) {
+      setActionError(getUserErrorMessage(cause, 'Unable to mark this order as served.'));
+    } finally {
+      serving.current = false;
+      setServingId(null);
+    }
   };
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#F5F6F8] text-[#121212]">
-      <header className="flex h-16 shrink-0 items-center justify-between bg-[#121212] px-6 text-white">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
+      <header className="flex min-h-16 shrink-0 flex-wrap gap-3 items-center justify-between bg-[#121212] px-4 py-2 text-white">
+        <button onClick={onBack} className="min-h-11 flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
           <ArrowLeft className="h-5 w-5" /> {tr('dashboard')}
         </button>
         <div className="flex items-center gap-2 font-black uppercase tracking-wider">
           <BellRing className="h-5 w-5 text-emerald-400" /> {tr('readyServeCollect')}
         </div>
-        <button onClick={() => refresh()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
+        <button onClick={() => refresh()} className="min-h-11 flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
           <RefreshCw className="h-4 w-4" /> {tr('refresh')}
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto p-4 lg:p-6">
         {(error || actionError) && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{actionError || error}</div>
+          <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{actionError || error}</div>
         )}
         {isLoading ? (
           <div className="flex h-full items-center justify-center gap-3 text-gray-500">
@@ -92,7 +100,7 @@ export default function ReadyToServeScreen({ onBack, lang = 'en' }) {
                   <button
                     disabled={Boolean(servingId)}
                     onClick={() => void serve(order.id)}
-                    className="min-w-28 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50"
+                    className="min-h-12 min-w-28 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50"
                   >
                     {servingId === order.id
                       ? order.diningMode === 'takeaway' ? tr('collecting') : tr('serving')

@@ -7,9 +7,9 @@ export function useProfile(userId = '') {
   const [isLoading, setIsLoading] = useState(Boolean(enabled));
   const [error, setError] = useState('');
 
-  const refetch = useCallback(async () => {
-    if (!userId) return;
-    setIsLoading(true);
+  const refetch = useCallback(async ({ background = false } = {}) => {
+    if (!userId) return { data: null, error: new Error('No active user session.') };
+    if (!background) setIsLoading(true);
     const result = await getProfile();
     if (result.error) {
       setProfile(null);
@@ -19,6 +19,7 @@ export function useProfile(userId = '') {
       setError('');
     }
     setIsLoading(false);
+    return result;
   }, [userId]);
 
   useEffect(() => {

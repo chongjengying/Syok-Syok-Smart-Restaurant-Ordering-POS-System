@@ -38,7 +38,7 @@ export function useAdminDashboard(enabled = true) {
       setLastUpdated(new Date());
       setError('');
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : 'Unable to load the dashboard.');
+      if (mounted.current && requestId === requestSequence.current) setError(cause instanceof Error ? cause.message : 'Unable to load the dashboard.');
     } finally {
       if (mounted.current && requestId === requestSequence.current) {
         setIsLoading(false);
@@ -61,6 +61,16 @@ export function useAdminDashboard(enabled = true) {
 
   useEffect(() => {
     mounted.current = true;
+    if (!enabled) {
+      ++requestSequence.current;
+      hasData.current = false;
+      setData(null);
+      setLastUpdated(null);
+      setError('');
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return undefined;
+    }
     void refresh();
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
@@ -69,7 +79,7 @@ export function useAdminDashboard(enabled = true) {
       mounted.current = false;
       window.clearInterval(timer);
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   useEffect(() => {
     if (!enabled) return undefined;

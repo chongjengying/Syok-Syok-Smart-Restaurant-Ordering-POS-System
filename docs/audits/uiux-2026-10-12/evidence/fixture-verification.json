@@ -1,0 +1,47 @@
+[
+  {
+    "run": "4A9BD3D5",
+    "branchInactive": true,
+    "activeStaff": 0,
+    "openShifts": 0,
+    "orderStatuses": [
+      "CANCELLED"
+    ],
+    "paymentStatuses": [
+      "CANCELLED"
+    ],
+    "settledPayments": 0,
+    "terminalRevoked": true,
+    "catalogRetired": true
+  },
+  {
+    "run": "A9C36201",
+    "branchInactive": true,
+    "activeStaff": 0,
+    "openShifts": 0,
+    "orderStatuses": [
+      "CANCELLED"
+    ],
+    "paymentStatuses": [
+      "CANCELLED"
+    ],
+    "settledPayments": 0,
+    "terminalRevoked": true,
+    "catalogRetired": true
+  },
+  {
+    "run": "AB3722C8",
+    "branchInactive": true,
+    "activeStaff": 0,
+    "openShifts": 0,
+    "orderStatuses": [
+      "CANCELLED"
+    ],
+    "paymentStatuses": [
+      "CANCELLED"
+    ],
+    "settledPayments": 0,
+    "terminalRevoked": true,
+    "catalogRetired": true
+  }
+]

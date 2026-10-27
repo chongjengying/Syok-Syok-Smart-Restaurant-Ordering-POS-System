@@ -4,7 +4,7 @@ Syok Syok is a restaurant ordering system for dine-in and takeaway service. Staf
 
 The application uses React and Vite with PostgreSQL, Supabase Auth, Supabase Realtime, Row Level Security, and authenticated Edge Functions.
 
-> Current-status note: Staging operational data was reset by an authorized migration. The current system still uses Auth-backed staff profiles and browser device registration; dedicated Terminal Auth with Auth-free staff records is planned, not implemented. See [AUTH_FLOW.md](AUTH_FLOW.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+> Current-status note: Staging operational data was reset by an authorized migration. Terminal Auth, device credentials, and PIN-based staff records are present, while legacy profile relationships and incomplete end-to-end authorization coverage remain. The intended separation is not yet fully verified. See [AUTH_FLOW.md](AUTH_FLOW.md) and [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Core workflows
 

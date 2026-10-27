@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 import { TableRepository } from '../_shared/repositories/tableRepository.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, PATCH, DELETE, OPTIONS');
@@ -96,12 +96,14 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !anonKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
 
   const caller = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authorization } },
+    global: { headers: callerHeaders(request, authorization) },
     auth: { persistSession: false },
   });
   const { data: userData, error: userError } = await caller.auth.getUser();
   if (userError || !userData.user) return jsonResponse(401, { error: 'The session is invalid or expired.' });
-  const { data: callerProfile } = await caller.from('profiles').select('role_name, status, branch_id').eq('id', userData.user.id).single();
+  const { data: profile } = await caller.from('profiles').select('role_name, status, branch_id').eq('id', userData.user.id).maybeSingle();
+  const { data: terminalSession } = profile ? { data: null } : await caller.rpc('current_terminal_staff_session');
+  const callerProfile = profile || (terminalSession?.id ? { role_name: terminalSession.role, status: 'ACTIVE', branch_id: terminalSession.branch_id } : null);
   if (!callerProfile || callerProfile.status !== 'ACTIVE') {
     return jsonResponse(403, { error: 'An active staff profile is required.' });
   }
@@ -244,9 +246,16 @@ Deno.serve(async (request) => {
     const validation = validateTable(body.data!, false, true);
     if (validation.error) return jsonResponse(400, { error: validation.error });
     const branchId = String(body.data?.branchId || callerProfile.branch_id || '');
-    if (!branchId) return jsonResponse(409, { error: 'The staff profile is not assigned to a branch.', code: 'BRANCH_REQUIRED' });
-    const { data: scoped } = await caller.rpc('can_access_branch', { p_branch_id: branchId });
+    if (!branchId) return jsonResponse(409, { error: 'Select a branch before creating a table.', code: 'BRANCH_REQUIRED' });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(branchId)) {
+      return jsonResponse(400, { error: 'A valid branch is required.', code: 'INVALID_BRANCH' });
+    }
+    const { data: scoped, error: scopeError } = await caller.rpc('can_access_branch', { p_branch_id: branchId });
+    if (scopeError) return jsonResponse(500, { error: 'Unable to verify branch access.' });
     if (!scoped) return jsonResponse(403, { error: 'Branch access denied.' });
+    const { data: branch, error: branchError } = await caller.from('branches').select('id,status').eq('id', branchId).maybeSingle();
+    if (branchError) return jsonResponse(500, { error: 'Unable to verify branch status.' });
+    if (!branch || branch.status !== 'ACTIVE') return jsonResponse(409, { error: 'This branch is inactive.', code: 'BRANCH_INACTIVE' });
     const { data, error } = await adminRepository.create({ ...validation.data!, branch_id: branchId });
     if (error?.code === '23505') return jsonResponse(409, { error: 'Table number or QR code already exists.' });
     if (error) return jsonResponse(500, { error: 'Unable to create restaurant table.' });

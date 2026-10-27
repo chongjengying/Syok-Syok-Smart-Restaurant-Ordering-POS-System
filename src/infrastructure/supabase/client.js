@@ -1,16 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../../config/env';
+import { fetchWithDeviceProof } from './deviceCredential';
 
 console.info(`[POS] Environment: ${env.appEnv}`);
 // Email/password administration and PIN operator tokens have separate lifetimes.
-export const accountSupabase = createClient(env.supabaseUrl, env.supabaseKey);
+export const accountSupabase = createClient(env.supabaseUrl, env.supabaseKey, { global: { fetch: fetchWithDeviceProof } });
 export const operatorSupabase = createClient(env.supabaseUrl, env.supabaseKey, {
+  global: { fetch: fetchWithDeviceProof },
   auth: { persistSession: false, detectSessionInUrl: false, storageKey: 'pos-operator-session' },
 });
 let operatorMode = false;
 const listeners = new Set();
 export const isOperatorMode = () => operatorMode;
 export function setOperatorMode(enabled) {
+  if (operatorMode === enabled) return;
   operatorMode = enabled;
   void (enabled ? operatorSupabase : accountSupabase).auth.getSession().then(({ data }) => {
     listeners.forEach(callback => callback('SIGNED_IN', data.session));

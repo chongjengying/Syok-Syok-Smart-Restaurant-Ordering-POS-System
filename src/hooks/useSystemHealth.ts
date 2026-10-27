@@ -22,13 +22,14 @@ export function useSystemHealth(enabled=true){
     if(!enabled)return Promise.resolve();
     if(activeRequest.current)return activeRequest.current;
     if(hasData.current)setIsRefreshing(true);else setIsLoading(true);
-    controller.current=new AbortController();
+    const requestController=new AbortController();
+    controller.current=requestController;
     const request=(async()=>{
-      const result=await getSystemHealth(controller.current?.signal);
-      if(!mounted.current)return;
+      const result=await getSystemHealth(requestController.signal);
+      if(!mounted.current||requestController.signal.aborted)return;
       if(result.error||!result.data){setError(result.error?.message||'Health dashboard is unavailable.');return;}
       setData(mergeRealtimeHealth(result.data,realtimeRef.current));hasData.current=true;setError('');
-    })().catch(cause=>{if(mounted.current)setError(cause instanceof Error?cause.message:'Health dashboard is unavailable.');}).finally(()=>{activeRequest.current=null;if(mounted.current){setIsLoading(false);setIsRefreshing(false);}});
+    })().catch(cause=>{if(mounted.current&&!requestController.signal.aborted)setError(cause instanceof Error?cause.message:'Health dashboard is unavailable.');}).finally(()=>{if(controller.current!==requestController)return;activeRequest.current=null;if(mounted.current){setIsLoading(false);setIsRefreshing(false);}});
     activeRequest.current=request;return request;
   },[enabled]);
 
@@ -36,7 +37,7 @@ export function useSystemHealth(enabled=true){
   useEffect(()=>{
     mounted.current=true;if(!enabled){setIsLoading(false);return undefined;}void refresh();
     const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void refresh();},SYSTEM_HEALTH_CONFIG.refreshMs);
-    return()=>{mounted.current=false;window.clearInterval(timer);controller.current?.abort();};
+    return()=>{mounted.current=false;window.clearInterval(timer);controller.current?.abort();activeRequest.current=null;};
   },[enabled,refresh]);
 
   useEffect(()=>{

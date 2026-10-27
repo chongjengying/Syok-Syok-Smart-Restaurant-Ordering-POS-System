@@ -336,11 +336,12 @@ export default function OrderStatusScreen({
             <div id="printable-receipt" className="space-y-3">
               <div className="text-center pb-3 border-b border-dashed border-gray-400">
                 {receiptConfig.showLogo && displaySettings?.logoUrl && <img src={displaySettings.logoUrl} alt="Restaurant logo" className="mx-auto mb-2 h-12 max-w-32 object-contain" onError={e=>{e.currentTarget.style.display='none';}}/>}
-                {receiptConfig.showRestaurantName!==false&&<h2 className="font-extrabold text-base">{restaurantInfo.restaurantName || 'Restaurant'}</h2>}
-                {receiptConfig.receiptHeader && <p className="text-[10px] text-gray-600">{receiptConfig.receiptHeader}</p>}
+                {receiptConfig.showCompanyName!==false&&receiptConfig.showRestaurantName!==false&&<h2 className="font-extrabold text-base">{restaurantInfo.name || restaurantInfo.restaurantName || 'Restaurant'}</h2>}
+                {receiptConfig.showRegistrationNumber!==false && (restaurantInfo.registrationNumber || restaurantInfo.registration_no) && <p className="text-[10px] text-gray-600">Reg: {restaurantInfo.registrationNumber || restaurantInfo.registration_no}</p>}
+                {receiptConfig.headerGreeting || receiptConfig.receiptHeader ? <p className="whitespace-pre-wrap text-[10px] text-gray-600">{receiptConfig.headerGreeting || receiptConfig.receiptHeader}</p> : null}
                 {receiptConfig.showAddress!==false && <p className="text-[10px] text-gray-600">{[restaurantInfo.addressLine1,restaurantInfo.addressLine2,restaurantInfo.city,restaurantInfo.state,restaurantInfo.postcode,restaurantInfo.country].filter(Boolean).join(', ')}</p>}
-                {receiptConfig.showPhone!==false && restaurantInfo.phoneNumber && <p className="text-[10px] text-gray-600">Tel: {restaurantInfo.phoneNumber}</p>}
-                {receiptConfig.showTaxNumber!==false && restaurantInfo.taxRegistrationNumber && <p className="text-[10px] text-gray-600">Tax No: {restaurantInfo.taxRegistrationNumber}</p>}
+                {receiptConfig.showPhoneNumber!==false && receiptConfig.showPhone!==false && (restaurantInfo.phone || restaurantInfo.phoneNumber) && <p className="text-[10px] text-gray-600">Tel: {restaurantInfo.phone || restaurantInfo.phoneNumber}</p>}
+                {receiptConfig.showTaxDetails!==false && receiptConfig.showTaxNumber!==false && restaurantInfo.taxRegistrationNumber && <p className="text-[10px] text-gray-600">Tax No: {restaurantInfo.taxRegistrationNumber}</p>}
                 <p className="text-[10px] text-gray-600">{receiptTimestamp}</p>
               </div>
               {(receiptConfig.showStaffName!==false||receiptConfig.showPaymentMethod!==false)&&<div className="space-y-1 text-[10px] text-gray-600">{receiptConfig.showStaffName!==false&&receiptStaffName&&<div className="flex justify-between"><span>Staff</span><strong>{receiptStaffName}</strong></div>}{receiptConfig.showPaymentMethod!==false&&receiptPaymentMethod&&<div className="flex justify-between"><span>Payment</span><strong>{receiptPaymentMethod}</strong></div>}</div>}
@@ -379,7 +380,7 @@ export default function OrderStatusScreen({
                   <span>{tr('subtotal')}:</span>
                   <span>{formatMoney(subtotal)}</span>
                 </div>
-                {receiptConfig.showTax!==false && <div className="flex justify-between">
+                {receiptConfig.showTaxDetails!==false && receiptConfig.showTax!==false && <div className="flex justify-between">
                   <span>{order?.taxName || 'Tax'} ({order?.taxRate || 0}%):</span>
                   <span>{formatMoney(tax)}</span>
                 </div>}
@@ -401,8 +402,8 @@ export default function OrderStatusScreen({
 
               {/* Footer */}
               <div className="pt-4 text-center border-t border-dashed border-gray-400 space-y-1">
-                <p className="text-[10px] text-gray-600 pt-1">{receiptConfig.thankYouMessage || tr('thankYou')}</p>
-                {receiptConfig.receiptFooter && <p className="text-[10px] text-gray-600">{receiptConfig.receiptFooter}</p>}
+                <p className="text-[10px] text-gray-600 pt-1">{receiptConfig.footerNote || receiptConfig.thankYouMessage || tr('thankYou')}</p>
+                {(receiptConfig.footerNote ? null : receiptConfig.receiptFooter) && <p className="whitespace-pre-wrap text-[10px] text-gray-600">{receiptConfig.receiptFooter}</p>}
                 <p className="text-[10px] text-gray-600">{tr('paymentStatus', { status: translateStatus(lang, order?.paymentStatus || orderData.paymentStatus || 'UNPAID') })}</p>
               </div>
             </div>

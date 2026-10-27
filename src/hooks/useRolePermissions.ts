@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createRole, getRolePermissionMatrix, saveRolePermissions } from '../services/admin-permission.service';
+import { createRole, getRolePermissionMatrix, saveRolePermissions, setRoleActive } from '../services/admin-permission.service';
 
 export function useRolePermissions() {
   const [data, setData] = useState<any>(null);
@@ -34,5 +34,15 @@ export function useRolePermissions() {
     await refresh();
     return result.data;
   };
-  return { data, isLoading, busy, error, notice, save, add };
+  const setActive = async (id: string, active: boolean) => {
+    setBusy(true); setError(''); setNotice('');
+    const result = await setRoleActive(id, active);
+    setBusy(false);
+    if (result.error) { setError(result.error.message); return false; }
+    setNotice(active ? 'Role activated.' : 'Role deactivated.');
+    globalThis.dispatchEvent?.(new Event('pos-permissions-changed'));
+    await refresh();
+    return true;
+  };
+  return { data, isLoading, busy, error, notice, save, add, setActive };
 }

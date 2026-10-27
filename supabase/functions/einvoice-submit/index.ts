@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 import { myinvoisToken, submitMyinvois } from '../_shared/myinvois.ts';
 
 const corsHeaders = buildCorsHeaders('POST, OPTIONS');
@@ -22,7 +22,7 @@ Deno.serve(async (request) => {
   if (request.method !== 'POST') return jsonResponse(405, { error: 'Method not allowed.' });
   const authorization = request.headers.get('Authorization');
   if (!authorization?.startsWith('Bearer ')) return jsonResponse(401, { error: 'Unauthorized' });
-  const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authorization } } });
+  const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: callerHeaders(request, authorization) } });
   const { data: authData, error: authError } = await caller.auth.getUser();
   if (authError || !authData.user) return jsonResponse(401, { error: 'Unauthorized' });
   const { data: allowed, error: permissionError } = await caller.rpc('has_pos_permission', { p_permission: 'einvoice.retry' });

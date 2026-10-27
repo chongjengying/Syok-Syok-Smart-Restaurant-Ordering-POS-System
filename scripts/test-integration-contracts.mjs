@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import worker from '../worker.js';
 
 const root = process.cwd();
 
@@ -30,9 +31,14 @@ assert.deepEqual(
 const directEnvReads = [...contents].filter(([, source]) => /import\.meta\.env/.test(source));
 assert.deepEqual(
   directEnvReads.map(([file]) => relative(file)),
-  ['src/config/env.js'],
-  'Vite environment variables must only be read by the centralized environment module.',
+  ['src/config/env.js', 'src/main.jsx'],
+  'Runtime Vite environment variables must be centralized; the entry point may use the compile-time DEV flag.',
 );
+const entryPoint = contents.get(path.join(srcRoot, 'main.jsx'));
+assert.doesNotMatch(entryPoint, /import\.meta\.env(?!\.DEV\b)/,
+  'The entry point must not read runtime configuration or credentials.');
+assert.match(entryPoint, /previewPath && import\.meta\.env\.DEV/,
+  'The preview import must remain guarded by the compile-time development flag.');
 
 const componentViolations = [...contents]
   .filter(([file, source]) => relative(file).startsWith('src/components/') && (
@@ -103,8 +109,9 @@ assert.match(edgeProductService, /imagePath:\s*product\.image_path \|\| null/, '
 assert.doesNotMatch(edgeProductService, /imageUrl:\s*product\.image_url/, 'The API must not return a stored environment-specific URL.');
 
 const adminShell = contents.get(path.join(srcRoot, 'components', 'admin', 'AdminShell.jsx'));
+const adminNavigation = contents.get(path.join(srcRoot, 'components', 'admin', 'adminNavigation.js'));
 for (const route of ['dashboard','orders','payments','tables','products','categories','users','roles','reports','audit']) {
-  assert.match(adminShell, new RegExp(`['\"]${route}['\"]`), `Admin navigation must include ${route}.`);
+  assert.match(adminNavigation, new RegExp(`['\"]${route}['\"]`), `Admin navigation must include ${route}.`);
 }
 assert.match(adminShell, /allowed\.has\((?:x|item)\[2\]\)/, 'Admin navigation must hide modules without permission.');
 const adminRepository = contents.get(path.join(srcRoot, 'repositories', 'admin.repository.ts'));
@@ -119,7 +126,7 @@ const dashboard = contents.get(path.join(srcRoot, 'components', 'admin', 'AdminD
 assert.match(dashboard, /DashboardFilters/, 'The dashboard must use one shared global filter component.');
 assert.match(dashboard, /formatCurrency/, 'Dashboard currency must use the shared Malaysia formatter.');
 assert.match(dashboard, /onNavigate/, 'Dashboard widgets must navigate into operational modules.');
-for (const section of ['Sales Performance','Payment Overview','Order Overview','Live Operations','Top Selling Products','Alerts & Attention','Recent Orders','Staff Performance','Recent Activity']) {
+for (const section of ['Sales trend','Payment Overview','Order Overview','Live Operations','Top-selling items','Alerts & Attention','Recent orders','Staff Performance','Recent Activity']) {
   assert.match(dashboard, new RegExp(section), `Dashboard must include ${section}.`);
 }
 
@@ -138,5 +145,30 @@ assert.ok(stagingUrl, 'Staging must define VITE_SUPABASE_URL.');
 assert.equal(stagingAppEnv, 'staging', 'Staging must explicitly define VITE_APP_ENV=staging.');
 assert.doesNotMatch(stagingUrl, /localhost|127\.0\.0\.1/i, 'Staging must not target a local Supabase instance.');
 assert.match(stagingUrl, /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i, 'Staging must target an HTTPS Supabase project URL.');
+
+const assetRequests = [];
+const workerEnv = { ASSETS: { fetch: async (request) => {
+  const pathname = new URL(request.url).pathname;
+  assetRequests.push(pathname);
+  return new Response(pathname === '/' ? 'application-shell' : 'missing-asset', {
+    status: pathname.startsWith('/assets/') ? 404 : 200,
+    headers: { 'Content-Type': pathname === '/' ? 'text/html' : 'text/plain' },
+  });
+} } };
+for (const pathname of ['/preview/admin', '/preview/admin/register', '/preview/admin/panel/dashboard']) {
+  const before = assetRequests.length;
+  const response = await worker.fetch(new Request(`https://staging.example${pathname}`), workerEnv);
+  assert.equal(response.status, 404, 'Deployed preview URLs must be unavailable.');
+  assert.equal(assetRequests.length, before, 'Preview requests must not reach the application assets.');
+}
+for (const pathname of ['/', '/admin', '/admin/', '/admin/login', '/pos', '/pos/setup', '/pos/login']) {
+  const response = await worker.fetch(new Request(`https://staging.example${pathname}`), workerEnv);
+  assert.equal(response.status, 200, `${pathname} must serve the application.`);
+  assert.equal(await response.text(), 'application-shell');
+  assert.match(response.headers.get('Cache-Control'), /no-store/, 'HTML must not retain stale bundle references.');
+}
+const missingAsset = await worker.fetch(new Request('https://staging.example/assets/missing.js'), workerEnv);
+assert.equal(missingAsset.status, 404, 'Missing bundles must remain 404 responses.');
+assert.notEqual(await missingAsset.text(), 'application-shell', 'Missing bundles must never receive application HTML.');
 
 console.log('PASS integration contracts');

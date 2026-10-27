@@ -3,6 +3,7 @@ import { getApiErrorMessage } from '../../shared/errorMessages';
 import { supabase } from './client';
 import { classifyApiError, isInfrastructureFailure } from '../../utils/healthStatus';
 import { recordApiTelemetry } from '../../services/api-telemetry.service';
+import { deviceProofHeaders } from './deviceCredential';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -44,11 +45,13 @@ export async function apiRequest(
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort(signal?.reason);
   signal?.addEventListener('abort', abortFromCaller, { once: true });
+  if (signal?.aborted) abortFromCaller();
   const timeout = globalThis.setTimeout(() => controller.abort('Request timed out.'), timeoutMs);
   const search = buildQuery(query);
   const normalizedPath = path ? `/${String(path).replace(/^\/+/, '')}` : '';
 
   try {
+    if (controller.signal.aborted) throw new DOMException('Request was cancelled.', 'AbortError');
     const response = await fetch(
       `${env.supabaseUrl}/functions/v1/${functionName}${normalizedPath}${search}`,
       {
@@ -58,13 +61,24 @@ export async function apiRequest(
           apikey: env.supabaseKey,
           Authorization: `Bearer ${sessionData.session.access_token}`,
           'x-correlation-id': correlationId,
+          ...deviceProofHeaders(),
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       },
     );
 
-    const payload = response.status === 204 ? null : await response.json().catch(() => null);
+    let payload = null;
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        if (response.ok) throw new ApiError('The POS server returned an invalid response. Check the operation status before trying again.', {
+          status: response.status, code: 'INVALID_RESPONSE', retryable: false,
+        });
+      }
+    }
     if (!response.ok) {
       const code = payload?.code || (response.status === 401 ? 'SESSION_EXPIRED' : response.status >= 500 ? 'SERVER_ERROR' : 'REQUEST_FAILED');
       const errorType = classifyApiError({ status: response.status, code });
@@ -92,6 +106,10 @@ export async function apiRequest(
           retryable: !wasCancelled,
         }),
       };
+    }
+    if (error instanceof ApiError) {
+      recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: error.status, errorType: 'INTERNAL_ERROR', durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: true });
+      return { data: null, error };
     }
     recordApiTelemetry({ service: functionName, endpoint: `/${functionName}${normalizedPath}`, method, statusCode: 0, errorType: 'NETWORK_ERROR', durationMs: Math.round(performance.now() - startedAt), correlationId, infrastructureFailure: true });
     return {

@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 
 type Status = 'HEALTHY' | 'DEGRADED' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
 type Check = { component:string; label:string; status:Status; operationalStatus?:string; critical:boolean; latencyMs?:number; message:string; lastCheckedAt:string; lastSuccessfulAt?:string; metadata?:Record<string,unknown> };
@@ -65,7 +65,7 @@ Deno.serve(async request => {
   if(!authorization?.startsWith('Bearer ')) return jsonResponse(401,{error:'Authentication is required.',code:'AUTHENTICATION_REQUIRED',correlationId});
   if(!url||!anonKey||!serviceKey) return jsonResponse(503,{error:'Health service configuration is incomplete.',code:'SERVICE_CONFIGURATION_ERROR',correlationId});
 
-  const caller=createClient(url,anonKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false}});
+  const caller=createClient(url,anonKey,{global:{headers:callerHeaders(request,authorization)},auth:{persistSession:false}});
   const authResult=await caller.auth.getUser();
   if(authResult.error||!authResult.data.user) return jsonResponse(401,{error:'The session is invalid or expired.',code:'SESSION_EXPIRED',correlationId});
   const rateKey=authResult.data.user.id;
@@ -88,7 +88,8 @@ Deno.serve(async request => {
       const event=item&&typeof item==='object'&&!Array.isArray(item)?item as Record<string,unknown>:{};
       const status=Math.min(599,Math.max(0,Number(event.statusCode)||0));
       const errorType=allowedErrors.has(String(event.errorType))?String(event.errorType):null;
-      return {service:cleanText(event.service,60)||'frontend',endpoint:cleanText(event.endpoint,180)||'unknown',method:cleanText(event.method,10).toUpperCase()||'GET',status_code:status,error_type:errorType,duration_ms:Math.min(300000,Math.max(0,Number(event.durationMs)||0)),correlation_id:cleanText(event.correlationId,80)||correlationId,infrastructure_failure:Boolean(event.infrastructureFailure)};
+      const infrastructureFailure=status>=500 || (status===0 && ['NETWORK_ERROR','TIMEOUT'].includes(errorType||'')) || (status>=200 && status<300 && errorType==='INTERNAL_ERROR');
+      return {service:cleanText(event.service,60)||'frontend',endpoint:cleanText(event.endpoint,180)||'unknown',method:cleanText(event.method,10).toUpperCase()||'GET',status_code:status,error_type:errorType,duration_ms:Math.min(300000,Math.max(0,Number(event.durationMs)||0)),correlation_id:cleanText(event.correlationId,80)||correlationId,infrastructure_failure:infrastructureFailure};
     });
     const service=createClient(url,serviceKey,{auth:{persistSession:false}});
     const inserted=await service.from('system_api_events').insert(rows);
@@ -122,7 +123,11 @@ Deno.serve(async request => {
   const observabilityCheck:Check={component:'observability',label:'Operational Metrics',status:metricsOk?'HEALTHY':'WARNING',critical:false,latencyMs:metricsResult.latencyMs,message:metricsOk?`Sanitized operational metrics loaded in ${metricsResult.latencyMs} ms.`:'Operational history could not be loaded; dependency checks remain available.',lastCheckedAt:checkedAt,...(metricsOk?{lastSuccessfulAt:checkedAt}:{})};
   const api=(metrics.api||{}) as Record<string,unknown>;
   const total=Number(api.totalRequests||0), failed=Number(api.failedRequests||0), failureRate=total?failed/total:0;
-  const apiCheck:Check={component:'api',label:'API Requests',status:total===0?'UNKNOWN':failureRate>=0.05?'CRITICAL':failureRate>=0.01?'WARNING':'HEALTHY',critical:false,message:total===0?'No telemetry has been received in the last 24 hours.':`${failed} infrastructure failures across ${total} observed requests.`,lastCheckedAt:checkedAt,metadata:{failureRate}};
+  const recentErrors=(Array.isArray(api.recentErrors)?api.recentErrors:[]) as Record<string,unknown>[];
+  const infrastructureErrors=recentErrors.filter(event=>Number(event.status_code)>=500 || ['NETWORK_ERROR','TIMEOUT','INTERNAL_ERROR'].includes(String(event.error_type)));
+  const affectedServices=[...new Set(infrastructureErrors.map(event=>cleanText(event.service,60)))].join(', ');
+  const latestFailure=infrastructureErrors[0]?.occurred_at;
+  const apiCheck:Check={component:'api',label:'API Requests',status:!metricsOk||total===0?'UNKNOWN':failureRate>=0.05?'CRITICAL':failureRate>=0.01?'WARNING':'HEALTHY',critical:false,message:!metricsOk?'API telemetry could not be loaded.':total===0?'No telemetry has been received in the last 24 hours.':`${failed} infrastructure failures across ${total} observed requests in the last 24 hours (${(failureRate*100).toFixed(2)}%).${affectedServices?` Affected services: ${affectedServices}.`:''}${latestFailure?` Latest recorded failure: ${cleanText(latestFailure,40)}.`:''} Historical failures remain counted after recovery; live function checks are shown separately.`,lastCheckedAt:checkedAt,metadata:{failureRate,windowHours:24,affectedServices,latestFailure:latestFailure||null}};
   const payment=(metrics.payment||{}) as Record<string,unknown>;
   const paymentCheck:Check={component:'payment',label:'Payment Gateway',status:'UNKNOWN',operationalStatus:'NOT_CONFIGURED',critical:false,message:'No external payment gateway is configured; cash and manual QR remain available.',lastCheckedAt:checkedAt,metadata:{provider:'UNCONFIGURED',mode:'MANUAL',lastSuccessfulTransaction:String(payment.lastSuccessfulTransaction||''),lastFailedTransaction:String(payment.lastFailedTransaction||'')}};
   const devices=Array.isArray(metrics.devices)?metrics.devices as Record<string,unknown>[]:[];

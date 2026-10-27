@@ -234,7 +234,7 @@ export default function SplitBillScreen({ orderId, onBack, onDone, lang = 'en' }
                   <div className="mt-6 space-y-3">{summary.items.filter((item) => item.remainingQuantity > 0).map((item) => (
                     <div key={item.orderItemId} className="flex items-center gap-4 rounded-xl border p-4">
                       <div className="min-w-0 flex-1"><p className="font-bold">{item.name}</p><p className="text-xs text-gray-500">{tr('quantityRemaining', { count: item.remainingQuantity })} · {formatMoney(item.remainingAmount)}</p></div>
-                      <select value={itemQuantities[item.orderItemId] || 0} onChange={(event) => { setItemQuantities((current) => ({ ...current, [item.orderItemId]: Number(event.target.value) })); resetRequest(); }} className="rounded-lg border p-2">{Array.from({ length: item.remainingQuantity + 1 }, (_, value) => <option key={value}>{value}</option>)}</select>
+                      <select aria-label={`Quantity to pay for ${item.name}`} value={itemQuantities[item.orderItemId] || 0} onChange={(event) => { setItemQuantities((current) => ({ ...current, [item.orderItemId]: Number(event.target.value) })); resetRequest(); }} className="rounded-lg border p-2">{Array.from({ length: item.remainingQuantity + 1 }, (_, value) => <option key={value}>{value}</option>)}</select>
                     </div>
                   ))}<div className="text-right font-black">{tr('selectedTotal')}: {formatMoney(formatCents(selectedItemCents))}</div></div>
                 )}

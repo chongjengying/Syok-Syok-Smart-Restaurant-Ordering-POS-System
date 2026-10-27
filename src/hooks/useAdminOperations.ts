@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAdminOrders,
   getAdminPayments,
@@ -22,7 +22,13 @@ const routeFilters = () => {
   const params = new URLSearchParams(query);
   return Object.fromEntries([
     ...filterKeys.map((key) => [key, params.get(key) || ""]),
-    ["page", Math.max(1, Number(params.get("page") || 1))],
+    [
+      "page",
+      Number.isSafeInteger(Number(params.get("page"))) &&
+      Number(params.get("page")) > 0
+        ? Number(params.get("page"))
+        : 1,
+    ],
   ]);
 };
 const persistFilters = (filters: Record<string, unknown>, replace = false) => {
@@ -45,6 +51,9 @@ const persistFilters = (filters: Record<string, unknown>, replace = false) => {
     "",
     target,
   );
+  globalThis.dispatchEvent(
+    new CustomEvent("admin-filters-changed", { detail: { hash: target } }),
+  );
 };
 export function useAdminOperations(kind: string) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -52,30 +61,53 @@ export function useAdminOperations(kind: string) {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const generation = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++generation.current;
     setIsLoading(true);
-    const r =
-      kind === "orders"
-        ? await getAdminOrders(filters)
-        : kind === "payments"
-          ? await getAdminPayments(filters)
-          : await getAuditLogs(filters);
-    const payload = r.data as any;
-    setRows(kind === "audit" ? payload || [] : payload?.rows || []);
-    setTotal(
-      kind === "audit" ? payload?.length || 0 : Number(payload?.total || 0),
-    );
-    setError(r.error?.message || "");
-    setIsLoading(false);
+    try {
+      const r =
+        kind === "orders"
+          ? await getAdminOrders(filters)
+          : kind === "payments"
+            ? await getAdminPayments(filters)
+            : await getAuditLogs(filters);
+      if (request !== generation.current) return;
+      const payload = r.data as any;
+      setRows(kind === "audit" ? payload || [] : payload?.rows || []);
+      setTotal(
+        kind === "audit" ? payload?.length || 0 : Number(payload?.total || 0),
+      );
+      setError(r.error?.message || "");
+    } catch (cause) {
+      if (request !== generation.current) return;
+      setRows([]);
+      setTotal(0);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to load records. Please try again.",
+      );
+    } finally {
+      if (request === generation.current) setIsLoading(false);
+    }
   }, [kind, filters]);
   useEffect(() => {
+    const requests = generation;
     const id = setTimeout(() => void refresh(), 200);
-    return () => clearTimeout(id);
+    return () => {
+      clearTimeout(id);
+      requests.current++;
+    };
   }, [refresh]);
   useEffect(() => {
     const sync = () => setFilters(routeFilters());
     window.addEventListener("popstate", sync);
-    return () => window.removeEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("hashchange", sync);
+    };
   }, []);
   const setFilter = (key: string, value: unknown) =>
     setFilters((current) => {

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { shiftDuration, shiftError, shiftMoney, shiftVariance } from '../src/shared/shiftPresentation.js';
+assert.equal(shiftVariance(-20), 'Short by RM 20.00');
+assert.equal(shiftVariance(0), 'Balanced');
+assert.equal(shiftVariance(20), 'Over by RM 20.00');
+assert.equal(shiftVariance(null), 'Pending close');
+assert.equal(shiftMoney(980), 'RM 980.00');
+assert.equal(shiftDuration('2026-10-04T01:00:00Z', '2026-10-04T10:05:00Z'), '9h 5m');
+assert.equal(shiftDuration('2026-10-04T01:00:00Z', null, Date.parse('2026-10-04T02:15:00Z')), '1h 15m');
+assert.equal(shiftError({ message: 'SHIFT_ALREADY_OPEN' }), 'An active shift already exists on this terminal.');
+console.log('VERIFIED PASS: shift presentation');

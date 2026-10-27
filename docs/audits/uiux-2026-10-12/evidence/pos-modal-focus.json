@@ -1,0 +1,62 @@
+[
+  {
+    "name": "BUTTON",
+    "inModal": true
+  },
+  {
+    "name": "+ Less Oil",
+    "inModal": true
+  },
+  {
+    "name": "+ No Onions",
+    "inModal": true
+  },
+  {
+    "name": "+ Sauce on Side",
+    "inModal": true
+  },
+  {
+    "name": "+ Extra Spicy",
+    "inModal": true
+  },
+  {
+    "name": "TEXTAREA",
+    "inModal": true
+  },
+  {
+    "name": "BUTTON",
+    "inModal": true
+  },
+  {
+    "name": "BUTTON",
+    "inModal": true
+  },
+  {
+    "name": "ADD TO CARTRM 12.00",
+    "inModal": true
+  },
+  {
+    "name": "iPad Canvas Mode:localiPad 11\" (1194×834pt)iPad Pro 12.9\" (1",
+    "inModal": false
+  },
+  {
+    "name": "iPad 11\" (1194×834pt)",
+    "inModal": false
+  },
+  {
+    "name": "iPad Pro 12.9\" (1366×1024pt)",
+    "inModal": false
+  },
+  {
+    "name": "Fullscreen Responsive",
+    "inModal": false
+  },
+  {
+    "name": "EN",
+    "inModal": false
+  },
+  {
+    "name": "简",
+    "inModal": false
+  }
+]

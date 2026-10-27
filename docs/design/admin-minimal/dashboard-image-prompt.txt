@@ -1,0 +1,37 @@
+Use case: ui-mockup
+Asset type: ONE complete high-fidelity desktop Restaurant POS Admin Dashboard design for approval, before any application implementation.
+Create a pixel-crisp, front-facing software screenshot, a complete 1440 by 960 px desktop application frame (3:2 aspect ratio). Edge-to-edge UI only, without browser chrome, laptop frame, perspective, environment, moodboard, annotations or multiple screens. This is a mature, usable restaurant management product, with realistic readable text and restrained compact spacing.
+
+Design system: modern minimal B2B SaaS, professionally typeset Inter-like sans serif. White main background #FFFFFF, light gray left sidebar #F7F8FA, neutral surfaces, subtle 1px gray #E5E7EB borders, charcoal #17202C text, secondary slate #64748B. One primary accent blue #2563EB; pale blue active navigation. Green/amber/red ONLY in semantic small status pills with written labels. Corners 8 to 10 px. Minimal shadow. No gradients, glass, illustrations, charts, food photos, oversized cards, decorative analytics, excessive color, or wasted huge gaps. Lucide-style 1.5px outline icons. Body/table text 14px, secondary 12px, headings 22-26px, metric values 30px; all text optically sharp.
+
+LEFT SIDEBAR: 224px wide, full viewport height, restrained restaurant fork-and-knife symbol in a small blue square, brand text "RestoAdmin" with "Restaurant workspace" smaller beneath. EXACTLY seven navigation entries with outline icons: "Dashboard" (active), "Menu", "Orders", "Tables", "Staff", "Reports", "Settings". NO OTHER NAVIGATION ENTRIES. Place first six together near top, Settings slightly separated below but still seventh. Bottom profile row: circular "AT" avatar, "Alex Tan", "Owner", small chevron. No onboarding switch, lock terminal, help navigation, billing, or extra modules.
+
+TOP HEADER: white, 72px height with subtle bottom border. Left text "Dashboard". Right branch dropdown "Bangsar Central" with small building icon, blue primary button "View reports" with arrow icon, and small "AT" profile circle. All aligned, generous whitespace, no dense toolbar or notification icons.
+
+MAIN CONTENT: 32px outer gutters, a clear heading "Today’s overview". Subtitle "A clear view of your restaurant’s day." Right of heading a subtle outlined badge "Mock Data" and date text with calendar icon "Mon, 26 Oct 2026". A small quiet refresh icon button, clearly recognizable. The date is contextual, do not add unnecessary complex analytics filters.
+
+KPI ROW: exactly THREE equal-width modest white bordered metric cards, around 120px high with 20px padding.
+1. Label "Today’s sales" with subtle info icon. Value "RM 4,820.50". Helper "Net receipts after refunds".
+2. Label "Today’s orders" with subtle info icon. Value "148". Helper "140 settled · 5 unpaid · 3 cancelled".
+3. Label "Average order value" with subtle info icon. Value "RM 34.80". Helper "Before refunds · 140 settled orders".
+No fourth KPI, occupancy card, growth percentages, sparklines, or misleading up arrows. These figures are internally reconciled: gross RM4300 less discounts100 plus tax252 plus service420 minus refunds51.50 = net4820.50. AOV is pre-refund4872 divided140 =34.80. Do not print this long calculation in the screen; only use it to keep the chosen values exact.
+
+CONTENT ROW: two bordered white panels below KPI row, with 24px gap. LEFT panel approximately two-thirds width, title "Recent orders", subtitle "Latest orders from Bangsar Central", quiet text link "View all orders" with arrow in panel header. Compact clean table, no unnecessary search field on this dashboard. Table column labels EXACTLY "ORDER", "SERVICE", "TOTAL", "PAYMENT", "STATUS". Separate payment and fulfillment statuses, never combine them. Each order number has time in a secondary line below; service has table when dine-in.
+Five rows:
+"#ORD-1048" / "14:28" | "Dine-in · T04" | "RM 84.50" | amber written pill "Unpaid" | amber written pill "Preparing"
+"#ORD-1047" / "14:26" | "Dine-in · T12" | "RM 36.00" | amber written pill "Unpaid" | blue written pill "Ready"
+"#ORD-1046" / "14:21" | "Takeaway" | "RM 72.00" | green written pill "Paid" | neutral written pill "Completed"
+"#ORD-1045" / "14:14" | "Dine-in · T07" | "RM 164.80" | green written pill "Paid" | neutral written pill "Completed"
+"#ORD-1044" / "14:07" | "Takeaway" | "RM 48.90" | neutral written pill "Refunded" | neutral written pill "Completed"
+Use aligned tabular numerals and readable badges. No pagination or ellipsis menus needed on this dashboard snapshot. Thin row dividers. Around 64px per row. Bottom of panel quiet text "Showing the 5 most recent orders".
+
+RIGHT panel approximately one-third width, title "Top-selling items", subtitle "By quantity sold today", quiet arrow link "View menu". Compact table labels "ITEM", "SOLD", "SALES". Five rows:
+"Nasi Lemak Royale" secondary "Mains" | "42" | "RM 756.00"
+"Signature Wagyu Burger" secondary "Mains" | "31" | "RM 1,178.00"
+"Teh Tarik Special" secondary "Beverages" | "68" | "RM 462.40"
+"Truffle Fries" secondary "Sides" | "27" | "RM 486.00"
+"Pandan Gula Melaka Cake" secondary "Desserts" | "19" | "RM 342.00"
+IMPORTANT: SORT THE TOP ITEMS BY QUANTITY descending, so actual displayed order MUST be Teh Tarik Special68, Nasi Lemak Royale42, Signature Wagyu Burger31, Truffle Fries27, Pandan Gula Melaka Cake19. Keep item names/amounts paired correctly. Comfortable table spacing, item names may wrap to two lines. Do not show stock badges here: stock control belongs in Menu. Footer "Item sales before discounts and tax".
+
+BOTTOM: very restrained muted note "All amounts in MYR. Cancelled and unpaid orders are excluded from sales." Right aligned small text "Updated 14:32 MYT". White breathing room below, no footer product marketing.
+Constraints: a polished clean commercial admin UI, exactly seven sidebar modules and ONE Dashboard screen. This is a static design mockup using clearly marked Mock Data. Do not create or depict other screens, code, code editor, a component library, charts, a fourth KPI, or extra modules. Ensure accurate legible spelling, all text and numbers as supplied, consistent margins, no clipping or cropped sidebar.

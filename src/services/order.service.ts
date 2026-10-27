@@ -1,6 +1,7 @@
 import {
   appendOrderItems as appendPersistedOrderItems,
   approveOrderVoid,
+  fetchOrderVoidApprovers,
   cancelPersistedOrder,
   createOrderBillSplit as createPersistedOrderBillSplit,
   fetchOrder,
@@ -267,6 +268,11 @@ export function voidOrderWithManagerApproval(orderId: string, managerId: string,
   if (!/^\d{6}$/.test(pin)) return Promise.resolve({ data: null, error: new Error('Enter the manager’s 6-digit PIN.') });
   if (reason.trim().length < 3) return Promise.resolve({ data: null, error: new Error('Enter a void reason.') });
   return approveOrderVoid(orderId, { managerId, pin, reason: reason.trim().slice(0, 500) });
+}
+
+export function listOrderVoidApprovers(orderId: string) {
+  if (!orderId) return Promise.resolve({ data: null, error: new Error('An order is required.') });
+  return fetchOrderVoidApprovers(orderId);
 }
 
 export function subscribeToOrder(

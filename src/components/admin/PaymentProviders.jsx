@@ -50,10 +50,10 @@ export default function PaymentProviders() {
               <tr><td className="p-4" colSpan={4}>Loading providers...</td></tr>
             ) : rows.map((provider) => (
               <tr key={provider.id} className="border-t">
-                <td className="p-3"><input type="checkbox" checked={provider.enabled} onChange={(event) => updateRow(provider.id, { enabled: event.target.checked })} /></td>
+                <td className="p-3"><input aria-label={`Enable ${provider.providerId}`} type="checkbox" checked={provider.enabled} onChange={(event) => updateRow(provider.id, { enabled: event.target.checked })} /></td>
                 <td className="p-3 font-bold">{provider.providerId}</td>
-                <td className="p-3"><input value={provider.displayName} onChange={(event) => updateRow(provider.id, { displayName: event.target.value })} className="w-full rounded-lg border px-3 py-2" /></td>
-                <td className="p-3"><input type="number" value={provider.sortOrder} onChange={(event) => updateRow(provider.id, { sortOrder: Number(event.target.value) })} className="w-24 rounded-lg border px-3 py-2" /></td>
+                <td className="p-3"><input aria-label={`Display name for ${provider.providerId}`} value={provider.displayName} onChange={(event) => updateRow(provider.id, { displayName: event.target.value })} className="w-full rounded-lg border px-3 py-2" /></td>
+                <td className="p-3"><input aria-label={`Sort order for ${provider.providerId}`} type="number" value={provider.sortOrder} onChange={(event) => updateRow(provider.id, { sortOrder: Number(event.target.value) })} className="w-24 rounded-lg border px-3 py-2" /></td>
               </tr>
             ))}
           </tbody>

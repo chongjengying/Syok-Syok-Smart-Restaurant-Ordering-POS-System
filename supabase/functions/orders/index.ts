@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 import {consumeRateLimit} from '../_shared/rateLimit.ts';
 
 const corsHeaders = buildCorsHeaders('GET, POST, PATCH, OPTIONS');
@@ -167,7 +167,7 @@ Deno.serve(async (request) => {
 
   // Passing the caller's JWT keeps auth.uid() and RLS active inside the RPC.
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authorization } },
+    global: { headers: callerHeaders(request, authorization) },
     auth: { persistSession: false },
   });
 
@@ -175,10 +175,18 @@ Deno.serve(async (request) => {
   if (userError || !userData.user) {
     return jsonResponse(401, { error: 'The session is invalid or expired.' });
   }
-  const { data: callerProfile } = await supabase.from('profiles').select('role_name, status').eq('id', userData.user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role_name, status').eq('id', userData.user.id).maybeSingle();
+  const { data: terminalSession } = profile ? { data: null } : await supabase.rpc('current_terminal_staff_session');
+  const callerProfile = profile || (terminalSession?.id ? { role_name: terminalSession.role, status: 'ACTIVE' } : null);
   if (!callerProfile || callerProfile.status !== 'ACTIVE') {
     return jsonResponse(403, { error: 'An active staff profile is required.' });
   }
+  const requesterProfileId = profile ? userData.user.id : terminalSession?.staff_id;
+
+  const hasPermission = async (permission: string) => {
+    const { data, error } = await supabase.rpc('has_pos_permission', { p_permission: permission });
+    return !error && data === true;
+  };
 
   if (request.method === 'GET' && new URL(request.url).searchParams.get('health') === 'probe') {
     return jsonResponse(200, { data: { status: 'ok' } });
@@ -208,7 +216,7 @@ Deno.serve(async (request) => {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
       if (scope === 'unpaid') {
-        if (!['ADMIN', 'MANAGER', 'WAITER'].includes(callerProfile.role_name)) {
+        if (!(await hasPermission('order.view'))) {
           return jsonResponse(403, { error: 'Front-of-house access is required.' });
         }
         const { data, error, count } = await supabase
@@ -222,13 +230,13 @@ Deno.serve(async (request) => {
         return jsonResponse(200, { data: { rows: data || [], total: count || 0, page, pageSize } });
       }
       if (scope === 'ready-to-serve') {
-        if (!['ADMIN', 'MANAGER', 'WAITER'].includes(callerProfile.role_name)) {
+        if (!(await hasPermission('order.serve'))) {
           return jsonResponse(403, { error: 'Front-of-house access is required.' });
         }
         const { data, error } = await supabase
           .from('orders')
           .select('*, restaurant_tables(table_number, table_name, area), order_item_batches(*), order_items(*, products(id, product_name), order_item_options(*))')
-          .in('payment_status', ['UNPAID', 'PAID'])
+          .in('payment_status', ['UNPAID', 'PARTIALLY_PAID', 'PAID'])
           .in('status', ['CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'])
           .order('created_at');
         if (error) return jsonResponse(500, { error: 'Unable to load ready orders.' });
@@ -239,13 +247,13 @@ Deno.serve(async (request) => {
           })).filter((order) => order.order_items.length > 0),
         });
       }
-      if (!['ADMIN', 'MANAGER', 'KITCHEN', 'WAITER'].includes(callerProfile.role_name)) {
+      if (!(await hasPermission('order.view'))) {
         return jsonResponse(403, { error: 'Kitchen or manager access is required.' });
       }
       const { data, error, count } = await supabase
         .from('orders')
         .select('*, restaurant_tables(table_number, table_name, area), order_item_batches!inner(*), order_items!inner(*, products(id, product_name), order_item_options(*))', { count: 'exact' })
-        .in('payment_status', ['UNPAID', 'PAID'])
+        .in('payment_status', ['UNPAID', 'PARTIALLY_PAID', 'PAID'])
         .in('status', ['CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'])
         .in('order_item_batches.status', ['PENDING', 'PREPARING', 'READY'])
         .in('order_items.item_status', ['SUBMITTED', 'PREPARING', 'READY'])
@@ -311,14 +319,19 @@ Deno.serve(async (request) => {
       const limit = await consumeRateLimit(`${userData.user.id}:${managerId}`, 'manager-void-approval', 8, 300);
       if (!limit.allowed) return jsonResponse(limit.error === 'RATE_LIMIT_EXCEEDED' ? 429 : 503, { error: limit.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many PIN attempts. Try again later.' : 'Approval is temporarily unavailable.', code: limit.error || 'RATE_LIMIT_UNAVAILABLE' });
       const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data: verification, error: verificationError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: managerId, p_pin: pin });
+      const { data: verification, error: verificationError } = await admin.rpc('verify_pos_manager_approval_pin', {
+        p_order_id: orderId, p_requested_by: requesterProfileId, p_manager_id: managerId,
+        p_pin: pin, p_permission: 'order.manage',
+      });
       if (verificationError) return jsonResponse(500, { error: 'PIN verification is temporarily unavailable.', code: 'SERVER_ERROR' });
       if (!verification?.ok) {
-        const locked = verification?.code === 'PIN_LOCKED';
-        return jsonResponse(locked ? 423 : 401, { error: locked ? 'This PIN is temporarily locked. Try again in five minutes.' : 'The manager PIN is incorrect.', code: locked ? 'PIN_LOCKED' : 'INVALID_PIN' });
+        const code = String(verification?.code || 'INVALID_PIN');
+        const locked = code === 'PIN_LOCKED';
+        return jsonResponse(locked ? 423 : ['REQUESTER_OUT_OF_SCOPE','MANAGER_UNAVAILABLE'].includes(code) ? 403 : 401,
+          { error: locked ? 'This PIN is temporarily locked. Try again in five minutes.' : 'Manager approval was denied.', code });
       }
       const { data: approval, error: approvalError } = await admin.rpc('approve_order_void', {
-        p_order_id: orderId, p_requested_by: userData.user.id, p_manager_id: managerId,
+        p_order_id: orderId, p_requested_by: requesterProfileId, p_manager_id: verification.legacyProfileId,
         p_reason: reason.slice(0, 500),
       });
       if (approvalError) {
@@ -393,11 +406,18 @@ Deno.serve(async (request) => {
       const limit = await consumeRateLimit(`${userData.user.id}:${managerId}`, 'manager-discount-approval', 8, 300);
       if (!limit.allowed) return jsonResponse(limit.error === 'RATE_LIMIT_EXCEEDED' ? 429 : 503, { error: limit.error === 'RATE_LIMIT_EXCEEDED' ? 'Too many PIN attempts. Try again later.' : 'Approval is temporarily unavailable.', code: limit.error || 'RATE_LIMIT_UNAVAILABLE' });
       const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data: verification, error: verificationError } = await admin.rpc('verify_staff_pin_exchange', { p_user_id: managerId, p_pin: pin });
+      const { data: verification, error: verificationError } = await admin.rpc('verify_pos_manager_approval_pin', {
+        p_order_id: orderId, p_requested_by: requesterProfileId, p_manager_id: managerId,
+        p_pin: pin, p_permission: 'discount.approve',
+      });
       if (verificationError) return jsonResponse(500, { error: 'PIN verification is temporarily unavailable.', code: 'SERVER_ERROR' });
-      if (!verification?.ok) return jsonResponse(verification?.code === 'PIN_LOCKED' ? 423 : 401, { error: verification?.code === 'PIN_LOCKED' ? 'This PIN is temporarily locked. Try again in five minutes.' : 'The manager PIN is incorrect.', code: verification?.code === 'PIN_LOCKED' ? 'PIN_LOCKED' : 'INVALID_PIN' });
+      if (!verification?.ok) {
+        const code = String(verification?.code || 'INVALID_PIN');
+        return jsonResponse(code === 'PIN_LOCKED' ? 423 : ['REQUESTER_OUT_OF_SCOPE','MANAGER_UNAVAILABLE'].includes(code) ? 403 : 401,
+          { error: code === 'PIN_LOCKED' ? 'This PIN is temporarily locked. Try again in five minutes.' : 'Manager approval was denied.', code });
+      }
       const { data, error } = await admin.rpc('approve_manual_order_discount', {
-        p_order_id: orderId, p_requested_by: userData.user.id, p_manager_id: managerId,
+        p_order_id: orderId, p_requested_by: requesterProfileId, p_manager_id: verification.legacyProfileId,
         p_discount_type: discountType, p_value: value, p_reason: reason,
       });
       if (error) {
@@ -590,6 +610,9 @@ Deno.serve(async (request) => {
     const message = error.message || 'Unable to create the order.';
     const code = message.match(/[A-Z][A-Z_]+/)?.[0] || 'ORDER_CREATION_FAILED';
     if (code === 'AUTHENTICATION_REQUIRED') return jsonResponse(401, { error: 'Authentication is required.', code });
+    if (['INSUFFICIENT_PERMISSION', 'ACTIVE_STAFF_SESSION_REQUIRED'].includes(code)) {
+      return jsonResponse(403, { error: 'An active, authorized staff session is required.', code });
+    }
     if (['TABLE_NOT_AVAILABLE', 'ACTIVE_ORDER_EXISTS', 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST'].includes(code)) {
       return jsonResponse(409, { error: code.replaceAll('_', ' ').toLowerCase(), code });
     }

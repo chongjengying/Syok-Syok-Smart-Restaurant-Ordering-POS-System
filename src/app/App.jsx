@@ -1,6 +1,9 @@
 import { isOperatorMode } from '../infrastructure/supabase/client';
 import { endOperatorSession, resolveTerminal } from '../services/terminal-context.service';
-import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { getCurrentCashierShift, resetPosDevice } from '../services/organization.service';
+import { clearDeviceCredential } from '../infrastructure/supabase/deviceCredential';
+import { shiftError } from '../shared/shiftPresentation';
+import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import IpadShell from '../components/IpadShell';
 import WelcomeScreen from '../components/WelcomeScreen';
 import MenuHomeScreen from '../components/MenuHomeScreen';
@@ -32,8 +35,11 @@ import { canAccessProtectedScreen, getRoleLanding, hasAdminWorkspaceAccess } fro
 import { useStaffHandoff } from '../hooks/useStaffHandoff';
 import StaffSelectorScreen from '../components/StaffSelectorScreen';
 import StaffAccessStatusScreen from '../components/StaffAccessStatusScreen';
+import TerminalSetupScreen from '../components/TerminalSetupScreen';
+import PosStartupScreen from '../components/PosStartupScreen';
 import TerminalLockScreen from '../components/TerminalLockScreen';
 import CashShiftScreen from '../components/CashShiftScreen';
+import { signInAnonymously } from '../features/auth/authService';
 
 const KitchenScreen = lazy(() => import('../components/KitchenScreen'));
 const ReadyToServeScreen = lazy(() => import('../components/ReadyToServeScreen'));
@@ -46,25 +52,68 @@ function OperationalScreenLoader({ lang }) {
   return <div className="w-full h-full flex items-center justify-center bg-[#121212] text-[#D4AF37] font-bold">{translate(lang, 'loading')}</div>;
 }
 
+function isPosPath(path = '') {
+  return path === '/pos' || path.startsWith('/pos/');
+}
+
+function adminLandingUrl() {
+  const hash = globalThis.location?.hash || '';
+  return `/admin${hash.startsWith('#admin/') ? hash : '#admin/dashboard'}`;
+}
+
 export default function App() {
+  const [posStartup, setPosStartup] = useState(() => globalThis.location?.pathname === '/pos' && !globalThis.location?.hash?.startsWith('#admin/'));
+  const [posEntryPath, setPosEntryPath] = useState(() => {
+    const path = globalThis.location?.pathname || '/';
+    if (globalThis.location?.hash?.startsWith('#admin/')) return '/admin';
+    if (!isPosPath(path)) return path;
+    return globalThis.localStorage?.getItem('pos.terminal.credential.v1') ? '/pos/login' : '/pos/setup';
+  });
   // Auth State
   const { session, isLoading: authLoading, refreshSession, signOut, isPasswordRecovery, finishPasswordRecovery, notice: sessionNotice, clearNotice, isLocked, lockTerminal, unlockTerminal } = useAuthSession();
   const {
     profile,
     isLoading: profileLoading,
     error: profileError,
+    refetch: refetchProfile,
   } = useProfile(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
   const permissionState = usePermissions(session?.user?.id ? `${session.user.id}:${isOperatorMode()}` : '');
   const [operatorReady, setOperatorReady] = useState(false);
   const [terminalContext, setTerminalContext] = useState(null);
+  const [activeShift, setActiveShift] = useState(null);
+  const [signOutBlocked, setSignOutBlocked] = useState(false);
   const [posRequested, setPosRequested] = useState(false);
-  const staffHandoff = useStaffHandoff(Boolean(session) && !operatorReady, session?.user?.id || '');
+  const adminAccount = !isOperatorMode() && (profile?.role === 'ADMIN' || hasAdminWorkspaceAccess(permissionState.permissions));
+  const effectivePermissions = useMemo(() => permissionState.permissions || [], [permissionState.permissions]);
+  const hasEffectivePermission = (permission) => effectivePermissions.includes(permission);
+  const staffHandoff = useStaffHandoff(Boolean(session) && !operatorReady && !adminAccount && terminalContext?.ok === true, session?.user?.id || '');
+  useEffect(() => {
+    if (!isOperatorMode() && !adminAccount && profile?.role?.startsWith('TERMINAL')) setOperatorReady(false);
+  }, [adminAccount, profile]);
   useEffect(() => {
     let active = true;
-    if (!session || operatorReady) { setTerminalContext(null); return () => { active = false; }; }
-    void resolveTerminal().then((result) => { if (active) setTerminalContext(result.data?.ok ? result.data : null); });
+    // Admin accounts use the account session and do not need a physical
+    // terminal binding. Wait for profile resolution before deciding whether
+    // this session belongs to a POS device.
+    if (!session || profileLoading || adminAccount || (session.user?.is_anonymous && !isPosPath(globalThis.location?.pathname || ''))) {
+      if (!session) deviceResetHandled.current = false;
+      if (!session || adminAccount) setTerminalContext(null);
+      return () => { active = false; };
+    }
+    void resolveTerminal().then(async (result) => {
+      if (!active) return;
+      setTerminalContext(result.data || null);
+      if (['TERMINAL_AUTH_NOT_BOUND','DEVICE_AUTHENTICATION_INVALID','DEVICE_REVOKED','DEVICE_NOT_ACTIVATED'].includes(result.data?.code) && globalThis.localStorage?.getItem('pos.terminal.credential.v1') && !deviceResetHandled.current) {
+        deviceResetHandled.current = true;
+        clearDeviceCredential();
+        setOperatorReady(false);
+        setPosEntryPath('/pos/setup');
+        globalThis.history?.replaceState(null, '', '/pos/setup');
+        await signOut();
+      }
+    });
     return () => { active = false; };
-  }, [session, operatorReady]);
+  }, [adminAccount, operatorReady, profileLoading, session, signOut]);
 
   // Navigation includes order list → detail → payment → confirmation.
   const [currentScreen, setCurrentScreen] = useState(() => globalThis.location?.hash?.startsWith('#admin/') ? 'admin' : 'welcome');
@@ -74,12 +123,16 @@ export default function App() {
   const [paymentConfirmation, setPaymentConfirmation] = useState(null);
   const [splitBillOrderId, setSplitBillOrderId] = useState(null);
   const [stayOnDashboard, setStayOnDashboard] = useState(false);
-  const [deviceMode, setDeviceMode] = useState('11inch'); // '11inch' | '129inch' | 'fullscreen'
   const [lang, setLang] = useState(() => getStoredLanguage()); // 'en' | 'zh' | 'ms'
   const hadStoredLanguageAtStartup = useRef(Boolean(globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY)));
   const appliedSystemLanguage = useRef(false);
   const appliedRoleLanding = useRef(false);
   const landingSessionId = useRef('');
+  const anonymousAttempted = useRef(false);
+  const deviceResetHandled = useRef(false);
+  useEffect(() => {
+    if (!session) anonymousAttempted.current = false;
+  }, [session]);
   const displaySettings = usePosDisplaySettings(Boolean(session));
   const configuredLanguages = Array.isArray(displaySettings?.enabledLanguages)
     ? SUPPORTED_LANGUAGES.filter((code) => displaySettings.enabledLanguages.includes(code))
@@ -89,6 +142,43 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  useEffect(() => {
+    if (globalThis.location?.hash?.startsWith('#admin/')) {
+      if (globalThis.location?.pathname !== '/admin') globalThis.history?.replaceState(null, '', adminLandingUrl());
+      if (posEntryPath !== '/admin') setPosEntryPath('/admin');
+      setPosStartup(false);
+      return;
+    }
+    if (!isPosPath(globalThis.location?.pathname || '')) return;
+    const hasRegisteredDevice = Boolean(globalThis.localStorage?.getItem('pos.terminal.credential.v1'));
+    const next = hasRegisteredDevice ? '/pos/login' : '/pos/setup';
+    if (next !== posEntryPath) setPosEntryPath(next);
+    if (globalThis.location?.pathname !== next) globalThis.history?.replaceState(null, '', next);
+    setPosStartup(false);
+  }, [posEntryPath]);
+
+  useEffect(() => {
+    if (!session || profileLoading || permissionState.isLoading || !adminAccount || isOperatorMode()) return;
+    if (!isPosPath(globalThis.location?.pathname || '')) return;
+    globalThis.history?.replaceState(null, '', adminLandingUrl());
+    setCurrentScreen('admin');
+  }, [adminAccount, permissionState.isLoading, profileLoading, session]);
+
+  useEffect(() => {
+    if (authLoading || session || posStartup || isPasswordRecovery || anonymousAttempted.current) return;
+    if (!isPosPath(globalThis.location?.pathname || '')) return;
+    if (!posEntryPath.startsWith('/pos') || (posEntryPath !== '/pos/setup' && !globalThis.localStorage?.getItem('pos.terminal.credential.v1'))) return;
+    anonymousAttempted.current = true;
+    void signInAnonymously().then(async result => {
+      if (result.error) {
+        setPosEntryPath('/pos/error');
+        globalThis.history?.replaceState(null, '', '/pos/error');
+        return;
+      }
+      await refreshSession();
+    });
+  }, [authLoading, isPasswordRecovery, posEntryPath, posStartup, refreshSession, session]);
 
   // Cart & Order State
   const {
@@ -104,15 +194,18 @@ export default function App() {
   const { tables, isLoading: tablesLoading, error: tablesError, refresh: refreshTables } = useTables(Boolean(session) && operatorReady && isOperatorMode());
   const [grandTotal, setGrandTotal] = useState(0);
   const [orderContextError, setOrderContextError] = useState('');
+  const [isOpeningOrder, setIsOpeningOrder] = useState(false);
+  const openingOrderInFlight = useRef(false);
   const [orderSubmitError, setOrderSubmitError] = useState('');
   const [orderNotice, setOrderNotice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
+  const takeawayConfirmationInFlight = useRef(false);
   const [takeawayPackaging, setTakeawayPackaging] = useState(['PAPER_BAG', 'NAPKIN']);
-  const canStartOrder = permissionState.hasPermission('order.create') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
-  const canAccessCashShift = permissionState.hasPermission('cash.shift.view');
-  const canMoveCash = permissionState.hasPermission('cash.movement');
-  const canAccessUnpaidOrders = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
-  const canAccessPayments = permissionState.hasPermission('payment.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
+  const canStartOrder = hasEffectivePermission('order.create') && hasPosCapability(profile?.role, POS_CAPABILITIES.START_ORDER);
+  const canAccessCashShift = hasEffectivePermission('cash.shift.view');
+  const canMoveCash = hasEffectivePermission('cash.movement');
+  const canAccessUnpaidOrders = hasEffectivePermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_UNPAID_ORDERS);
+  const canAccessPayments = hasEffectivePermission('payment.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.TAKE_PAYMENT);
   const {
     orders: unpaidOrders,
     isLoading: unpaidOrdersLoading,
@@ -157,6 +250,25 @@ export default function App() {
   });
 
   const handleLogout = async () => {
+    if (isOperatorMode()) {
+      const ended = await endOperatorSession();
+      if (ended.error) {
+        setOrderContextError(ended.error.message === 'ACTIVE_SHIFT_SIGN_OUT_BLOCKED' ? 'Close the current shift before signing out, or use Switch Staff to hand over.' : ended.error.message);
+        if (ended.error.message === 'ACTIVE_SHIFT_SIGN_OUT_BLOCKED') setSignOutBlocked(true);
+        return ended;
+      }
+      setIsProfileOpen(false);
+      unlockTerminal();
+      setOperatorReady(false);
+      setCurrentScreen('welcome');
+      clearCart();
+      clearProductCache();
+      resetCheckout();
+      appliedRoleLanding.current = false;
+      globalThis.history?.replaceState(null, '', '/pos/login');
+      return { error: null };
+    }
+    const loginPath = adminAccount || !isPosPath(globalThis.location?.pathname || '') ? '/admin/login' : '/pos/login';
     await discardDraft();
     const { error } = await signOut();
     if (error) return { error };
@@ -165,23 +277,77 @@ export default function App() {
     clearCart();
     clearProductCache();
     resetCheckout();
+    globalThis.history?.replaceState(null, '', loginPath);
+    setPosEntryPath(loginPath);
     return { error: null };
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (!operatorReady || !isOperatorMode() || !(permissionState.permissions || []).includes('cash.shift.view')) { setActiveShift(null); return undefined; }
+    const load = async () => {
+      const result = await getCurrentCashierShift();
+      if (active && !result.error) setActiveShift(result.data || null);
+    };
+    void load();
+    const timer = window.setInterval(load, 10000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [operatorReady, currentScreen, permissionState.permissions]);
+
+  const handleAuthenticatedLogin = async () => {
+    const result = await refreshSession();
+    const signedInAsAdmin = result?.data?.staff?.role === 'ADMIN';
+    if (!result?.error && signedInAsAdmin) {
+      setOperatorReady(true);
+      setCurrentScreen('admin');
+      globalThis.history?.replaceState(null, '', adminLandingUrl());
+    }
+    return result;
   };
 
   const handleSwitchStaff = async () => {
     await discardDraft();
-    const ended = await endOperatorSession();
+    const ended = await endOperatorSession({ handoff: true });
     if (ended.error) { setOrderContextError(ended.error.message); return; }
     unlockTerminal();
     setPosRequested(true);
     setIsProfileOpen(false);
-    globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+    globalThis.history?.replaceState(null, '', '/pos/login');
     setCurrentScreen('welcome');
     clearCart();
     clearProductCache();
     resetCheckout();
     appliedRoleLanding.current = false;
     setOperatorReady(false);
+  };
+
+  const handleChangeTerminal = async () => {
+    if (!hasEffectivePermission('terminal.deactivate') || !terminalContext?.terminalId) {
+      setOrderContextError('You do not have permission to unbind this device.');
+      return;
+    }
+    const unbound = await resetPosDevice(terminalContext.terminalId);
+    if (unbound.error) { setOrderContextError(unbound.error.message === 'ACTIVE_SHIFT_DEVICE_CHANGE_BLOCKED' ? 'Close the current shift before unbinding this device.' : unbound.error.message); return; }
+    await discardDraft();
+    const ended = await endOperatorSession();
+    if (ended.error) {
+      setOrderContextError(ended.error.message);
+      return;
+    }
+    const result = await signOut();
+    if (result.error) {
+      setOrderContextError(result.error.message);
+      return;
+    }
+    clearDeviceCredential();
+    setOperatorReady(false);
+    setTerminalContext(null);
+    setPosEntryPath('/pos/setup');
+    globalThis.history?.replaceState(null, '', '/pos/setup');
+    setCurrentScreen('welcome');
+    clearCart();
+    clearProductCache();
+    resetCheckout();
   };
 
   // Listen for PWA Install Prompt & Network Online/Offline
@@ -281,6 +447,16 @@ export default function App() {
 
   // Flow Navigation Handlers
   const handleStartOrder = async () => {
+    const currentShift = await getCurrentCashierShift();
+    if (currentShift.error) {
+      setOrderContextError(shiftError(currentShift.error));
+      return;
+    }
+    if (!currentShift.data?.id) {
+      setOrderContextError('Open a shift before starting an order.');
+      if (canAccessCashShift) setCurrentScreen('cashShift');
+      return;
+    }
     setStayOnDashboard(false);
     const discarded = await discardDraft();
     if (discarded.error) {
@@ -315,11 +491,24 @@ export default function App() {
 
   const handleReviewConfirmation = async (computedTotal) => {
     if (diningMode !== 'takeaway') return handleSendOrder(computedTotal);
+    if (takeawayConfirmationInFlight.current) return { data: null, error: null };
+    if (!canAccessPayments) {
+      setOrderSubmitError(tr('paymentRoleRequired'));
+      return { data: null, error: new Error(tr('paymentRoleRequired')) };
+    }
+    takeawayConfirmationInFlight.current = true;
     setGrandTotal(computedTotal);
     setOrderSubmitError('');
     setIsSendingOrder(true);
-    const result = await prepareTakeawayPayment(takeawayPackaging);
-    setIsSendingOrder(false);
+    let result;
+    try {
+      result = await prepareTakeawayPayment(takeawayPackaging);
+    } catch (error) {
+      result = { data: null, error };
+    } finally {
+      takeawayConfirmationInFlight.current = false;
+      setIsSendingOrder(false);
+    }
     if (result.error) {
       setOrderSubmitError(getUserErrorMessage(result.error, tr('unexpectedRetry')));
       return result;
@@ -365,6 +554,10 @@ export default function App() {
   };
 
   const handleOpenOrderContext = async () => {
+    if (openingOrderInFlight.current) return;
+    openingOrderInFlight.current = true;
+    setIsOpeningOrder(true);
+    try {
     setOrderContextError('');
     if (activeOrder && !['DRAFT', 'LOCAL_DRAFT'].includes(activeOrder.status) && activeOrder.tableId !== selectedTable) {
       setOrderContextError(tr('currentSubmittedOrderLocked'));
@@ -425,6 +618,12 @@ export default function App() {
     clearCart();
     if (reopenedExistingOrder) setOrderDetailBackScreen('tableSelection');
     setCurrentScreen(reopenedExistingOrder ? 'orderDetail' : 'menu');
+    } catch (error) {
+      setOrderContextError(getUserErrorMessage(error, tr('unexpectedRetry')));
+    } finally {
+      openingOrderInFlight.current = false;
+      setIsOpeningOrder(false);
+    }
   };
 
   const handleProceedToPayment = () => {
@@ -549,24 +748,24 @@ export default function App() {
     setCurrentScreen(activeOrder.status === 'DRAFT' || draftCart.length > 0 ? 'menu' : 'orderStatus');
   }, [activeOrder, checkoutRestoring, currentScreen, draftCart.length, stayOnDashboard]);
 
-  const canAccessKitchen = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
-  const canAccessReadyToServe = permissionState.hasPermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
-  const canAccessReports = permissionState.hasPermission('report.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
-  const canAccessTables = permissionState.hasPermission('table.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
+  const canAccessKitchen = hasEffectivePermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_KITCHEN);
+  const canAccessReadyToServe = hasEffectivePermission('order.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.SERVE_ORDER);
+  const canAccessReports = hasEffectivePermission('report.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.VIEW_REPORTS);
+  const canAccessTables = hasEffectivePermission('table.view') && hasPosCapability(profile?.role, POS_CAPABILITIES.OPERATE_TABLES);
   const canManageProducts = ['product.create', 'product.edit', 'product.manage_image']
-    .some((permission) => permissionState.hasPermission(permission));
-  const canAccessAdmin = !isOperatorMode() && hasAdminWorkspaceAccess(permissionState.permissions);
+    .some((permission) => hasEffectivePermission(permission));
+  const canAccessAdmin = !isOperatorMode() && (profile?.role === 'ADMIN' || hasAdminWorkspaceAccess(effectivePermissions));
   useEffect(() => {
     // Administrators authenticate with email/password and do not require the
     // operational staff PIN handoff used by cashiers, waiters, and kitchen staff.
-    if (profile?.status === 'ACTIVE' && profile.role === 'ADMIN' && !operatorReady && !posRequested && !isOperatorMode()) setOperatorReady(true);
-  }, [operatorReady, posRequested, profile]);
+    if (profile?.status === 'ACTIVE' && adminAccount && !operatorReady && !posRequested) setOperatorReady(true);
+  }, [adminAccount, operatorReady, posRequested, profile]);
   useEffect(() => {
-    if (!permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
+    if (!authLoading && session && profile && !profileLoading && !permissionState.isLoading && currentScreen === 'admin' && !canAccessAdmin) {
       globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
       setCurrentScreen('welcome');
     }
-  }, [canAccessAdmin, currentScreen, permissionState.isLoading]);
+  }, [authLoading, canAccessAdmin, currentScreen, permissionState.isLoading, profile, profileLoading, session]);
 
   useEffect(() => {
     if (!session) {
@@ -583,32 +782,34 @@ export default function App() {
     if (!operatorReady) return;
     if (!profile || profile.status !== 'ACTIVE' || profileLoading || permissionState.isLoading || appliedRoleLanding.current) return;
     appliedRoleLanding.current = true;
-    const landing = isOperatorMode() ? (profile.role === 'KITCHEN' ? 'kitchen' : 'welcome') : getRoleLanding(profile.role);
+    const landing = isOperatorMode() ? (profile.role === 'KITCHEN' ? 'kitchen' : 'welcome') : adminAccount ? 'admin' : getRoleLanding(profile.role);
     if (landing === 'admin') {
-      globalThis.history?.replaceState(null, '', '#admin/dashboard');
+      globalThis.history?.replaceState(null, '', adminLandingUrl());
       setCurrentScreen('admin');
     } else if (landing === 'kitchen') {
-      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      globalThis.history?.replaceState(null, '', isPosPath(globalThis.location?.pathname || '') ? '/pos/kitchen' : globalThis.location?.pathname || '/');
       setCurrentScreen('kitchen');
     } else {
-      globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
+      globalThis.history?.replaceState(null, '', globalThis.location?.pathname?.startsWith('/pos') ? '/pos/sales' : globalThis.location?.pathname || '/');
       setCurrentScreen('welcome');
     }
-  }, [operatorReady, permissionState.isLoading, profile, profileLoading, session]);
+  }, [adminAccount, operatorReady, permissionState.isLoading, profile, profileLoading, session]);
 
   useEffect(() => {
-    if (!session || profileLoading || permissionState.isLoading) return;
-    if (!canAccessProtectedScreen(currentScreen, profile?.role, permissionState.permissions)) {
+    if (!session || !profile || profileLoading || permissionState.isLoading) return;
+    if (currentScreen === 'admin' && canAccessAdmin) return;
+    if (!canAccessProtectedScreen(currentScreen, profile?.role, effectivePermissions)) {
       globalThis.history?.replaceState(null, '', globalThis.location?.pathname || '/');
       setCurrentScreen(profile?.role === 'KITCHEN' && canAccessKitchen ? 'kitchen' : 'welcome');
     }
-  }, [canAccessAdmin, canAccessKitchen, canAccessPayments, canAccessReadyToServe, canAccessReports, canAccessTables, canAccessUnpaidOrders, canStartOrder, currentScreen, permissionState.isLoading, permissionState.permissions, profile, profileLoading, session]);
+  }, [canAccessAdmin, canAccessKitchen, canAccessPayments, canAccessReadyToServe, canAccessReports, canAccessTables, canAccessUnpaidOrders, canStartOrder, currentScreen, effectivePermissions, permissionState.isLoading, profile, profileLoading, session]);
   // Show a full-screen loading state while checking session
+  if (posStartup) {
+    return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><PosStartupScreen /></IpadShell>;
+  }
   if (authLoading || (session && (profileLoading || checkoutRestoring))) {
     return (
       <IpadShell
-        deviceMode={deviceMode}
-        setDeviceMode={setDeviceMode}
         isOnline={isOnline}
         lang={lang}
         setLang={setLang}
@@ -619,12 +820,29 @@ export default function App() {
     );
   }
 
+  // An anonymous terminal setup session can remain in this browser. Opening an
+  // admin URL must still offer email/password sign-in for an administrator.
+  if (session?.user?.is_anonymous && !isPosPath(globalThis.location?.pathname || '')) {
+    return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}>
+      <AuthScreen lang={lang} setLang={setLang} enabledLanguages={enabledLanguages} onSignedIn={handleAuthenticatedLogin} sessionNotice={sessionNotice} onDismissSessionNotice={clearNotice} mode="admin" />
+    </IpadShell>;
+  }
+
   // Not authenticated → show Login Screen (inside IpadShell for consistent framing)
   if (!session || isPasswordRecovery) {
+    const deviceIsUnbound = !globalThis.localStorage?.getItem('pos.terminal.credential.v1');
+    const posRouteRequested = isPosPath(globalThis.location?.pathname || '') || posEntryPath.startsWith('/pos');
+    if (!isPasswordRecovery && posRouteRequested && (posEntryPath === '/pos/setup' || deviceIsUnbound)) {
+      return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><TerminalSetupScreen onActivated={async () => { const result = await signInAnonymously(); if (result.error) return result; setPosEntryPath('/pos/login'); globalThis.history?.replaceState(null, '', '/pos/login'); await refreshSession(); return result; }} onResume={async () => { const result = await signInAnonymously(); if (result.error) return result; const terminal = await resolveTerminal(); if (!terminal.data?.ok) return { ...terminal, error: new Error(terminal.data?.code || 'TERMINAL_AUTH_NOT_BOUND') }; setTerminalContext(terminal.data); setPosEntryPath('/pos/login'); globalThis.history?.replaceState(null, '', '/pos/login'); await refreshSession(); return terminal; }} onSignOut={() => { globalThis.history?.replaceState(null, '', '/pos'); setPosStartup(true); }} /></IpadShell>;
+    }
+    if (posEntryPath === '/pos/error') {
+      return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#0A0A0F] p-8 text-center text-white"><h1 className="text-2xl font-black text-red-300">Terminal unavailable</h1><p className="max-w-md text-sm text-gray-400">This terminal credential is invalid or revoked. Contact an administrator to activate or replace this device.</p></div></IpadShell>;
+    }
+    if (!isPasswordRecovery && posRouteRequested && !deviceIsUnbound) {
+      return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><PosStartupScreen title="Connecting to POS terminal" /></IpadShell>;
+    }
     return (
       <IpadShell
-        deviceMode={deviceMode}
-        setDeviceMode={setDeviceMode}
         isOnline={isOnline}
         lang={lang}
         setLang={setLang}
@@ -636,19 +854,24 @@ export default function App() {
           enabledLanguages={enabledLanguages}
           passwordRecovery={isPasswordRecovery}
           onPasswordRecovered={finishPasswordRecovery}
-          onSignedIn={refreshSession}
+          onSignedIn={handleAuthenticatedLogin}
           sessionNotice={sessionNotice}
           onDismissSessionNotice={clearNotice}
+          mode={isPosPath(globalThis.location?.pathname || '') || posEntryPath.startsWith('/pos') ? 'terminal' : 'admin'}
         />
       </IpadShell>
     );
   }
 
-  if (profileError || !profile || profile.status !== 'ACTIVE') {
+  if (profileError || !profile || profile.status !== 'ACTIVE' || (!adminAccount && profile.role === 'TERMINAL_SETUP')) {
+    if (['TERMINAL_AUTH_NOT_BOUND','DEVICE_AUTHENTICATION_INVALID','DEVICE_REVOKED','DEVICE_NOT_ACTIVATED'].includes(terminalContext?.code)) {
+      return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><TerminalSetupScreen onActivated={async () => { const result = await resolveTerminal(); if (result.data?.ok) { const refreshed = await refetchProfile(); if (refreshed?.error || refreshed?.data?.role !== 'TERMINAL') return { ...result, error: refreshed?.error || new Error('Terminal profile could not be loaded.') }; setTerminalContext(result.data); setPosEntryPath('/pos/login'); globalThis.history?.replaceState(null, '', '/pos/login'); } return result; }} onResume={async () => { const result = await resolveTerminal(); if (result.data?.ok) { const refreshed = await refetchProfile(); if (refreshed?.error || refreshed?.data?.role !== 'TERMINAL') return { ...result, error: refreshed?.error || new Error('Terminal profile could not be loaded.') }; setTerminalContext(result.data); setPosEntryPath('/pos/login'); globalThis.history?.replaceState(null, '', '/pos/login'); } return result; }} onSignOut={handleLogout} /></IpadShell>;
+    }
+    if (posEntryPath.startsWith('/pos') && terminalContext?.code) {
+      return <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}><div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[#0A0A0F] p-8 text-center text-white"><h1 className="text-2xl font-black text-red-300">Terminal unavailable</h1><p className="max-w-md text-sm text-gray-400">This terminal credential is invalid or inactive. Contact an administrator.</p><button onClick={handleLogout} className="rounded-xl bg-[#D4AF37] px-6 py-3 font-black text-black">Return to setup</button></div></IpadShell>;
+    }
     return (
       <IpadShell
-        deviceMode={deviceMode}
-        setDeviceMode={setDeviceMode}
         isOnline={isOnline}
         lang={lang}
         setLang={setLang}
@@ -671,9 +894,9 @@ export default function App() {
     );
   }
 
-  if (!operatorReady) {
+  if (!operatorReady && !adminAccount) {
     return (
-      <IpadShell deviceMode={deviceMode} setDeviceMode={setDeviceMode} isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}>
+      <IpadShell isOnline={isOnline} lang={lang} setLang={setLang} enabledLanguages={enabledLanguages}>
         <StaffSelectorScreen
           staff={staffHandoff.staff}
           selectedStaff={staffHandoff.selected}
@@ -707,7 +930,7 @@ export default function App() {
           canConfigurePins={profile.role === 'ADMIN'}
           onConfigurePins={() => {
             appliedRoleLanding.current = true;
-            globalThis.history?.replaceState(null, '', '#admin/users');
+            globalThis.history?.replaceState(null, '', '/admin#admin/users');
             setCurrentScreen('admin');
             setOperatorReady(true);
           }}
@@ -721,17 +944,20 @@ export default function App() {
   // Authenticated → show POS App
   return (
     <IpadShell
-      deviceMode={deviceMode}
-      setDeviceMode={setDeviceMode}
       isOnline={isOnline}
       lang={lang}
       setLang={setLang}
       enabledLanguages={enabledLanguages}
       onLogout={handleLogout}
       onLock={lockTerminal}
-      onSwitchStaff={handleSwitchStaff}
+      onSwitchStaff={adminAccount ? undefined : handleSwitchStaff}
+      onChangeTerminal={hasEffectivePermission('terminal.deactivate') ? handleChangeTerminal : undefined}
       userEmail={session?.user?.email}
       onOpenProfile={() => setIsProfileOpen(true)}
+      terminalContext={terminalContext}
+      staffName={profile?.name}
+      shiftStatus={activeShift?.status || 'No open shift'}
+      onCurrentShift={!adminAccount && hasEffectivePermission('cash.shift.view') ? () => setCurrentScreen('cashShift') : undefined}
     >
       {/* Screen 1: Welcome Screen */}
       {currentScreen === 'welcome' && (
@@ -744,11 +970,11 @@ export default function App() {
           onOpenUnpaidOrders={() => setCurrentScreen('unpaidOrders')}
           onOpenCashShift={() => setCurrentScreen('cashShift')}
           onOpenProducts={() => {
-            globalThis.history?.replaceState(null, '', '#admin/products');
+            globalThis.history?.replaceState(null, '', '/admin#admin/products');
             setCurrentScreen('admin');
           }}
           onOpenAdmin={() => {
-            globalThis.history?.replaceState(null, '', '#admin/dashboard');
+            globalThis.history?.replaceState(null, '', '/admin#admin/dashboard');
             setCurrentScreen('admin');
           }}
           canStartOrder={canStartOrder}
@@ -767,7 +993,7 @@ export default function App() {
           handleInstallPwa={handleInstallPwa}
         />
       )}
-      {currentScreen === 'cashShift' && canAccessCashShift && <CashShiftScreen onBack={() => setCurrentScreen('welcome')} canMoveCash={canMoveCash} />}
+      {currentScreen === 'cashShift' && canAccessCashShift && <CashShiftScreen onBack={() => setCurrentScreen('welcome')} canMoveCash={canMoveCash} canOpen={hasEffectivePermission('cash.shift.open')} canClose={hasEffectivePermission('cash.shift.close')} canOpenDrawer={hasEffectivePermission('cash.drawer.open')} staffName={profile?.name} terminalId={terminalContext?.terminalId} />}
 
       {/* Screen 2: Menu Home Screen */}
       {currentScreen === 'menu' && (
@@ -847,6 +1073,7 @@ export default function App() {
           tablesError={tablesError}
           onBack={() => setCurrentScreen(tableSelectionBackScreen)}
           onContinue={handleOpenOrderContext}
+          isOpeningOrder={isOpeningOrder}
           onRefreshTables={async () => { setOrderContextError(''); await refreshTables(); }}
           contextError={orderContextError}
           grandTotal={authoritativeTotal ?? grandTotal}
@@ -902,7 +1129,7 @@ export default function App() {
 
       {currentScreen === 'tableManagement' && canAccessTables && (
         <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
-          <TableManagementScreen role={profile.role} onBack={() => setCurrentScreen('welcome')} lang={lang} />
+          <TableManagementScreen role={profile.role} canManage={hasEffectivePermission('table.manage')} onBack={() => setCurrentScreen('welcome')} lang={lang} />
         </Suspense>
       )}
 
@@ -915,8 +1142,14 @@ export default function App() {
       {currentScreen === 'admin' && canAccessAdmin && (
         <Suspense fallback={<OperationalScreenLoader lang={lang} />}>
           <AdminShell
+            key={`${profile.id}:${profile.company_id}:${permissionState.permissions.join(',')}`}
             role={profile.role}
             permissions={permissionState.permissions}
+            profile={profile}
+            onProfileUpdated={() => refetchProfile({ background: true })}
+            onLogout={handleLogout}
+            setLang={setLang}
+            enabledLanguages={enabledLanguages}
             onSwitchStaff={handleSwitchStaff}
             onBack={handleSwitchStaff}
             lang={lang}
@@ -973,6 +1206,7 @@ export default function App() {
         lang={lang}
       />
       {isLocked && <TerminalLockScreen staff={profile} onUnlock={unlockTerminal} onLogout={handleLogout} onSwitchStaff={handleSwitchStaff} />}
+      {signOutBlocked && <div role="dialog" aria-modal="true" aria-label="Active shift" className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4"><section className="w-full max-w-md rounded-lg bg-white p-6 text-slate-950"><h2 className="text-xl font-bold">You currently have an active shift.</h2><div className="mt-6 flex flex-wrap justify-end gap-3"><button type="button" onClick={() => setSignOutBlocked(false)} className="rounded border border-slate-300 px-4 py-2 font-semibold">Return to POS</button>{hasEffectivePermission('cash.shift.view') && <button type="button" onClick={() => { setSignOutBlocked(false); setCurrentScreen('cashShift'); }} className="rounded bg-slate-950 px-4 py-2 font-semibold text-white">Close Shift</button>}</div></section></div>}
     </IpadShell>
   );
 }

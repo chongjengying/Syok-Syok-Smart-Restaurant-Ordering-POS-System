@@ -1,7 +1,47 @@
-import React,{useEffect,useRef} from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 
-export default function AccessibleDialog({title,onClose,children,className='max-w-2xl'}){
- const panel=useRef(null);const previous=useRef(null);
- useEffect(()=>{previous.current=document.activeElement;const node=panel.current;node?.focus();const keydown=e=>{if(e.key==='Escape')onClose();if(e.key!=='Tab'||!node)return;const focusable=[...node.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')];if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}};document.addEventListener('keydown',keydown);return()=>{document.removeEventListener('keydown',keydown);previous.current?.focus?.();};},[onClose]);
- return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl outline-none ${className}`}><h2 id="admin-dialog-title" className="sr-only">{title}</h2>{children}</section></div>;
+// Native modal dialogs keep keyboard focus inside the active dialog and make
+// the background inert, including when one dialog opens another dialog.
+export default function AccessibleDialog({ title, onClose, children, className = 'max-w-2xl', panelClassName = 'rounded-2xl bg-white p-6 shadow-2xl', dismissOnBackdrop = true }) {
+  const panel = useRef(null);
+  const titleId = useId();
+  useEffect(() => {
+    const previous = document.activeElement;
+    const node = panel.current;
+    node.showModal();
+    return () => {
+      node.close();
+      if (previous?.isConnected) previous.focus?.();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={panel}
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        const node = event.currentTarget;
+        const controls = [...node.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')]
+          .filter((item) => item.getClientRects().length && !item.closest('[inert]'));
+        const first = controls[0], last = controls.at(-1);
+        if (!first) { event.preventDefault(); node.focus(); return; }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === node)) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === node)) {
+          event.preventDefault(); first.focus();
+        }
+      }}
+      onClick={(event) => {
+        if (!dismissOnBackdrop || event.target !== event.currentTarget) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose();
+      }}
+      className={`pos-dialog fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto border-0 text-slate-900 ${panelClassName} ${className}`}
+    >
+      <h2 id={titleId} className="sr-only">{title}</h2>
+      {children}
+    </dialog>
+  );
 }

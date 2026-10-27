@@ -59,7 +59,7 @@ async function bindStaffToBranch(staff, branch) {
     body: {
       branch_id: branch.id, company_id: branch.company_id,
       terminal_code: `QA-${suffix}-${fixture.terminalIds.length + 1}`,
-      name: 'Concurrency QA terminal', status: 'ACTIVE', terminal_type: 'POS',
+      name: 'Concurrency QA terminal', status: 'ACTIVE', terminal_type: 'CASHIER',
       registration_status: 'REGISTERED', device_identifier: device,
       access_mode: 'ALL_BRANCH_STAFF', allowed_roles: ['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN'],
     },

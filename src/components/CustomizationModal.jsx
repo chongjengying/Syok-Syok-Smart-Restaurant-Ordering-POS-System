@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
+import AccessibleDialog from './admin/AccessibleDialog';
 import { X, Plus, Minus, Check, MessageSquare } from 'lucide-react';
 import { translate, translations } from '../utils/i18n';
 import { soundFx } from '../utils/audio';
@@ -14,6 +15,7 @@ export default function CustomizationModal({
   diningMode,
   lang
 }) {
+  const noteId = useId();
   const t = translations[lang] || translations.en;
   const tr = (key, variables) => translate(lang, key, variables);
 
@@ -100,13 +102,13 @@ export default function CustomizationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
+    <AccessibleDialog title={`${tr('customization')}: ${getDishName(dish)}`} onClose={onClose} dismissOnBackdrop={false} className="max-w-4xl" panelClassName="rounded-2xl bg-white p-0 shadow-2xl overflow-hidden">
       {/* Central Modal Container ($800 x 600pt reference) */}
-      <div className="w-[800px] h-[600px] bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col modal-elevation-high border border-white/20">
+      <div className="w-full h-[min(720px,calc(100dvh-2rem))] bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col modal-elevation-high border border-white/20">
         {/* Modal Header */}
-        <div className="h-16 px-6 bg-[#121212] text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="text-xs bg-[#D4AF37] text-black font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+        <div className="min-h-16 px-4 sm:px-6 bg-[#121212] text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 flex items-center gap-3">
+            <span className="hidden sm:inline text-xs bg-[#D4AF37] text-black font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
               {tr('customization')}
             </span>
             <h2 className="font-extrabold text-lg text-white truncate max-w-md">
@@ -114,22 +116,23 @@ export default function CustomizationModal({
             </h2>
           </div>
           <button
+            aria-label="Close customization"
             onClick={() => {
               soundFx.playTap();
               onClose();
             }}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            className="w-11 h-11 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="min-h-0 flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
           {/* Left Column: Dish Image & Description */}
-          <div className="w-[320px] bg-[#F8F9FA] p-6 border-r border-[#E9ECEF] flex flex-col justify-between shrink-0">
+          <div className="w-full md:w-64 bg-[#F8F9FA] p-4 md:p-6 border-b md:border-r border-[#E9ECEF] flex flex-col justify-between shrink-0">
             <div>
-              <div className="w-full h-[200px] rounded-2xl overflow-hidden shadow-md mb-4 bg-gray-200 border border-gray-200">
+              <div className="hidden md:block w-full h-[180px] rounded-2xl overflow-hidden shadow-md mb-4 bg-gray-200 border border-gray-200">
                 {dish.image ? (
                   <img
                     src={dish.image}
@@ -145,7 +148,7 @@ export default function CustomizationModal({
               <h3 className="font-extrabold text-xl text-[#121212] leading-tight">
                 {getDishName(dish)}
               </h3>
-              <p className="text-sm font-bold text-[#B8952B] mt-1">
+              <p className="text-sm font-bold text-[#80600d] mt-1">
                 {tr('basePrice')}: {formatMoney(dish.price)}
               </p>
               <p className="text-xs text-gray-500 mt-3 leading-relaxed">
@@ -153,20 +156,20 @@ export default function CustomizationModal({
               </p>
             </div>
 
-            <div className="bg-white p-3 rounded-xl border border-gray-200 text-xs text-gray-600">
+            <div className="hidden md:block bg-white p-3 rounded-xl border border-gray-200 text-xs text-gray-600">
               <span className="font-bold text-gray-800 block mb-0.5">{tr('chefNote')}</span>
               {tr('chefNoteText')}
             </div>
           </div>
 
           {/* Right Column: Customization Options */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-white">
+          <div className="min-w-0 flex-1 p-4 md:p-6 md:overflow-y-auto space-y-6 bg-white">
             {diningMode === 'dine-in' && (
               <div>
-                <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-3">{tr('itemService')}</label>
+                <label className="text-xs font-extrabold text-gray-600 uppercase tracking-wider block mb-3">{tr('itemService')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   {['DINE_IN', 'TAKEAWAY'].map((mode) => (
-                    <button key={mode} type="button" onClick={() => setServiceMode(mode)}
+                    <button key={mode} type="button" aria-pressed={serviceMode === mode} onClick={() => setServiceMode(mode)}
                       className={`h-12 rounded-xl border-2 text-sm font-bold ${serviceMode === mode ? 'bg-[#121212] text-white border-[#D4AF37]' : 'bg-gray-100 border-transparent'}`}>
                       {mode === 'TAKEAWAY' ? tr('packTakeaway') : tr('serveDineIn')}
                     </button>
@@ -176,33 +179,34 @@ export default function CustomizationModal({
             )}
             {(dish.optionGroups || []).map((group) => (
               <div key={group.id}>
-                <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-3">
+                <label className="text-xs font-extrabold text-gray-600 uppercase tracking-wider block mb-3">
                   {group.name} {group.isRequired ? `• ${tr('required')}` : ''}
                   {group.selectionType === 'MULTIPLE' ? ` • ${tr('chooseRange', { min: group.minSelection, max: group.maxSelection })}` : ''}
                 </label>
-                <div className={group.selectionType === 'SINGLE' ? 'grid grid-cols-2 gap-3' : 'space-y-2'}>
+                <div className={group.selectionType === 'SINGLE' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'space-y-2'}>
                   {group.options.map((option) => {
                     const isSelected = (selections[group.id] || []).some((item) => item.id === option.id);
                     return (
                       <button
                         key={option.id}
                         type="button"
+                        aria-pressed={isSelected}
                         onClick={() => toggleOption(group, option)}
-                        className={`w-full h-[48px] px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition-all cursor-pointer border-2 ${
+                        className={`w-full min-h-[48px] gap-2 px-3 py-2 rounded-xl text-sm font-semibold flex items-center justify-between transition-all cursor-pointer border-2 ${
                           isSelected
                             ? 'bg-[#121212] text-white border-[#D4AF37] shadow-md'
                             : 'bg-[#F1F3F5] text-[#121212] border-transparent hover:bg-gray-200'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 ${group.selectionType === 'SINGLE' ? 'rounded-full' : 'rounded-md'} flex items-center justify-center border ${
+                        <div className="min-w-0 flex items-center gap-3">
+                          <div className={`w-5 h-5 shrink-0 ${group.selectionType === 'SINGLE' ? 'rounded-full' : 'rounded-md'} flex items-center justify-center border ${
                             isSelected ? 'bg-[#D4AF37] border-[#D4AF37] text-black' : 'border-gray-400 bg-white'
                           }`}>
                             {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                           </div>
-                          <span>{option.name}</span>
+                          <span className="break-words text-left">{option.name}</span>
                         </div>
-                        <span className={isSelected ? 'text-[#D4AF37] font-bold' : 'text-gray-600'}>
+                        <span className={`shrink-0 text-xs ${isSelected ? 'text-[#D4AF37] font-bold' : 'text-gray-600'}`}>
                           {option.priceAdjustment > 0 ? `+${formatMoney(option.priceAdjustment)}` : tr('included')}
                         </span>
                       </button>
@@ -219,7 +223,7 @@ export default function CustomizationModal({
 
             {/* 3. Special Request Text Box & Preset Chips */}
             <div>
-              <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+              <label htmlFor={noteId} className="text-xs font-extrabold text-gray-600 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>{t.specialRequest}</span>
               </label>
@@ -231,7 +235,7 @@ export default function CustomizationModal({
                     key={chip}
                     type="button"
                     onClick={() => addPresetChip(chip)}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold px-3 py-1.5 rounded-full cursor-pointer transition-all border border-gray-200"
+                    className="min-h-11 text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold px-3 py-1.5 rounded-full cursor-pointer transition-all border border-gray-200"
                   >
                     + {chip}
                   </button>
@@ -239,6 +243,7 @@ export default function CustomizationModal({
               </div>
 
               <textarea
+                id={noteId}
                 value={specialRequest}
                 onChange={(e) => setSpecialRequest(e.target.value)}
                 placeholder={t.specialPlaceholder}
@@ -254,10 +259,12 @@ export default function CustomizationModal({
         </div>
 
         {/* Sticky Bottom Bar with Stepper & Dynamic CTA (64pt height) */}
-        <div className="h-[84px] bg-[#121212] text-white px-6 flex items-center justify-between shrink-0 border-t border-white/10">
+        <div className="bg-[#121212] text-white p-3 sm:px-6 flex flex-wrap gap-3 items-center justify-between shrink-0 border-t border-white/10">
           {/* Large Quantity Stepper */}
           <div className="flex items-center bg-white/10 rounded-2xl p-1.5 border border-white/15">
             <button
+              aria-label="Decrease quantity"
+              disabled={quantity <= 1}
               onClick={() => {
                 if (quantity > 1) {
                   soundFx.playTap();
@@ -271,7 +278,7 @@ export default function CustomizationModal({
             <span className="w-12 text-center font-extrabold text-xl text-white">
               {quantity}
             </span>
-            <button
+            <button aria-label="Increase quantity"
               onClick={() => {
                 soundFx.playTap();
                 setQuantity(Math.min(CART_QUANTITY_MAX, quantity + 1));
@@ -287,15 +294,15 @@ export default function CustomizationModal({
           <button
             onClick={handleSaveItem}
             disabled={!hasValidSelections}
-            className="h-[64px] px-8 rounded-[16px] bg-gradient-to-r from-[#D4AF37] to-[#B8952B] disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white font-bold text-lg tracking-wider flex items-center gap-4 btn-gold-shadow hover:enabled:scale-[1.02] active:enabled:scale-95 transition-all cursor-pointer"
+            className="min-h-14 flex-1 sm:flex-none px-4 rounded-xl bg-[#D4AF37] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#121212] font-bold text-base flex items-center justify-between gap-3 cursor-pointer"
           >
             <span>{existingCartItem ? t.editItemBtn : t.addToCartBtn}</span>
-            <span className="bg-black/20 px-3 py-1 rounded-lg text-white font-extrabold text-xl">
+            <span className="px-2 py-1 rounded-lg text-[#121212] font-extrabold text-lg whitespace-nowrap">
               {formatMoney(totalPrice)}
             </span>
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleDialog>
   );
 }

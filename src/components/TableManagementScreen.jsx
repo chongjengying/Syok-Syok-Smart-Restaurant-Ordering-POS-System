@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, MoveRight, Pencil, Plus, RefreshCw, Sparkles, UtensilsCrossed, Wrench, X } from 'lucide-react';
 import { useTableManagement } from '../hooks/useTableManagement';
+import { listBranches } from '../services/organization.service';
 import { translate, translateStatus } from '../utils/i18n';
 
 const statusStyles = {
@@ -11,9 +12,25 @@ const statusStyles = {
   DISABLED: 'bg-red-100 text-red-800',
 };
 
-export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false, initialStatus = '', branchId = '' }) {
+export default function TableManagementScreen({ role, onBack, lang = 'en', embedded = false, initialStatus = '', branchId = '', canManage = ['ADMIN', 'MANAGER'].includes(role) }) {
   const tr = (key, variables) => translate(lang, key, variables);
   const includeInactive = ['ADMIN', 'MANAGER'].includes(role);
+  const [selectedBranchId, setSelectedBranchId] = useState(branchId);
+  const [branches, setBranches] = useState([]);
+  const [branchesLoading, setBranchesLoading] = useState(embedded);
+  const [branchError, setBranchError] = useState('');
+  useEffect(() => {
+    if (!embedded) return undefined;
+    let active = true;
+    void listBranches().then(({ data, error }) => {
+      if (!active) return;
+      setBranches(data || []);
+      setBranchError(error?.message || '');
+      setBranchesLoading(false);
+    });
+    return () => { active = false; };
+  }, [embedded]);
+  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
   const {
     tables,
     isLoading,
@@ -31,7 +48,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
     moveOrder,
     create,
     edit,
-  } = useTableManagement(true, { includeInactive, branchId });
+  } = useTableManagement(!embedded || Boolean(selectedBranchId), { includeInactive, branchId: embedded ? selectedBranchId : branchId });
   const [move, setMove] = useState(null);
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [tableEditor, setTableEditor] = useState(null);
@@ -71,12 +88,12 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
         </button>
       </header>}
 
-      {embedded && <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-black">Tables</h1><p className="text-sm text-gray-500">Capacity, areas, availability, and operational status.</p></div><div className="flex gap-2"><select aria-label="Table status" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className="rounded-xl border bg-white px-3 text-sm"><option value="">All statuses</option>{Object.keys(statusStyles).map(status=><option key={status}>{status}</option>)}</select><button onClick={() => { setTableEditor({ isNew: true }); setTableForm({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' }); }} className="flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 font-black"><Plus size={16}/>Add Table</button><button onClick={() => refresh()} className="rounded-xl border bg-white p-3"><RefreshCw className="h-4 w-4" /></button></div></div>}
+      {embedded && <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-black">Tables</h1><p className="text-sm text-gray-500">Choose a branch to manage its dining tables.</p></div><div className="flex flex-wrap gap-2"><select aria-label="Table branch" value={selectedBranchId} onChange={event => setSelectedBranchId(event.target.value)} disabled={branchesLoading} className="rounded-xl border bg-white px-3 text-sm"><option value="">{branchesLoading ? 'Loading branches…' : 'Select branch'}</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}{branch.status !== 'ACTIVE' ? ' (inactive)' : ''}</option>)}</select><select aria-label="Table status" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className="rounded-xl border bg-white px-3 text-sm"><option value="">All statuses</option>{Object.keys(statusStyles).map(status=><option key={status}>{status}</option>)}</select>{canManage && <button disabled={!selectedBranch || selectedBranch.status !== 'ACTIVE'} onClick={() => { setTableEditor({ isNew: true }); setTableForm({ tableNumber: '', tableName: '', capacity: 2, area: 'Indoor' }); }} className="flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 font-black disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16}/>Add Table</button>}<button disabled={!selectedBranchId} onClick={() => refresh()} className="rounded-xl border bg-white p-3 disabled:opacity-50" aria-label="Refresh tables"><RefreshCw className="h-4 w-4" /></button></div></div>}
 
       <main className={`flex-1 ${embedded ? '' : 'overflow-y-auto p-6'} space-y-5`}>
-        {(error || actionError) && (
+        {(branchError || error || actionError) && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {actionError || error}
+            <AlertTriangle className="w-4 h-4 shrink-0" /> {actionError || error || branchError}
           </div>
         )}
         {actionMessage && (
@@ -84,7 +101,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
             <CheckCircle2 className="w-4 h-4 shrink-0" /> {actionMessage}
           </div>
         )}
-        {isLoading ? (
+        {embedded && !selectedBranchId ? <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">{branchesLoading ? 'Loading branches…' : branches.length ? 'Select a branch to view and create its tables.' : 'No accessible branches are available.'}</div> : isLoading ? (
           <div className="h-full flex items-center justify-center gap-3 text-gray-500"><Loader2 className="w-6 h-6 animate-spin" /> {tr('loadingTables')}</div>
         ) : visibleTables.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">{tr('noTables')}</div>
@@ -114,7 +131,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
                     ) : <p className="text-gray-400">{tr('noActiveOrder')}</p>}
                   </div>
                   <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-                    {embedded && ['ADMIN', 'MANAGER'].includes(role) && <button disabled={busy} onClick={() => { setTableEditor(table); setTableForm({ tableNumber: table.tableNumber, tableName: table.tableName || '', capacity: table.capacity, area: table.area || 'Indoor' }); }} className="rounded-lg border px-3 py-2 text-xs font-bold flex items-center gap-1"><Pencil size={13}/> Edit</button>}
+                    {embedded && canManage && <button disabled={busy} onClick={() => { setTableEditor(table); setTableForm({ tableNumber: table.tableNumber, tableName: table.tableName || '', capacity: table.capacity, area: table.area || 'Indoor' }); }} className="rounded-lg border px-3 py-2 text-xs font-bold flex items-center gap-1"><Pencil size={13}/> Edit</button>}
                     {table.status === 'AVAILABLE' && (
                       <button disabled={busy} onClick={() => reserve(table.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{tr('reserve')}</button>
                     )}
@@ -133,10 +150,10 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
                     {canMoveOrder && (
                       <button disabled={busy} onClick={() => setMove({ orderId: order.id, sourceTableId: table.id, orderNumber: order.orderNumber })} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50 flex items-center gap-1"><MoveRight className="w-3.5 h-3.5" /> {tr('move')}</button>
                     )}
-                    {['ADMIN', 'MANAGER'].includes(role) && ['AVAILABLE', 'CLEANING'].includes(table.status) && (
+                    {canManage && ['AVAILABLE', 'CLEANING'].includes(table.status) && (
                       <button disabled={busy} onClick={() => runOutOfService(table.id)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50 flex items-center gap-1"><Wrench className="w-3.5 h-3.5" /> {tr('outOfService')}</button>
                     )}
-                    {['ADMIN', 'MANAGER'].includes(role) && table.status === 'DISABLED' && (
+                    {canManage && table.status === 'DISABLED' && (
                       <button disabled={busy} onClick={() => restore(table.id)} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800 disabled:opacity-50">{tr('restore')}</button>
                     )}
                   </div>
@@ -165,7 +182,7 @@ export default function TableManagementScreen({ role, onBack, lang = 'en', embed
           </div>
         </div>
       )}
-      {tableEditor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><form onSubmit={async e => { e.preventDefault(); if (!globalThis.confirm(tableEditor.id ? 'Save changes to this table?' : 'Create this table?')) return; const input = { ...tableForm, capacity: Number(tableForm.capacity) }; const result = tableEditor.id ? await edit(tableEditor.id, input) : await create(input); if (!result.error) setTableEditor(null); }} className="w-full max-w-md rounded-2xl bg-white p-6"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{tableEditor.id ? 'Edit' : 'Add'} Table</h2><button type="button" onClick={() => setTableEditor(null)}><X/></button></div><label className="block text-sm font-bold">Table number<input required maxLength={20} value={tableForm.tableNumber} onChange={e => setTableForm({...tableForm,tableNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Name<input maxLength={100} value={tableForm.tableName} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Area<input required maxLength={100} value={tableForm.area} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Capacity<input required type="number" min="1" max="100" value={tableForm.capacity} onChange={e => setTableForm({...tableForm,capacity:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>{actionError&&<p className="mt-3 text-sm text-red-600">{actionError}</p>}<button disabled={Boolean(updatingId)} className="mt-6 w-full rounded-xl bg-[#D4AF37] p-3 font-black">{updatingId?'Saving…':'Save Table'}</button></form></div>}
+      {tableEditor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"><form onSubmit={async e => { e.preventDefault(); if (!globalThis.confirm(tableEditor.id ? 'Save changes to this table?' : 'Create this table?')) return; const input = { ...tableForm, capacity: Number(tableForm.capacity) }; const result = tableEditor.id ? await edit(tableEditor.id, input) : await create(input); if (!result.error) setTableEditor(null); }} className="w-full max-w-md rounded-2xl bg-white p-6"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{tableEditor.id ? 'Edit' : 'Add'} Table</h2><button type="button" onClick={() => setTableEditor(null)}><X/></button></div><p className="mb-4 text-sm text-gray-600">Branch: {selectedBranch?.code || 'Current branch'} · {selectedBranch?.name || ''}</p><label className="block text-sm font-bold">Table number<input required maxLength={20} value={tableForm.tableNumber} onChange={e => setTableForm({...tableForm,tableNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Name<input maxLength={100} value={tableForm.tableName} onChange={e => setTableForm({...tableForm,tableName:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Area<input required maxLength={100} value={tableForm.area} onChange={e => setTableForm({...tableForm,area:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label><label className="mt-4 block text-sm font-bold">Capacity<input required type="number" min="1" max="100" value={tableForm.capacity} onChange={e => setTableForm({...tableForm,capacity:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>{actionError&&<p className="mt-3 text-sm text-red-600">{actionError}</p>}<button disabled={Boolean(updatingId)} className="mt-6 w-full rounded-xl bg-[#D4AF37] p-3 font-black">{updatingId?'Saving…':'Save Table'}</button></form></div>}
     </div>
   );
 }

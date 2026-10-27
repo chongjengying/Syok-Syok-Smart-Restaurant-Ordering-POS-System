@@ -7,7 +7,7 @@ import { useAuthConnection } from '../hooks/useAuthConnection';
 import { soundFx } from '../utils/audio';
 import { SUPPORTED_LANGUAGES, translate } from '../utils/i18n';
 
-export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered, onSignedIn, sessionNotice = '', onDismissSessionNotice }) {
+export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SUPPORTED_LANGUAGES, passwordRecovery = false, onPasswordRecovered, onSignedIn, sessionNotice = '', onDismissSessionNotice, mode = 'admin' }) {
   const tr = (key) => translate(lang, key);
   const { status: connectionStatus } = useAuthConnection();
   const submitLock = useRef(false);
@@ -171,7 +171,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
         <div
           className="rounded-[28px] border border-white/[0.08] p-8 sm:p-10 relative overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, rgba(26,26,30,0.95) 0%, rgba(18,18,22,0.98) 100%)',
+            background: 'linear-gradient(135deg, rgba(26,26,30,0.98) 0%, rgba(18,18,22,0.99) 100%)',
             boxShadow: '0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(212,175,55,0.05), inset 0 1px 0 rgba(255,255,255,0.03)',
           }}
         >
@@ -216,15 +216,15 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
             </div>
 
             <h1 className="text-[22px] font-black tracking-[0.12em] text-white">
-              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : 'SYOK SYOK POS'}
+              {passwordRecovery ? tr('resetPasswordTitle') : isForgotPassword ? tr('forgotPasswordTitle') : isSignUp ? tr('signupTitle') : mode === 'setup' ? 'POS TERMINAL SETUP' : mode === 'terminal' ? 'POS STAFF LOGIN' : 'Restaurant POS'}
             </h1>
             <p className="mt-1.5 text-xs font-medium text-gray-400">
-              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : 'Restaurant Management'}
+              {passwordRecovery ? tr('resetPasswordSubtitle') : isForgotPassword ? tr('forgotPasswordSubtitle') : isSignUp ? tr('signupSubtitle') : mode === 'setup' ? 'Enter the terminal account before entering the activation code' : mode === 'terminal' ? 'Sign in with the registered terminal account' : 'Restaurant Management'}
             </p>
           </div>
 
           {/* Tab Selection */}
-          {!passwordRecovery && !isForgotPassword && <div className="flex border-b border-white/[0.08] mb-6">
+          {!passwordRecovery && !isForgotPassword && mode !== 'terminal' && <div className="flex border-b border-white/[0.08] mb-6">
             <button
               type="button"
               onClick={() => {
@@ -452,7 +452,7 @@ export default function AuthScreen({ lang = 'en', setLang, enabledLanguages = SU
 
           <div className="mt-6 border-t border-white/[0.08] pt-5 text-center">
             <p className={`text-[10px] font-black tracking-[0.22em] ${env.appEnv === 'production' ? 'text-red-400' : 'text-amber-400'}`}>
-              {env.appEnv === 'production' ? 'PRODUCTION ENVIRONMENT' : 'STAGING ENVIRONMENT'}
+              {env.appEnv.toUpperCase()} ENVIRONMENT
             </p>
             <p className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400">
               <span>POS {APP_VERSION}</span>

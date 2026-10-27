@@ -179,13 +179,15 @@ const newStation = (): KitchenStation => ({
 });
 export default function SystemAdministrationPage({
   lang = "en",
+  initialTab = "General",
 }: {
   lang?: string;
+  initialTab?: string;
 }) {
   const tr = (key: string, variables: Record<string, unknown> = {}) =>
     translate(lang, key, variables);
   const state = useSystemSettings();
-  const [tab, setTab] = useState<TabName>(tabs[0]);
+  const [tab, setTab] = useState<TabName>(tabs.includes(initialTab as TabName) ? initialTab as TabName : tabs[0]);
   const [notice, setNotice] = useState("");
   const s = state.draft;
   const fields = tabFields[tab];

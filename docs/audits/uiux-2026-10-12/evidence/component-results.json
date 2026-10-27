@@ -1,0 +1,42 @@
+[
+  {
+    "viewport": [
+      1920,
+      1080
+    ],
+    "verification": "VERIFIED PASS",
+    "checks": "viewport fit; forward/reverse focus; selection; notes; quantity; payload; save reachability; Escape; focus return; no JS errors"
+  },
+  {
+    "viewport": [
+      1366,
+      768
+    ],
+    "verification": "VERIFIED PASS",
+    "checks": "viewport fit; forward/reverse focus; selection; notes; quantity; payload; save reachability; Escape; focus return; no JS errors"
+  },
+  {
+    "viewport": [
+      1024,
+      768
+    ],
+    "verification": "VERIFIED PASS",
+    "checks": "viewport fit; forward/reverse focus; selection; notes; quantity; payload; save reachability; Escape; focus return; no JS errors"
+  },
+  {
+    "viewport": [
+      768,
+      1024
+    ],
+    "verification": "VERIFIED PASS",
+    "checks": "viewport fit; forward/reverse focus; selection; notes; quantity; payload; save reachability; Escape; focus return; no JS errors"
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "verification": "VERIFIED PASS",
+    "checks": "viewport fit; forward/reverse focus; selection; notes; quantity; payload; save reachability; Escape; focus return; no JS errors"
+  }
+]

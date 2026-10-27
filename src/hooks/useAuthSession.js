@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getValidatedSession, onAuthStateChange, signOut } from '../features/auth/authService';
 
 const INACTIVITY_LIMIT_MS = 3 * 60 * 1000;
+const isTransientValidationError = (error) => error?.code === 'CONNECTION_FAILED' || Number(error?.status || 0) >= 500;
 
 export function useAuthSession() {
   const signOutReason = useRef('');
   const suppressSignOutNotice = useRef(false);
+  const validationSequence = useRef(0);
+  const validatedIdentity = useRef('');
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,11 +35,15 @@ export function useAuthSession() {
     let active = true;
     let validationTimer;
 
+    const requestId = ++validationSequence.current;
     getValidatedSession().then(({ data, error: sessionError }) => {
       if (!active) return;
+      if (requestId !== validationSequence.current) return;
+      validatedIdentity.current = data?.session?.user?.id || '';
       setSession(data?.session || null);
       setError(sessionError);
       if (sessionError) setNotice(sessionError.message);
+      else setNotice('');
       setIsLoading(false);
     });
 
@@ -44,6 +51,9 @@ export function useAuthSession() {
       if (!active) return;
       if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
       if (event === 'SIGNED_OUT' || !nextSession) {
+        ++validationSequence.current;
+        window.clearTimeout(validationTimer);
+        validatedIdentity.current = '';
         setSession(null);
         setError(null);
         setIsLoading(false);
@@ -54,14 +64,28 @@ export function useAuthSession() {
         suppressSignOutNotice.current = false;
         return;
       }
-      setIsLoading(true);
+      // Revalidate metadata/token updates without unmounting the active form.
+      // A new identity still waits for full session validation before rendering.
+      const sameValidatedIdentity = validatedIdentity.current === nextSession.user?.id;
+      if (!sameValidatedIdentity || !['USER_UPDATED', 'TOKEN_REFRESHED'].includes(event)) setIsLoading(true);
       window.clearTimeout(validationTimer);
+      const requestId = ++validationSequence.current;
       validationTimer = window.setTimeout(async () => {
         const validated = await getValidatedSession();
         if (!active) return;
+        if (requestId !== validationSequence.current) return;
+        if (validated.error && isTransientValidationError(validated.error) && sameValidatedIdentity) {
+          setSession(nextSession);
+          setError(validated.error);
+          setNotice('Connection interrupted. Your session is being kept active and will be checked again.');
+          setIsLoading(false);
+          return;
+        }
+        validatedIdentity.current = validated.data?.session?.user?.id || '';
         setSession(validated.data?.session || null);
         setError(validated.error);
         if (validated.error) setNotice(validated.error.message);
+        else setNotice('');
         setIsLoading(false);
       }, 0);
     });
@@ -97,16 +121,28 @@ export function useAuthSession() {
     const validate = async () => {
       if (checking || !navigator.onLine) return;
       checking = true;
+      const requestId = ++validationSequence.current;
       const result = await getValidatedSession();
       checking = false;
+      if (requestId !== validationSequence.current) return;
+      if (result.error && isTransientValidationError(result.error)) {
+        setError(result.error);
+        setNotice('Connection interrupted. Your session is being kept active and will be checked again.');
+        return;
+      }
       if (result.error || !result.data?.session) {
+        validatedIdentity.current = '';
         setSession(null);
         setError(result.error);
         setNotice(result.error?.message || 'Your staff session is no longer available. Sign in again.');
+      } else {
+        validatedIdentity.current = result.data.session.user.id;
+        setError(null);
+        setNotice('');
       }
     };
     const onVisibility = () => { if (document.visibilityState === 'visible') void validate(); };
-    const interval = window.setInterval(validate, 60_000);
+    const interval = window.setInterval(validate, isOperatorMode() ? 10_000 : 60_000);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearInterval(interval);
@@ -115,14 +151,20 @@ export function useAuthSession() {
   }, [session]);
 
   const refreshSession = useCallback(async () => {
+    const requestId = ++validationSequence.current;
     const result = await getValidatedSession();
+    if (requestId !== validationSequence.current) return result;
+    validatedIdentity.current = result.data?.session?.user?.id || '';
     setSession(result.data?.session || null);
     setError(result.error);
     if (result.error) setNotice(result.error.message);
+    else setNotice('');
+    setIsLoading(false);
     return result;
   }, []);
 
   const signOutSession = useCallback(async () => {
+    validationSequence.current += 1;
     signOutReason.current = '';
     suppressSignOutNotice.current = true;
     setNotice('');

@@ -76,9 +76,9 @@ export default function MenuHomeScreen({
   return (
     <div className="w-full h-full flex flex-col bg-[#F8F9FA] text-[#121212] overflow-hidden">
       {/* 1. TOP BAR Header */}
-      <div className="h-16 bg-[#121212] text-white px-6 flex items-center justify-between shadow-md shrink-0 z-30">
+      <div className="pos-menu-toolbar min-h-16 bg-[#121212] text-white p-3 flex flex-wrap gap-3 items-center justify-between shadow-md shrink-0 z-30">
         {/* Left: Logo & Search Box */}
-        <div className="flex items-center gap-6">
+        <div className="min-w-0 flex flex-1 items-center gap-3">
           <button
             type="button"
             onClick={() => {
@@ -92,23 +92,24 @@ export default function MenuHomeScreen({
               <LayoutDashboard className="w-5 h-5" />
             </div>
             <div className="hidden sm:block leading-tight">
-              <div className="font-extrabold text-sm tracking-wide text-white">AURA POS</div>
+              <div className="font-extrabold text-sm tracking-wide text-white">Restaurant POS</div>
               <div className="max-w-72 truncate text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">
                 {[operationalContext?.branchCode, operationalContext?.terminalCode, operationalContext?.staffName, activeOrder?.orderNumber]
-                  .filter(Boolean).join(' · ') || 'Fine Dining'}
+                  .filter(Boolean).join(' · ') || tr('menu')}
               </div>
             </div>
           </button>
 
           {/* Search Food... Input */}
-          <div className="relative w-64 md:w-80">
+          <div className="relative min-w-0 flex-1 max-w-80">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={t.searchPlaceholder}
               placeholder={t.searchPlaceholder}
-              className="w-full h-10 pl-10 pr-4 bg-white/10 text-white placeholder-gray-400 rounded-xl text-sm border border-white/15 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all"
+              className="w-full h-11 pl-10 pr-4 bg-white/10 text-white placeholder-gray-400 rounded-xl text-sm border border-white/15 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all"
             />
           </div>
         </div>
@@ -150,6 +151,9 @@ export default function MenuHomeScreen({
         </div>
       </div>
 
+      <button type="button" disabled={cart.length === 0} onClick={onCheckout} className="pos-mobile-order-action min-h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 text-sm font-bold disabled:text-slate-500">
+        <span>{t.myOrder} · {totalItemCount} {t.items}</span><span>{t.checkout} <ChevronRight className="inline h-4 w-4" /></span>
+      </button>
       {operationError && (
         <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
           {operationError}
@@ -254,7 +258,7 @@ export default function MenuHomeScreen({
             </div>
           )}
           <div
-            className="pos-product-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-8"
+            className="pos-product-grid grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-8"
             aria-busy={isLoadingProducts}
           >
             {isLoadingProducts && <ProductGridSkeleton />}
@@ -276,10 +280,10 @@ export default function MenuHomeScreen({
             {!isLoadingProducts && products.map((dish) => (
               <div
                 key={dish.id}
-                className="pos-product-card w-full h-[306px] bg-white rounded-xl p-3 border border-[#E9ECEF] card-elevation-low hover:border-[#D4AF37] transition-colors duration-150 flex flex-col justify-between group"
+                className="pos-product-card w-full min-h-[260px] bg-white rounded-xl p-3 border border-[#E9ECEF] card-elevation-low hover:border-[#D4AF37] transition-colors duration-150 flex flex-col justify-between group"
               >
                 {/* 1:1 Aspect Ratio Food Image with 16pt rounded corners */}
-                <div className="relative w-full h-[138px] rounded-lg overflow-hidden bg-gray-100 mb-3">
+                <div className="relative w-full h-[112px] rounded-lg overflow-hidden bg-gray-100 mb-3">
                   <ProductImage src={dish.imageUrl} alt={dish.name} fallbackLabel={tr('productImageUnavailable')} className="h-full w-full object-cover" />
                   {!dish.isAvailable && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/80 px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">{tr('soldOut')}</span>}
                 </div>
@@ -287,7 +291,7 @@ export default function MenuHomeScreen({
                 {/* Middle: Item Name, Price */}
                 <div className="flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-bold text-base text-[#121212] line-clamp-1 group-hover:text-[#B8952B] transition-colors">
+                    <h3 className="font-bold text-base text-[#121212] line-clamp-2 group-hover:text-[#80600d] transition-colors">
                       {getDishName(dish)}
                     </h3>
                     {dish.code && <p className="text-[9px] font-bold tracking-wide text-gray-400">{dish.code}</p>}
@@ -447,7 +451,7 @@ export default function MenuHomeScreen({
               }}
               className={`w-full h-[64px] rounded-[16px] font-bold text-base tracking-wide flex items-center justify-between px-6 transition-all duration-200 cursor-pointer ${
                 cart.length > 0
-                  ? 'bg-[#D4AF37] hover:bg-[#B8952B] text-white btn-gold-shadow active:scale-95'
+                  ? 'bg-[#D4AF37] hover:bg-[#C59A2A] text-[#121212]'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}
             >

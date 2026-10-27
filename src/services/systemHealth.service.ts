@@ -3,11 +3,7 @@ import { env } from '../config/env';
 import { fetchSystemHealth } from '../repositories/systemHealth.repository';
 import type { RealtimeHealth, SystemHealth } from '../types/systemHealth';
 import { calculateOverallHealth } from '../utils/healthStatus';
-
-const normalizeEnvironment = (value:string) => {
-  const normalized=String(value||'DEVELOPMENT').toUpperCase();
-  return (['LOCAL','DEVELOPMENT','STAGING','PRODUCTION'].includes(normalized)?normalized:'DEVELOPMENT') as SystemHealth['environment'];
-};
+import { normalizeEnvironment, environmentsMatch } from '../config/environment.js';
 
 export async function getSystemHealth(signal?:AbortSignal){
   const result=await fetchSystemHealth(signal);
@@ -15,8 +11,10 @@ export async function getSystemHealth(signal?:AbortSignal){
   const server=result.data;
   const frontendEnvironment=normalizeEnvironment(env.appEnv);
   const components=[...server.components];
-  if(frontendEnvironment!==server.environment){
+  if(!environmentsMatch(frontendEnvironment,server.environment)){
     components.push({component:'environment',label:'Environment Configuration',status:'WARNING',critical:true,message:`Frontend reports ${frontendEnvironment} while the health service reports ${server.environment}.`,lastCheckedAt:server.checkedAt});
+  } else {
+    components.push({component:'environment',label:'Environment Configuration',status:'HEALTHY',critical:true,message:`Frontend and health service environments are compatible (${frontendEnvironment} / ${server.environment}).`,lastCheckedAt:server.checkedAt});
   }
   return {error:null,data:{...server,components,overallStatus:calculateOverallHealth(components),version:{appVersion:server.version.appVersion==='unknown'?BUILD_INFO.appVersion:server.version.appVersion,commitSha:server.version.commitSha||BUILD_INFO.commitSha,buildId:server.version.buildId||BUILD_INFO.buildId,buildTimestamp:server.version.buildTimestamp||BUILD_INFO.buildTimestamp}}};
 }

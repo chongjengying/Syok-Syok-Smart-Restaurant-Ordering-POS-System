@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import AccessibleDialog from './admin/AccessibleDialog';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Banknote, CheckCircle, Loader2, Smartphone, X } from 'lucide-react';
 import { useOrder } from '../hooks/useOrder';
 import { usePaymentCapabilities } from '../hooks/usePaymentCapabilities';
 import { usePaymentSummary } from '../hooks/usePaymentSummary';
 import { calculateCashTender } from '../services/cash-payment.service';
-import { processSplitPayment } from '../services/payment.service';
+import { processPayment, processSplitPayment } from '../services/payment.service';
 import { groupOrderRounds } from '../services/order-rounds.service';
 import { soundFx } from '../utils/audio';
 import { getUserErrorMessage } from '../shared/errorMessages';
@@ -28,12 +29,14 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
   const [receivedInput, setReceivedInput] = useState('');
   const [referenceInput, setReferenceInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [earlyPaymentAcknowledged, setEarlyPaymentAcknowledged] = useState(false);
   const [showQrConfirmation, setShowQrConfirmation] = useState(false);
   const [voucherCode, setVoucherCode] = useState('');
   const [voucherBusy, setVoucherBusy] = useState(false);
   const [voucherMessage, setVoucherMessage] = useState('');
+  const paymentAttempt = useRef(null);
 
   const paymentMethods = useMemo(() => capabilities
     .map((capability) => ({ ...capability, method: String(capability.method || '').toUpperCase().replace(/[-_ ]/g, '') }))
@@ -58,11 +61,12 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
     && ['UNPAID', 'PARTIALLY_PAID'].includes(summary?.paymentStatus || order.paymentStatus)
     && (takeawayAwaitingPayment || !hasUnsentItems));
   const canAddPayment = Boolean(orderPayable && selectedCapability && amount > 0 && amount <= outstanding
+    && (!takeawayAwaitingPayment || Math.round(amount * 100) === Math.round(outstanding * 100))
     && (selectedMethod !== 'CASH' || cashTender)
     && (!providerRequired || selectedProvider)
     && (!hasActiveKitchenItems || earlyPaymentAcknowledged)
     && !isProcessing && !voucherBusy && !isLoadingSummary && !summaryError);
-  const canComplete = Boolean(summary?.paymentStatus === 'PAID' && Number(summary.remainingAmount) === 0 && !isProcessing);
+  const canComplete = Boolean(summary?.paymentStatus === 'PAID' && Number(summary.remainingAmount) === 0 && !isProcessing && !isCompleting);
 
   useEffect(() => {
     const first = paymentMethods.find((method) => method.available)?.method;
@@ -82,22 +86,40 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
     soundFx.playTap();
     setPaymentError('');
     setIsProcessing(true);
-    const result = await processSplitPayment({
-      orderId,
-      splitType: amount === outstanding ? 'FULL' : 'AMOUNT',
-      paymentMethod: String(selectedMethod || '').toUpperCase().replace(/[-_ ]/g, '') === 'EWALLET' ? 'QR' : selectedMethod,
-      amount: amount.toFixed(2),
-      receivedAmount: selectedMethod === 'CASH' ? cashTender.receivedAmount.toFixed(2) : amount.toFixed(2),
-      providerId: providerRequired ? providerId : null,
-      paymentReference: referenceInput.trim() || null,
-      idempotencyKey: crypto.randomUUID(),
-    });
-    setIsProcessing(false);
+    const method = String(selectedMethod || '').toUpperCase().replace(/[-_ ]/g, '') === 'EWALLET' ? 'QR' : selectedMethod;
+    const tendered = selectedMethod === 'CASH' ? cashTender.receivedAmount : amount;
+    let result;
+    try {
+      const signature = `${orderId}|${takeawayAwaitingPayment}|${method}|${amount.toFixed(2)}|${tendered.toFixed(2)}|${providerId}|${referenceInput.trim()}`;
+      if (paymentAttempt.current?.signature !== signature) {
+        paymentAttempt.current = { signature, key: crypto.randomUUID() };
+      }
+      if (takeawayAwaitingPayment) {
+        result = await processPayment(orderId, method, amount, paymentAttempt.current.key,
+          tendered, true, referenceInput.trim(), providerRequired ? providerId : null);
+      } else {
+        result = await processSplitPayment({
+          orderId,
+          splitType: amount === outstanding ? 'FULL' : 'AMOUNT',
+          paymentMethod: method,
+          amount: amount.toFixed(2),
+          receivedAmount: tendered.toFixed(2),
+          providerId: providerRequired ? providerId : null,
+          paymentReference: referenceInput.trim() || null,
+          idempotencyKey: paymentAttempt.current.key,
+        });
+      }
+    } catch (error) {
+      result = { error };
+    } finally {
+      setIsProcessing(false);
+    }
     if (result.error) {
       setPaymentError(getUserErrorMessage(result.error, 'Payment could not be recorded.'));
       soundFx.playRemove();
       return;
     }
+    paymentAttempt.current = null;
     soundFx.playSuccess();
     setSummaryKey(crypto.randomUUID());
     await refetch();
@@ -108,14 +130,23 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
 
   const completeOrder = async () => {
     if (!canComplete) return;
-    const result = await onPaymentSubmit({
-      paymentMethod: 'MULTIPLE',
-      receivedAmount: paid,
-      changeAmount: 0,
-      paymentReference: summary.payments.map((payment) => payment.paymentNumber).join(', '),
-      alreadyPaid: true,
-    });
-    if (result?.error) setPaymentError(getUserErrorMessage(result.error, 'Order could not be completed.'));
+    setIsCompleting(true);
+    setPaymentError('');
+    try {
+      const result = await onPaymentSubmit({
+        orderId,
+        paymentMethod: 'MULTIPLE',
+        receivedAmount: paid,
+        changeAmount: 0,
+        paymentReference: summary.payments.map((payment) => payment.paymentNumber).join(', '),
+        alreadyPaid: true,
+      });
+      if (result?.error) setPaymentError(getUserErrorMessage(result.error, 'Order could not be completed.'));
+    } catch (error) {
+      setPaymentError(getUserErrorMessage(error, 'Order could not be completed.'));
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const requestVoucher = async () => {
@@ -188,23 +219,24 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
             </div>
 
             <h2 className="mt-5 font-black">Select payment method</h2>
-            {paid === 0 && <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-amber-900">Promotion / Voucher</p><div className="mt-2 flex gap-2"><input value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} maxLength={60} placeholder="Enter voucher code" className="min-w-0 flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy} onClick={() => void requestVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>{voucherMessage && <p role="status" className={`mt-2 text-xs font-semibold ${voucherMessage.includes('updated') ? 'text-emerald-700' : 'text-red-700'}`}>{voucherMessage}</p>}</section>}
+            {paid === 0 && <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-amber-900">Promotion / Voucher</p><div className="mt-2 flex gap-2"><input aria-label="Voucher code" value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} maxLength={60} placeholder="Enter voucher code" className="min-w-0 flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold"/><button disabled={!voucherCode.trim() || voucherBusy} onClick={() => void requestVoucher()} className="rounded-xl bg-[#121212] px-3 py-2 text-xs font-black text-[#D4AF37] disabled:opacity-40">{voucherBusy ? 'Applying…' : 'Apply'}</button></div>{voucherMessage && <p role="status" className={`mt-2 text-xs font-semibold ${voucherMessage.includes('updated') ? 'text-emerald-700' : 'text-red-700'}`}>{voucherMessage}</p>}</section>}
             {isLoadingMethods || isLoadingSummary ? <div className="flex h-24 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="h-5 w-5 animate-spin" /> Loading payment details...</div> : (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {paymentMethods.map((capability) => {
                   const details = METHOD_DETAILS[capability.method];
                   const Icon = details.icon;
                   const selected = capability.method === selectedMethod;
-                  return <button key={capability.method} disabled={!capability.available || isProcessing || outstanding <= 0} onClick={() => { setSelectedMethod(capability.method); setPaymentError(''); }} className={`rounded-xl border-2 p-4 text-left ${selected ? 'border-[#D4AF37] bg-[#121212] text-white' : 'border-gray-200 bg-white'} disabled:opacity-40`}><div className="flex items-center justify-between"><Icon className="h-5 w-5" />{selected && <CheckCircle className="h-4 w-4 text-[#D4AF37]" />}</div><p className="mt-3 text-sm font-black">{details.label}</p></button>;
+                  return <button aria-pressed={selected} key={capability.method} disabled={!capability.available || isProcessing || outstanding <= 0} onClick={() => { setSelectedMethod(capability.method); setPaymentError(''); }} className={`rounded-xl border-2 p-4 text-left ${selected ? 'border-[#D4AF37] bg-[#121212] text-white' : 'border-gray-200 bg-white'} disabled:opacity-40`}><div className="flex items-center justify-between"><Icon className="h-5 w-5" />{selected && <CheckCircle className="h-4 w-4 text-[#D4AF37]" />}</div><p className="mt-3 text-sm font-black">{details.label}</p></button>;
                 })}
               </div>
             )}
 
             {outstanding > 0 && <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-              <label className="text-xs font-black uppercase text-gray-500">Amount applied to order</label>
-              <div className="mt-2 flex items-center rounded-xl border border-gray-300 bg-white px-3"><span className="text-sm font-bold">RM</span><input inputMode="decimal" value={amountInput} onChange={(event) => setAmountInput(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={outstanding.toFixed(2)} className="w-full bg-transparent px-2 py-3 text-right text-lg font-black outline-none" /></div>
-              {selectedMethod === 'CASH' && <><label className="mt-4 block text-xs font-black uppercase text-gray-500">{tr('cashReceived')}</label><div className="mt-2 flex items-center rounded-xl border border-gray-300 bg-white px-3"><span className="text-sm font-bold">RM</span><input inputMode="decimal" value={receivedInput} onChange={(event) => setReceivedInput(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={amount.toFixed(2)} className="w-full bg-transparent px-2 py-3 text-right text-lg font-black outline-none" /></div><div className="mt-3 flex justify-between text-sm"><span>{tr('change')}</span><strong className="text-emerald-700">{money(cashTender?.changeAmount || 0)}</strong></div></>}
-              {providerRequired && <><label className="mt-4 block text-xs font-black uppercase text-gray-500">Provider</label><select value={providerId} onChange={(event) => setProviderId(event.target.value)} className="mt-2 w-full rounded-xl border bg-white p-3"><option value="">Select provider</option>{providers.map((provider) => <option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>)}</select><label className="mt-4 block text-xs font-black uppercase text-gray-500">Payment reference <span className="font-normal normal-case">(optional)</span></label><input value={referenceInput} onChange={(event) => setReferenceInput(event.target.value)} maxLength={150} placeholder="Reference number" className="mt-2 w-full rounded-xl border bg-white p-3" /></>}
+              <label htmlFor="payment-amountInput" className="text-xs font-black uppercase text-gray-500">Amount applied to order</label>
+              <div className="mt-2 flex items-center rounded-xl border border-gray-300 bg-white px-3"><span className="text-sm font-bold">RM</span><input id="payment-amountInput" inputMode="decimal" value={amountInput} disabled={takeawayAwaitingPayment} onChange={(event) => setAmountInput(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={outstanding.toFixed(2)} className="w-full bg-transparent px-2 py-3 text-right text-lg font-black outline-none disabled:text-gray-500" /></div>
+              {takeawayAwaitingPayment && <p className="mt-2 text-xs font-semibold text-sky-800">Full payment submits this takeaway order to the kitchen.</p>}
+              {selectedMethod === 'CASH' && <><label htmlFor="payment-receivedInput" className="mt-4 block text-xs font-black uppercase text-gray-500">{tr('cashReceived')}</label><div className="mt-2 flex items-center rounded-xl border border-gray-300 bg-white px-3"><span className="text-sm font-bold">RM</span><input id="payment-receivedInput" inputMode="decimal" value={receivedInput} onChange={(event) => setReceivedInput(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={amount.toFixed(2)} className="w-full bg-transparent px-2 py-3 text-right text-lg font-black outline-none" /></div><div className="mt-3 flex justify-between text-sm"><span>{tr('change')}</span><strong className="text-emerald-700">{money(cashTender?.changeAmount || 0)}</strong></div></>}
+              {providerRequired && <><label htmlFor="payment-provider" className="mt-4 block text-xs font-black uppercase text-gray-500">Provider</label><select id="payment-provider" value={providerId} onChange={(event) => setProviderId(event.target.value)} className="mt-2 w-full rounded-xl border bg-white p-3"><option value="">Select provider</option>{providers.map((provider) => <option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>)}</select><label htmlFor="payment-referenceInput" className="mt-4 block text-xs font-black uppercase text-gray-500">Payment reference <span className="font-normal normal-case">(optional)</span></label><input id="payment-referenceInput" value={referenceInput} onChange={(event) => setReferenceInput(event.target.value)} maxLength={150} placeholder="Reference number" className="mt-2 w-full rounded-xl border bg-white p-3" /></>}
             </div>}
 
             {orderPayable && hasActiveKitchenItems && <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900"><input type="checkbox" checked={earlyPaymentAcknowledged} onChange={(event) => setEarlyPaymentAcknowledged(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#121212]" /><span>{tr('activeKitchenPaymentWarning')}</span></label>}
@@ -212,7 +244,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
             {(paymentError || capabilitiesError || summaryError) && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{paymentError || capabilitiesError || summaryError}{capabilitiesError && <button onClick={() => refresh()} className="ml-2 underline">{tr('retry')}</button>}</div>}
 
             <button disabled={!canAddPayment} onClick={() => providerRequired ? setShowQrConfirmation(true) : void addPayment()} className="mt-5 w-full rounded-xl bg-emerald-500 px-5 py-4 font-black text-black disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500">{isProcessing ? tr('recordingPayment') : 'Confirm Payment'}</button>
-            <button disabled={!canComplete} onClick={completeOrder} className="mt-3 w-full rounded-xl bg-[#121212] px-5 py-4 font-black text-[#D4AF37] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500">Complete Order</button>
+            <button disabled={!canComplete} onClick={completeOrder} className="mt-3 w-full rounded-xl bg-[#121212] px-5 py-4 font-black text-[#D4AF37] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500">{isCompleting ? 'Completing...' : 'Complete Order'}</button>
 
             <div className="mt-5 border-t pt-4">
               <h3 className="font-black">Payment History</h3>
@@ -223,7 +255,7 @@ export default function PaymentScreen({ orderId, onBack, onPaymentSubmit, onAppl
           </section>
         </div>
       </main>
-      {showQrConfirmation && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 text-[#121212] shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase text-amber-700">Manual verification</p><h2 className="mt-1 text-xl font-black">Confirm QR / E-wallet Payment</h2></div><button onClick={() => setShowQrConfirmation(false)} disabled={isProcessing} aria-label="Close"><X /></button></div><div className="my-5 rounded-xl bg-slate-50 p-4 text-sm"><p>Have you verified that <strong>{money(amount)}</strong> was received?</p><p className="mt-2">Provider: <strong>{selectedProvider?.displayName}</strong></p><p className="mt-1">Order: <strong>{order?.orderNumber}</strong></p></div><p className="mb-5 text-xs text-slate-500">Physical QR remains manual. Confirm only after checking the merchant app or receipt.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowQrConfirmation(false)} disabled={isProcessing} className="rounded-xl border px-4 py-3 font-bold">Go Back</button><button onClick={() => { setShowQrConfirmation(false); void addPayment(); }} disabled={isProcessing} className="rounded-xl bg-emerald-500 px-4 py-3 font-black">{isProcessing ? 'Confirming...' : 'Yes, Payment Received'}</button></div></div></div>}
+      {showQrConfirmation && <AccessibleDialog title="Confirm QR / E-wallet Payment" onClose={() => { if (!isProcessing) setShowQrConfirmation(false); }} dismissOnBackdrop={false} className="max-w-md"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase text-amber-700">Manual verification</p><h2 className="mt-1 text-xl font-black">Confirm QR / E-wallet Payment</h2></div><button onClick={() => setShowQrConfirmation(false)} disabled={isProcessing} aria-label="Close"><X /></button></div><div className="my-5 rounded-xl bg-slate-50 p-4 text-sm"><p>Have you verified that <strong>{money(amount)}</strong> was received?</p><p className="mt-2">Provider: <strong>{selectedProvider?.displayName}</strong></p><p className="mt-1">Order: <strong>{order?.orderNumber}</strong></p></div><p className="mb-5 text-xs text-slate-500">Physical QR remains manual. Confirm only after checking the merchant app or receipt.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowQrConfirmation(false)} disabled={isProcessing} className="rounded-xl border px-4 py-3 font-bold">Go Back</button><button onClick={() => { setShowQrConfirmation(false); void addPayment(); }} disabled={isProcessing} className="rounded-xl bg-emerald-500 px-4 py-3 font-black">{isProcessing ? 'Confirming...' : 'Yes, Payment Received'}</button></div></AccessibleDialog>}
     </div>
   );
 }

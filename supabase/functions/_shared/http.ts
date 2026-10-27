@@ -1,9 +1,14 @@
 export function buildCorsHeaders(methods: string) {
   return {
     'Access-Control-Allow-Origin': Deno.env.get('CORS_ALLOWED_ORIGIN') || '*',
-    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, x-correlation-id',
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, x-correlation-id, x-pos-device-credential',
     'Access-Control-Allow-Methods': methods,
   };
+}
+
+export function callerHeaders(request: Request, authorization: string) {
+  const proof = request.headers.get('x-pos-device-credential');
+  return { Authorization: authorization, ...(proof ? { 'x-pos-device-credential': proof } : {}) };
 }
 
 export function jsonResponse(

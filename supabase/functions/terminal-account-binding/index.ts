@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as respond } from '../_shared/http.ts';
 import { consumeRateLimit } from '../_shared/rateLimit.ts';
 
 const cors = buildCorsHeaders('POST, OPTIONS');
@@ -14,7 +14,7 @@ Deno.serve(async (request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!authorization?.startsWith('Bearer ') || !url || !anonKey || !serviceKey) return json(401, { error: 'Authentication is required.' });
 
-  const caller = createClient(url, anonKey, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } });
+  const caller = createClient(url, anonKey, { global: { headers: callerHeaders(request, authorization) }, auth: { persistSession: false } });
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: auth, error: authError } = await caller.auth.getUser();
   if (authError || !auth.user) return json(401, { error: 'The session is invalid or expired.' });
@@ -42,6 +42,15 @@ Deno.serve(async (request) => {
   }
   if (!terminalUser) return json(404, { error: 'No terminal account exists for that email.' });
   if (!terminalUser.email) return json(400, { error: 'The selected Auth account cannot be used as a terminal account.' });
+  const { data: terminalProfile, error: profileError } = await admin
+    .from('profiles')
+    .select('id,email,status,role_name')
+    .eq('id', terminalUser.id)
+    .maybeSingle();
+  if (profileError) return json(503, { error: 'Terminal profile lookup is temporarily unavailable.' });
+  if (!terminalProfile || terminalProfile.status !== 'ACTIVE' || terminalProfile.email?.toLowerCase() !== email) {
+    return json(404, { error: 'No active profile exists for that terminal email.' });
+  }
 
   const { data, error } = await caller.rpc('bind_terminal_auth_account', { p_terminal_id: terminalId, p_auth_user_id: terminalUser.id });
   if (error) {

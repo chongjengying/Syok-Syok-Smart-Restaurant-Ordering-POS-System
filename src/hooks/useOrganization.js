@@ -25,8 +25,22 @@ export function useOrganization(mode) {
     try {
       const result = await saveOrganization(mode, form);
       if (result.error) throw result.error;
-      await load(); setMessage('Changes saved.'); return true;
-    } catch (e) { setError(e.message); return false; }
+      await load();
+      const isCreate = !form?.id;
+      const message = mode === 'company'
+        ? `${isCreate ? 'Company created' : 'Company updated'} successfully.`
+        : `${isCreate ? 'Branch created' : 'Branch updated'} successfully.`;
+      setMessage(message);
+      globalThis.dispatchEvent?.(new CustomEvent('admin-toast', { detail: { message } }));
+      return true;
+    } catch (e) {
+      const message = e?.message || 'Unable to save changes.';
+      setError(message);
+      globalThis.dispatchEvent?.(new CustomEvent('admin-toast', {
+        detail: { message, tone: 'error' },
+      }));
+      return false;
+    }
     finally { setSaving(false); }
   };
   return { rows, loading, saving, error, message, load, save };

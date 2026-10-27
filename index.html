@@ -11,10 +11,24 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SmartPOS" />
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- The isolated admin preview uses system fonts and makes no external requests. -->
+    <script>
+      const isAdminPreview = location.pathname === '/preview/admin' || location.pathname.startsWith('/preview/admin/');
+      if (!isAdminPreview) {
+        const fonts = [
+          { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+          { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous' },
+          { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap' },
+        ];
+        fonts.forEach(({ rel, href, crossorigin }) => {
+          const link = document.createElement('link');
+          link.rel = rel;
+          link.href = href;
+          if (crossorigin) link.crossOrigin = crossorigin;
+          document.head.append(link);
+        });
+      }
+    </script>
   </head>
   <body class="bg-[#121212] text-[#121212] antialiased select-none overflow-x-hidden font-['Inter',sans-serif]">
     <div id="root"></div>

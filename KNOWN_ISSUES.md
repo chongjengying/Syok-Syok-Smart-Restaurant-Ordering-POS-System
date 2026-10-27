@@ -1,11 +1,11 @@
 # Known Issues
 
-## P1 — Terminal-device Auth separation is incomplete
+## P1 — Terminal-device and staff identity separation needs full verification
 
-Current staff profiles are Auth-backed and terminal resolution uses a browser device identifier. The target model of dedicated terminal Auth plus Auth-free staff records is not implemented.
+The current flow has terminal Auth identities, revocable device credentials, and PIN-based `staff` records. Legacy `profiles` keys still connect historical operational records. The separation is not yet established across every POS path by negative authenticated browser, RLS, payment, and concurrency tests.
 
-- Verification: **PARTIALLY VERIFIED** by code inspection.
-- Next step: staged terminal Auth/staff-entity migration plus negative E2E/RLS tests.
+- Verification: **PARTIALLY VERIFIED** by local terminal lifecycle, staff-session, and tenant tests. Full cashier browser and staging authorization coverage is **NOT VERIFIED**.
+- Next step: cover terminal revocation, staff login, payment, refunds, and cross-company denial in authenticated browser and concurrent backend tests.
 
 ## P1 — Staging operational data was reset
 

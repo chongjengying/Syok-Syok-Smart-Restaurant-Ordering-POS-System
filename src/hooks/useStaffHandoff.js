@@ -52,6 +52,7 @@ export function useStaffHandoff(enabled, currentUserId) {
     setStaff(current => current.map(person => person.id === selected.id ? { ...person, pin_status: 'ACTIVE', pin_setup_required: false } : person));
     setSelected(current => current ? { ...current, pin_status: 'ACTIVE', pin_setup_required: false } : current);
     setPinResetRequired(false);
+    globalThis.dispatchEvent?.(new CustomEvent('admin-staff-updated', { detail: { staffId: selected.id, pinStatus: 'ACTIVE' } }));
     return true;
   }, [currentUserId, isSubmitting, pinResetRequired, selected]);
 

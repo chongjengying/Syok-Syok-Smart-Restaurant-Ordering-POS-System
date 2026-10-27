@@ -1,0 +1,42 @@
+[
+  {
+    "viewport": [
+      1920,
+      1080
+    ],
+    "verification": "VERIFIED PASS",
+    "coverage": "Component fixtures: welcome, menu add handler, populated kitchen/serving, sample receipt; empty/loading/error states for menu and queues. No live queue mutation."
+  },
+  {
+    "viewport": [
+      1366,
+      768
+    ],
+    "verification": "VERIFIED PASS",
+    "coverage": "Component fixtures: welcome, menu add handler, populated kitchen/serving, sample receipt; empty/loading/error states for menu and queues. No live queue mutation."
+  },
+  {
+    "viewport": [
+      1024,
+      768
+    ],
+    "verification": "VERIFIED PASS",
+    "coverage": "Component fixtures: welcome, menu add handler, populated kitchen/serving, sample receipt; empty/loading/error states for menu and queues. No live queue mutation."
+  },
+  {
+    "viewport": [
+      768,
+      1024
+    ],
+    "verification": "VERIFIED PASS",
+    "coverage": "Component fixtures: welcome, menu add handler, populated kitchen/serving, sample receipt; empty/loading/error states for menu and queues. No live queue mutation."
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "verification": "VERIFIED PASS",
+    "coverage": "Component fixtures: welcome, menu add handler, populated kitchen/serving, sample receipt; empty/loading/error states for menu and queues. No live queue mutation."
+  }
+]

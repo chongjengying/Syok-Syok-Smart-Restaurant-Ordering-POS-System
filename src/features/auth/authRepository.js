@@ -1,10 +1,12 @@
-import { supabase, accountSupabase, operatorSupabase, setOperatorMode, subscribeEffectiveAuth } from '../../infrastructure/supabase/client';
+import { supabase, accountSupabase, operatorSupabase, isOperatorMode, setOperatorMode, subscribeEffectiveAuth } from '../../infrastructure/supabase/client';
 import { env } from '../../config/env';
+import { getDeviceIdentifier } from '../../services/terminal-context.service';
 
-const profileColumns = 'id, name, username, email, role_name, status, created_at, updated_at, roles(name)';
+const profileColumns = 'id, company_id, branch_id, name, username, email, role_name, status, created_at, updated_at, roles(name)';
 
 export function createAuthAccount(email, password, fullName) {
-  return supabase.auth.signUp({
+  setOperatorMode(false);
+  return accountSupabase.auth.signUp({
     email,
     password,
     options: { data: { full_name: fullName, name: fullName } },
@@ -12,7 +14,16 @@ export function createAuthAccount(email, password, fullName) {
 }
 
 export function createAuthSession(email, password) {
-  return supabase.auth.signInWithPassword({ email, password });
+  setOperatorMode(false);
+  return accountSupabase.auth.signInWithPassword({ email, password });
+}
+
+export async function createAnonymousSession() {
+  setOperatorMode(false);
+  const current = await accountSupabase.auth.getSession();
+  if (current.error) return current;
+  if (current.data.session?.user?.is_anonymous) return { data: { session: current.data.session, user: current.data.session.user }, error: null };
+  return accountSupabase.auth.signInAnonymously();
 }
 
 export function fetchMyStaffSession() {
@@ -41,7 +52,7 @@ export async function verifyStaffPinToken() {
 }
 
 export function fetchTerminalContext() {
-  return accountSupabase.rpc('resolve_authenticated_terminal');
+  return accountSupabase.rpc('resolve_authenticated_terminal', { p_device_identifier: getDeviceIdentifier() });
 }
 
 export async function probeAuthHealth(signal) {
@@ -57,7 +68,7 @@ export async function probeAuthHealth(signal) {
 }
 
 export function resendSignupConfirmation(email) {
-  return supabase.auth.resend({
+  return accountSupabase.auth.resend({
     type: 'signup',
     email,
     options: { emailRedirectTo: window.location.origin },
@@ -65,13 +76,13 @@ export function resendSignupConfirmation(email) {
 }
 
 export function requestPasswordRecovery(email) {
-  return supabase.auth.resetPasswordForEmail(email, {
+  return accountSupabase.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin,
   });
 }
 
 export function replacePassword(password) {
-  return supabase.auth.updateUser({ password });
+  return accountSupabase.auth.updateUser({ password });
 }
 
 export function recordSuccessfulLogin() {
@@ -79,8 +90,11 @@ export function recordSuccessfulLogin() {
 }
 
 export async function destroyAuthSession() {
-  await operatorSupabase.rpc('end_terminal_staff_session');
-  await operatorSupabase.auth.signOut({ scope: 'local' });
+  if (isOperatorMode()) {
+    const ended = await operatorSupabase.rpc('end_terminal_staff_session');
+    if (ended.error) return ended;
+  }
+  await operatorSupabase.auth.stopAutoRefresh();
   setOperatorMode(false);
   return accountSupabase.auth.signOut();
 }
@@ -98,7 +112,7 @@ export function subscribeToAuthState(onChange) {
 }
 
 export function fetchProfile(userId) {
-  return supabase
+  return accountSupabase
     .from('profiles')
     .select(profileColumns)
     .eq('id', userId)
@@ -113,12 +127,10 @@ export function fetchStaffProfiles() {
 }
 
 export function patchStaffAccess(userId, values) {
-  return supabase
-    .from('profiles')
-    .update(values)
-    .eq('id', userId)
-    .select(profileColumns)
-    .single();
+  return supabase.rpc('admin_update_staff', {
+    p_user_id: userId,
+    p_payload: { role: values.role_name, status: values.status },
+  });
 }
 
 export function patchProfile(userId, values) {

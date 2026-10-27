@@ -65,6 +65,6 @@ Dine-in ordering starts by selecting a table. An available table creates a new l
 The frontend requires:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (legacy `VITE_SUPABASE_ANON_KEY` is accepted)
 
 Edge Functions use server-side Supabase secrets. `CORS_ALLOWED_ORIGIN` should be set to the deployed frontend origin outside local development. Cash is the only enabled payment provider until a real external gateway adapter and credentials are configured.

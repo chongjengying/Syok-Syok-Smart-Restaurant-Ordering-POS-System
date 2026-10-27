@@ -230,7 +230,8 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
       return { data: applyPersistedOrder(persisted.data, tableLabel), error: null };
     }
     if (!activeOrder?.id) return { data: null, error: new Error('No active order context.') };
-    await draftSaveQueue.current;
+    const queuedSave = await draftSaveQueue.current;
+    if (queuedSave.error) return queuedSave;
     const saved = await saveOrderDraftItems(activeOrder.id, cart, draftVersion.current);
     if (saved.error) return saved;
     const appliedVoucherCode = activeOrder.adjustmentMetadata?.voucher?.code;
@@ -261,6 +262,8 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     if (diningMode !== 'takeaway') return { data: null, error: new Error('Only takeaway orders use pay before submit.') };
     if (!cart.length) return { data: null, error: new Error('Add at least one product before payment.') };
     if (!requestKey.current) requestKey.current = crypto.randomUUID();
+    const queuedSave = await draftSaveQueue.current;
+    if (queuedSave.error) return queuedSave;
     let orderId = activeOrder?.id || null;
     if (activeOrder?.isLocalDraft || !orderId) {
       const draft = await createOrderDraft('takeaway', null, requestKey.current);
@@ -284,19 +287,22 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     return cancelOrder(activeOrder.id, 'Draft discarded before submission');
   }, [activeOrder]);
 
-  const submitPayment = useCallback(async ({ paymentMethod, finalAmount, receivedAmount, submitTakeaway = false, paymentReference = '', providerId = null }) => {
-    if (!pendingOrder?.id) {
-      return { data: null, error: new Error('No unpaid order is available for payment.') };
-    }
+  const submitPayment = useCallback(async ({ orderId, paymentMethod, finalAmount, receivedAmount, submitTakeaway = false, paymentReference = '', providerId = null }) => {
     // Split-bill payments are already committed by the payment RPC. The
     // final button only confirms the refreshed paid order; do not send the
     // UI's synthetic MULTIPLE method through the single-payment endpoint.
     if (paymentMethod === 'MULTIPLE') {
-      const persisted = await getOrder(pendingOrder.id);
+      if (!orderId || (orderId !== pendingOrder?.id && orderId !== activeOrder?.id)) {
+        return { data: null, error: new Error('The paid order is no longer active. Reopen the order to confirm payment.') };
+      }
+      const persisted = await getOrder(orderId);
       if (persisted.error) return persisted;
       if (persisted.data.paymentStatus !== 'PAID') return { data: null, error: new Error('Payment status changed. Refresh the order.') };
       applyPersistedOrder(persisted.data, tableLabel);
       return { data: persisted.data, error: null };
+    }
+    if (!pendingOrder?.id) {
+      return { data: null, error: new Error('No unpaid order is available for payment.') };
     }
     const authoritativeAmount = Number.isFinite(finalAmount) ? Number(finalAmount) : Number(pendingOrder.total);
     const signature = `${pendingOrder.id}|${paymentMethod}|${authoritativeAmount}`;
@@ -328,7 +334,7 @@ export function useCheckout({ enabled, cart, diningMode, tableId, tableLabel }) 
     applyPersistedOrder(persistedResult.data, tableLabel);
     paymentRequest.current = null;
     return { data: persistedResult.data, error: null };
-  }, [applyPersistedOrder, pendingOrder, tableLabel]);
+  }, [activeOrder?.id, applyPersistedOrder, pendingOrder, tableLabel]);
 
   const applyVoucher = useCallback(async (code) => {
     if (!activeOrder?.id) return { data: null, error: new Error('Create an order before applying a voucher.') };

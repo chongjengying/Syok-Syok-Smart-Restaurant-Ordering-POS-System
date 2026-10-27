@@ -34,8 +34,8 @@ async function createStaff(role, suffix, branchId) {
 }
 
 const suffix = crypto.randomUUID().slice(0, 8);
-const [branch] = (await request('/rest/v1/branches?code=eq.MAIN&select=id', { key: serviceKey })).payload;
-assert.ok(branch?.id, 'Seeded MAIN branch is required.');
+const [branch] = (await request('/rest/v1/branches?status=eq.ACTIVE&select=id&order=created_at.asc&limit=1', { key: serviceKey })).payload;
+assert.ok(branch?.id, 'An active local branch is required.');
 const category = (await request('/rest/v1/categories', {
   method: 'POST', key: serviceKey, body: { name: `Serve ${suffix}` },
 })).payload[0];

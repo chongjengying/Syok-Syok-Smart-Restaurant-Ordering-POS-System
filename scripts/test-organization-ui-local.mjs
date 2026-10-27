@@ -7,7 +7,8 @@ async function api(path,body,token=s.SERVICE_ROLE_KEY,method='POST') {
  const r=await fetch(`${s.API_URL}${path}`,{method,headers:{apikey:s.ANON_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();const data=text?JSON.parse(text):null;assert.ok(r.ok,JSON.stringify(data));return data;
 }
 const auth=await api('/auth/v1/signup',{email,password});
-const [branch]=await api('/rest/v1/branches?code=eq.MAIN&select=id',undefined,s.SERVICE_ROLE_KEY,'GET');
+const [branch]=await api('/rest/v1/branches?status=eq.ACTIVE&select=id&order=created_at.asc&limit=1',undefined,s.SERVICE_ROLE_KEY,'GET');
+assert.ok(branch?.id,'Expected an active local branch');
 await api(`/rest/v1/profiles?id=eq.${auth.user.id}`,{role_name:'ADMIN',status:'ACTIVE',branch_id:branch.id},s.SERVICE_ROLE_KEY,'PATCH');
 const browser=await chromium.launch({headless:true});
 try {

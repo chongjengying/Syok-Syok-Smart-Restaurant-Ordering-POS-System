@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
 import { useAdminOperations } from "../../hooks/useAdminOperations";
-import { getOrder, voidOrderWithManagerApproval } from "../../services/order.service";
-import { listSelectableStaff } from "../../features/auth/authService";
+import { getOrder, listOrderVoidApprovers, voidOrderWithManagerApproval } from "../../services/order.service";
 export default function AdminOrders({ canManage = false }) {
   const s = useAdminOperations("orders");
   const [selected, setSelected] = useState(null);
@@ -12,6 +11,7 @@ export default function AdminOrders({ canManage = false }) {
   const [busy, setBusy] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [managers, setManagers] = useState([]);
+  const [managersLoading, setManagersLoading] = useState(false);
   const [managerId, setManagerId] = useState("");
   const [managerSearch, setManagerSearch] = useState("");
   const [recentManagerIds, setRecentManagerIds] = useState([]);
@@ -36,12 +36,18 @@ export default function AdminOrders({ canManage = false }) {
     );
   }, [managerSearch, managers]);
   useEffect(() => {
-    if (!approvalOpen) return;
-    void listSelectableStaff().then((result) => {
-      setManagers((result.data || []).filter((staff) => ["MANAGER", "ADMIN"].includes(staff.role)));
-      if (result.error) setDetailError(result.error.message);
+    if (!approvalOpen || !selected?.id) return undefined;
+    let active = true;
+    setManagers([]);
+    setManagersLoading(true);
+    void listOrderVoidApprovers(selected.id).then((result) => {
+      if (!active) return;
+      setManagers(result.data || []);
+      setDetailError(result.error?.message || "");
+      setManagersLoading(false);
     });
-  }, [approvalOpen]);
+    return () => { active = false; };
+  }, [approvalOpen, selected?.id]);
   useEffect(() => {
     if (!approvalOpen) return;
     try {
@@ -113,7 +119,7 @@ export default function AdminOrders({ canManage = false }) {
             All restaurant orders and financial states.
           </p>
         </div>
-        <button onClick={s.refresh} className="rounded-xl border bg-white p-3">
+        <button aria-label="Refresh orders" onClick={s.refresh} className="rounded-xl border bg-white p-3">
           <RefreshCw size={17} />
         </button>
       </div>
@@ -121,6 +127,7 @@ export default function AdminOrders({ canManage = false }) {
         <div className="relative min-w-64 flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <input
+            aria-label="Search orders"
             value={s.search}
             onChange={(e) => s.setSearch(e.target.value)}
             placeholder="Order, table, or staff"
@@ -128,6 +135,7 @@ export default function AdminOrders({ canManage = false }) {
           />
         </div>
         <select
+          aria-label="Status"
           value={s.filters.status || ""}
           onChange={(e) => s.setFilter("status", e.target.value)}
           className="rounded-xl border bg-white px-3"
@@ -148,6 +156,7 @@ export default function AdminOrders({ canManage = false }) {
           ))}
         </select>
         <select
+          aria-label="Payment status"
           value={s.filters.paymentStatus || ""}
           onChange={(e) => s.setFilter("paymentStatus", e.target.value)}
           className="rounded-xl border bg-white px-3"
@@ -158,6 +167,7 @@ export default function AdminOrders({ canManage = false }) {
           ))}
         </select>
         <select
+          aria-label="Dining mode"
           value={s.filters.diningMode || ""}
           onChange={(e) => s.setFilter("diningMode", e.target.value)}
           className="rounded-xl border bg-white px-3"
@@ -168,12 +178,14 @@ export default function AdminOrders({ canManage = false }) {
         </select>
         <input
           type="date"
+          aria-label="From date"
           value={s.filters.dateFrom || ""}
           onChange={(e) => s.setFilter("dateFrom", e.target.value)}
           className="rounded-xl border px-3"
         />
         <input
           type="date"
+          aria-label="To date"
           value={s.filters.dateTo || ""}
           onChange={(e) => s.setFilter("dateTo", e.target.value)}
           className="rounded-xl border px-3"
@@ -381,7 +393,9 @@ export default function AdminOrders({ canManage = false }) {
                 </div>
               )}
               <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-white">
-                {filteredManagers.length ? (
+                {managersLoading ? (
+                  <p className="px-4 py-6 text-center text-sm text-gray-500">Loading approvers…</p>
+                ) : filteredManagers.length ? (
                   filteredManagers.map((manager) => (
                     <button
                       key={manager.id}
@@ -403,7 +417,7 @@ export default function AdminOrders({ canManage = false }) {
             </div>
             <label className="mt-5 block text-sm font-bold">Manager PIN
               <input ref={pinRef} autoFocus inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "").slice(0, 6)); setDetailError(""); }} className="sr-only" aria-label="Six-digit manager PIN" />
-              <button type="button" onClick={() => pinRef.current?.focus()} className="mt-3 flex w-full justify-center gap-4 rounded-xl border bg-gray-50 p-4 ring-[#D4AF37]/30 transition focus-visible:outline-none focus-visible:ring-4" aria-label={`${pin.length} of 4 PIN digits entered`}>
+              <button type="button" onClick={() => pinRef.current?.focus()} className="mt-3 flex w-full justify-center gap-4 rounded-xl border bg-gray-50 p-4 ring-[#D4AF37]/30 transition focus-visible:outline-none focus-visible:ring-4" aria-label={`${pin.length} of 6 PIN digits entered`}>
                 {[0, 1, 2, 3, 4, 5].map((index) => <i key={index} className={`h-3 w-3 rounded-full border ${index < pin.length ? "border-[#D4AF37] bg-[#D4AF37]" : "border-gray-400"}`} />)}
               </button>
             </label>

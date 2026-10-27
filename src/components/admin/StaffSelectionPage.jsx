@@ -9,6 +9,7 @@ export default function StaffSelectionPage({ branchId }) {
   const [assigningId, setAssigningId] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [assignedIds, setAssignedIds] = useState(() => new Set());
 
   useEffect(() => {
     void listBranches().then((result) => {
@@ -16,24 +17,26 @@ export default function StaffSelectionPage({ branchId }) {
     });
   }, [branchId]);
 
-  const available = useMemo(() => staff.users.filter((user) => (
-    user.status === 'ACTIVE'
-    && user.auth_linked
-    && !(user.branches || []).some((assignment) => assignment.branch_id === branchId)
-  )), [branchId, staff.users]);
+  const available = useMemo(() => staff.users.filter((user) => {
+    const assignedToBranch = user.branch_id === branchId || user.branches?.some((item) => item.branch_id === branchId);
+    return user.status === 'ACTIVE' && !assignedToBranch && !assignedIds.has(user.id);
+  }), [assignedIds, branchId, staff.users]);
 
   const assign = async (user) => {
     if (assigningId) return;
     setAssigningId(user.id);
     setError('');
     setNotice('');
-    const result = await assignStaffBranch(user.id, branchId, false);
+    const result = await assignStaffBranch(user.legacy_profile_id || user.id, branchId, false);
     setAssigningId('');
     if (result.error) {
       setError(result.error.message);
+      globalThis.dispatchEvent?.(new CustomEvent('admin-toast', { detail: { message: result.error.message, tone: 'error' } }));
       return;
     }
+    setAssignedIds((current) => new Set([...current, user.id]));
     setNotice(`${user.name} was assigned to ${branch?.code || 'the branch'}.`);
+    globalThis.dispatchEvent?.(new CustomEvent('admin-toast', { detail: { message: 'Staff assigned successfully.' } }));
     await staff.refresh();
   };
 

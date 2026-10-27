@@ -65,7 +65,7 @@ async function bindStaffToMain(staff, branch) {
     body: {
       branch_id: branch.id, company_id: branch.company_id,
       terminal_code: `PERF-${suffix}-${fixture.terminalIds.length + 1}`,
-      name: 'Performance QA terminal', status: 'ACTIVE', terminal_type: 'POS',
+      name: 'Performance QA terminal', status: 'ACTIVE', terminal_type: 'CASHIER',
       registration_status: 'REGISTERED', device_identifier: device,
       access_mode: 'ALL_BRANCH_STAFF', allowed_roles: ['ADMIN', 'MANAGER', 'WAITER', 'KITCHEN'],
     },

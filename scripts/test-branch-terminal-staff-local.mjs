@@ -23,17 +23,27 @@ async function request(path, { body, method = body === undefined ? 'GET' : 'POST
 }
 
 const rpc = (name, body) => request(`/rest/v1/rpc/${name}`, { body });
-const [main] = await request('/rest/v1/branches?code=eq.MAIN&select=id,company_id', { service: true });
-assert.ok(main?.id, 'Expected the seeded MAIN branch');
+const [main] = await request('/rest/v1/branches?status=eq.ACTIVE&select=id,company_id&order=created_at.asc&limit=1', { service: true });
+assert.ok(main?.id, 'Expected an active local branch');
 
 async function createUser(role) {
   const email = `branch-terminal-${role.toLowerCase()}-${suffix}@example.com`;
   const password = `Branch-${suffix}!`;
   const auth = await request('/auth/v1/signup', { body: { email, password } });
+  const [roleRecord] = await request(`/rest/v1/roles?name=eq.${role}&select=id`, { service: true });
+  assert.ok(roleRecord?.id, `Expected the seeded ${role} role`);
   await request(`/rest/v1/profiles?id=eq.${auth.user.id}`, {
     method: 'PATCH',
     service: true,
-    body: { email, name: `${role} branch test`, role_name: role, status: 'ACTIVE' },
+    body: {
+      id: auth.user.id,
+      company_id: main.company_id,
+      email,
+      name: `${role} branch test`,
+      role_name: role,
+      role_id: roleRecord.id,
+      status: 'ACTIVE',
+    },
   });
   return { ...auth.user, access_token: auth.access_token, email, password };
 }
@@ -43,15 +53,30 @@ token = admin.access_token;
 const staff = await createUser('WAITER');
 const branch = await rpc('save_branch', {
   p_id: null,
-  p_payload: { code: `T-${suffix}`, name: `Terminal test ${suffix}`, status: 'ACTIVE' },
+  p_payload: { code: `T-${suffix}`, name: `Terminal test ${suffix}`, address: 'Local test address', phone: '+60123456789', timezone: 'Asia/Kuala_Lumpur', status: 'ACTIVE' },
   p_expected_revision: null,
 });
+const editedBranch = await rpc('save_branch', {
+  p_id: branch.id,
+  p_payload: {
+    ...branch,
+    name: `Edited terminal test ${suffix}`,
+    operating_model: 'QUICK_SERVICE',
+    manager_name: 'Test Manager',
+    country: 'Malaysia',
+    tax_rate: 6,
+  },
+  p_expected_revision: branch.revision,
+});
+assert.equal(editedBranch.name, `Edited terminal test ${suffix}`);
+assert.equal(editedBranch.configuration.operating_model, 'QUICK_SERVICE');
+assert.equal(editedBranch.configuration.manager_name, 'Test Manager');
 const terminal = await rpc('save_pos_terminal', {
   p_id: null,
   p_branch_id: branch.id,
   p_code: `POS-${suffix}`,
   p_name: 'Branch assignment test terminal',
-  p_type: 'POS',
+  p_type: 'CASHIER',
 });
 assert.equal(terminal.branch_id, branch.id);
 assert.equal(terminal.registration_status, 'UNREGISTERED');
@@ -76,13 +101,13 @@ assert.deepEqual(activeAssignments.map((item) => item.branch_id), [branch.id], '
 
 await rpc('save_terminal_access', {
   p_terminal_id: terminal.id,
-  p_access_mode: 'ROLE_RESTRICTED',
-  p_allowed_roles: ['WAITER'],
+  p_access_mode: 'ALL_BRANCH_STAFF',
+  p_allowed_roles: [],
   p_staff_ids: [],
 });
 const [access] = await request(`/rest/v1/pos_terminals?id=eq.${terminal.id}&select=id,branch_id,access_mode,allowed_roles`, { service: true });
 assert.equal(access.branch_id, branch.id);
-assert.equal(access.access_mode, 'ROLE_RESTRICTED');
-assert.deepEqual(access.allowed_roles, ['WAITER']);
+assert.equal(access.access_mode, 'ALL_BRANCH_STAFF');
+assert.deepEqual(access.allowed_roles, []);
 
-console.log('PASS branch creation, POS terminal creation, staff assignment, primary branch sync, and role-restricted terminal access');
+console.log('PASS branch creation, POS terminal creation, staff assignment, primary branch sync, and all-branch-staff terminal access');

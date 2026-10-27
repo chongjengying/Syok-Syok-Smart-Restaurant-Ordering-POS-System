@@ -1,25 +1,26 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
-  Activity,
   ArrowLeft,
-  ChartNoAxesCombined,
+  Building2,
   ClipboardList,
-  CreditCard,
-  FolderTree,
   LayoutDashboard,
-  Logs,
   Menu,
-  PackageSearch,
-  ReceiptText,
+  Search,
   Settings,
   ShieldCheck,
+  Table2,
   TrendingUp,
   Users,
   UtensilsCrossed,
   X,
-  QrCode,
-  FileText,
 } from "lucide-react";
+import AccessibleDialog from "./AccessibleDialog";
 import AdminDashboard from "./AdminDashboard";
 import ProductManagementScreen from "../ProductManagementScreen";
 import CategoryManagement from "./CategoryManagement";
@@ -27,6 +28,7 @@ import UserManagement from "./UserManagement";
 import RolePermissions from "./RolePermissions";
 import AdminOrders from "./AdminOrders";
 import AdminPayments from "./AdminPayments";
+import AdminReceipts from "./AdminReceipts";
 import AuditLogs from "./AuditLogs";
 import TableManagementScreen from "../TableManagementScreen";
 import ReportsScreen from "../ReportsScreen";
@@ -48,175 +50,199 @@ import DiscountActivity from "./DiscountActivity";
 import CashShiftManagement from "./CashShiftManagement";
 import StaffSelectionPage from "./StaffSelectionPage";
 import { getSystemSettings } from "../../services/systemSettings.service";
+import { useAdminDashboard } from "../../hooks/useAdminDashboard";
+import { adminSections, getAdminNavigation } from "./adminNavigation";
+import AdminSettingsOverview from "./AdminSettingsOverview";
+import AdminAccountPage from "./AdminAccountPage";
+import "./adminWorkspace.css";
 
-const groups = [
-  ["", [["dashboard", "Dashboard", "dashboard.view", LayoutDashboard]]],
-  [
-    "ORGANIZATION",
-    [
-      ["company", "Company", "company.view", Settings],
-      ["branches", "Branches", "branch.view", FolderTree],
-      ["terminals", "Terminals", "terminal.view", Settings],
-      ["users", "Staff", "user.view", Users],
-      ["roles", "Roles & Permissions", "role.view", ShieldCheck],
-    ],
-  ],
-  [
-    "OPERATIONS",
-    [
-      ["orders", "Orders", "order.view", ClipboardList],
-      ["payments", "Payments", "payment.view", ReceiptText],
-      ["cash-shifts", "Cashier Shifts", "cash.shift.view", CreditCard],
-      ["tables", "Tables", "table.view", UtensilsCrossed],
-    ],
-  ],
-  [
-    "BUSINESS",
-    [
-      ["products", "Products", "product.view", PackageSearch],
-      ["categories", "Categories", "category.view", FolderTree],
-      ["promotions", "Promotions", "promotion.view", ReceiptText],
-      ["vouchers", "Vouchers", "voucher.view", ReceiptText],
-    ],
-  ],
-  [
-    "REPORTS",
-    [
-      ["reports", "Sales Reports", "report.view", TrendingUp],
-      ["discount-activity", "Voucher Usage", "voucher.activity.view", ReceiptText],
-      ["audit", "Audit Logs", "audit.view", Logs],
-    ],
-  ],
-  [
-    "SYSTEM",
-    [
-      [
-        "system-administration",
-        "Restaurant Settings",
-        "settings.view",
-        Settings,
-      ],
-      ["system-health", "System Health", "system.health.view", Activity],
-      ["qr-settings", "QR Payment Settings", "settings.manage", QrCode],
-      ["payment-providers", "Payment Methods", "settings.manage", CreditCard],
-      ["einvoice", "E-Invoice", "einvoice.view", FileText],
-    ],
-  ],
-];
-const items = groups.flatMap((group) => group[1]);
-
+const icons = {
+  dashboard: LayoutDashboard,
+  menu: UtensilsCrossed,
+  orders: ClipboardList,
+  tables: Table2,
+  staff: Users,
+  reports: TrendingUp,
+  settings: Settings,
+};
 const readRoute = () => {
-  const raw = globalThis.location?.hash?.replace(/^#admin\//, "") || "";
+  const raw =
+    globalThis.location?.hash?.replace(/^#admin\//, "") || "dashboard";
   const [section = "dashboard", query = ""] = raw.split("?");
   return { section, query };
 };
 
-export default function AdminShell({ role, permissions, onBack, onSwitchStaff, lang }) {
+export default function AdminShell({
+  role,
+  permissions = [],
+  profile,
+  onProfileUpdated,
+  onBack,
+  onSwitchStaff,
+  onLogout,
+  lang,
+  setLang,
+  enabledLanguages,
+}) {
   const tr = (key, variables) => translate(lang, key, variables);
   const allowed = useMemo(() => new Set(permissions), [permissions]);
-  const first = items.find((item) => allowed.has(item[2]))?.[0] || "";
+  const navigation = useMemo(() => getAdminNavigation(allowed), [allowed]);
+  const items = useMemo(
+    () => adminSections.filter((item) => !item[2] || allowed.has(item[2])),
+    [allowed],
+  );
+  const first =
+    adminSections.find((item) => item[2] && allowed.has(item[2]))?.[0] || "";
   const initial = readRoute();
   const [section, setSection] = useState(
-    items.some((item) => item[0] === initial.section && allowed.has(item[2]))
-      ? initial.section
-      : first,
+    items.some((item) => item[0] === initial.section) ? initial.section : first,
   );
   const [routeKey, setRouteKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [businessLabel, setBusinessLabel] = useState("Restaurant Admin");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [account, setAccount] = useState(profile);
+  const [businessLabel, setBusinessLabel] = useState("Company workspace");
+  const [toast, setToast] = useState(null);
+  const routeHash = useRef(globalThis.location?.hash || "");
   const healthState = useSystemHealth(allowed.has("system.health.view"));
+  const dashboardState = useAdminDashboard(
+    section === "dashboard" && allowed.has("dashboard.view"),
+  );
   const networkState = useNetworkStatus();
+  const canOpen = useCallback(
+    (id) => items.some((item) => item[0] === id),
+    [items],
+  );
+  useEffect(() => {
+    setAccount(profile);
+  }, [profile]);
 
+  useEffect(() => {
+    const showToast = (event) => {
+      const message = String(event.detail?.message || "").trim();
+      if (!message) return;
+      setToast({ message, tone: event.detail?.tone || "success" });
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => setToast(null), 4200);
+    };
+    window.addEventListener("admin-toast", showToast);
+    return () => {
+      window.removeEventListener("admin-toast", showToast);
+      window.clearTimeout(showToast.timer);
+    };
+  }, []);
   useEffect(() => {
     if (!allowed.has("settings.view")) return undefined;
     let active = true;
-    void getSystemSettings().then((result) => {
-      if (!active || result.error || !result.data) return;
-      const info = result.data.restaurantInfo || {};
-      const name = String(info.restaurantName || "").trim();
-      const branch = String(info.branchName || "").trim();
-      if (name) setBusinessLabel(branch ? `${name} · ${branch}` : name);
-    });
-    return () => { active = false; };
+    const load = () => {
+      void getSystemSettings()
+        .then((result) => {
+          if (!active || result.error || !result.data) return;
+          const name = String(
+            result.data.restaurantInfo?.restaurantName || "",
+          ).trim();
+          if (name) setBusinessLabel(name);
+        })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener("pos-settings-updated", load);
+    return () => {
+      active = false;
+      window.removeEventListener("pos-settings-updated", load);
+    };
   }, [allowed]);
-
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuery("");
+        setSidebarOpen(false);
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const mayLeave = (next) =>
+    globalThis.dispatchEvent(
+      new CustomEvent("before-admin-navigate", {
+        cancelable: true,
+        detail: { section: next },
+      }),
+    );
   const navigate = (nextSection, filters = {}) => {
-    if (
-      !globalThis.dispatchEvent(
-        new CustomEvent("before-admin-navigate", {
-          cancelable: true,
-          detail: { section: nextSection },
-        }),
-      )
-    )
-      return;
-    const target = items.find(
-      (item) => item[0] === nextSection && allowed.has(item[2]),
-    );
-    if (!target) return;
-    const query = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== "" && value != null) query.set(key, String(value));
+    if (!canOpen(nextSection)) return;
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== "" && value != null) params.set(key, String(value));
     });
-    const suffix = query.size ? `?${query}` : "";
-    globalThis.history?.replaceState(
-      null,
-      "",
-      `#admin/${nextSection}${suffix}`,
-    );
+    const target = `#admin/${nextSection}${params.size ? `?${params}` : ""}`;
+    if (target === globalThis.location.hash) {
+      setSidebarOpen(false);
+      setSearchOpen(false);
+      return;
+    }
+    if (!mayLeave(nextSection)) return;
+    globalThis.history.pushState(null, "", target);
+    routeHash.current = target;
     setSection(nextSection);
     setRouteKey((current) => current + 1);
     setSidebarOpen(false);
+    setSearchOpen(false);
   };
-
   useEffect(() => {
-    if (section && !globalThis.location.hash.startsWith(`#admin/${section}`))
-      globalThis.history?.replaceState(null, "", `#admin/${section}`);
-  }, [section]);
+    if (!first) return;
+    if (!canOpen(readRoute().section))
+      globalThis.history.replaceState(null, "", `#admin/${section}`);
+    routeHash.current = globalThis.location.hash;
+  }, [canOpen, first, section]);
   useEffect(() => {
+    const filtersChanged = (event) => {
+      if (typeof event.detail?.hash === "string")
+        routeHash.current = event.detail.hash;
+    };
     const sync = () => {
+      if (globalThis.location.hash === routeHash.current) return;
       const route = readRoute();
-      if (
-        route.section !== section &&
-        !globalThis.dispatchEvent(
-          new CustomEvent("before-admin-navigate", {
-            cancelable: true,
-            detail: { section: route.section },
-          }),
-        )
-      ) {
-        globalThis.history?.replaceState(null, "", `#admin/${section}`);
+      if (!canOpen(route.section) || !mayLeave(route.section)) {
+        globalThis.history.replaceState(null, "", routeHash.current);
         return;
       }
-      if (
-        items.some((item) => item[0] === route.section && allowed.has(item[2]))
-      ) {
-        setSection(route.section);
-        setRouteKey((current) => current + 1);
-      }
+      routeHash.current = globalThis.location.hash;
+      setSection(route.section);
+      setRouteKey((current) => current + 1);
+      setSidebarOpen(false);
+      setSearchOpen(false);
     };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
+    window.addEventListener("admin-filters-changed", filtersChanged);
     return () => {
       window.removeEventListener("popstate", sync);
       window.removeEventListener("hashchange", sync);
+      window.removeEventListener("admin-filters-changed", filtersChanged);
     };
-  }, [allowed, section]);
+  }, [canOpen]);
   if (!first)
     return (
-      <div className="flex h-full items-center justify-center bg-[#121212] text-white">
-        Admin access denied.
+      <div className="admin-workspace admin-access-denied">
+        <h1>Admin access denied</h1>
+        <p>Your account does not have permission to open this workspace.</p>
       </div>
     );
   const activeRoute = readRoute();
   const activeParams = new URLSearchParams(activeRoute.query);
-
   const content = {
     dashboard: (
       <AdminDashboard
+        state={dashboardState}
         onNavigate={navigate}
         systemHealth={healthState.data}
         canViewSystemAdministration={allowed.has("settings.view")}
+        canViewSystemHealth={allowed.has("system.health.view")}
+        canOpen={canOpen}
       />
     ),
     products: (
@@ -243,6 +269,8 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
       <StaffSelectionPage branchId={activeParams.get("assignBranchId")} />
     ) : (
       <UserManagement
+        staffId={activeParams.get("staffId") || ""}
+        onNavigate={navigate}
         canCreate={allowed.has("user.create")}
         canEdit={allowed.has("user.edit")}
         canAssignRole={allowed.has("user.assign_role")}
@@ -250,11 +278,23 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
     ),
     roles: <RolePermissions canEdit={allowed.has("role.edit")} />,
     orders: <AdminOrders canManage={allowed.has("order.manage")} />,
-    payments: <AdminPayments canRefund={allowed.has("payment.refund")} />,
-    "cash-shifts": <CashShiftManagement canForceClose={allowed.has("cash.shift.force_close")} />,
+    payments: (
+      <AdminPayments
+        canRefund={allowed.has("payment.refund")}
+        canManageStock={allowed.has("inventory.manage")}
+      />
+    ),
+    receipts: <AdminReceipts canReprint={allowed.has("receipt.reprint")} />,
+    "cash-shifts": (
+      <CashShiftManagement
+        initialShiftId={activeParams.get("shiftId") || ""}
+        canForceClose={allowed.has("cash.shift.force_close")}
+      />
+    ),
     tables: (
       <TableManagementScreen
         role={role}
+        canManage={allowed.has("table.manage")}
         embedded
         lang={lang}
         initialStatus={activeParams.get("status") || ""}
@@ -265,125 +305,355 @@ export default function AdminShell({ role, permissions, onBack, onSwitchStaff, l
     audit: <AuditLogs />,
     "qr-settings": <QrPaymentSettings />,
     "payment-providers": <PaymentProviders />,
-    terminals: <TerminalManagement permissions={permissions} />,
-    company: <OrganizationManagement mode="company" permissions={permissions} />,
-    branches: <OrganizationManagement mode="branch" permissions={permissions} initialBranchId={activeParams.get("branchId") || ""} />,
+    terminals: (
+      <TerminalManagement permissions={permissions} onNavigate={navigate} />
+    ),
+    company: (
+      <OrganizationManagement mode="company" permissions={permissions} />
+    ),
+    branches: (
+      <OrganizationManagement
+        mode="branch"
+        permissions={permissions}
+        initialBranchId={activeParams.get("branchId") || ""}
+      />
+    ),
     "system-health": <SystemHealthPage state={healthState} />,
-    "system-administration": <SystemAdministrationPage lang={lang} />,
+    "system-administration": (
+      <SystemAdministrationPage
+        lang={lang}
+        initialTab={activeParams.get("tab") || "General"}
+      />
+    ),
+    settings: <AdminSettingsOverview canOpen={canOpen} onNavigate={navigate} />,
+    profile: (
+      <AdminAccountPage
+        profile={account}
+        lang={lang}
+        setLang={setLang}
+        enabledLanguages={enabledLanguages}
+        onLogout={() => {
+          if (mayLeave("logout")) onLogout?.();
+        }}
+        onUpdated={(updated) => {
+          setAccount(updated);
+          void onProfileUpdated?.();
+        }}
+      />
+    ),
     einvoice: <EinvoiceOverview />,
-    vouchers: <VoucherManagement initialStatus={activeParams.get("status") || ""} initialValidity={activeParams.get("validity") || ""} initialCreate={activeParams.get("create") === "1"} />,
-    promotions: <PromotionManagement initialStatus={activeParams.get("status") || ""} initialCreate={activeParams.get("create") === "1"} />,
-    "discount-activity": <DiscountActivity initialKind={activeParams.get("kind") || ""} />,
+    vouchers: (
+      <VoucherManagement
+        initialStatus={activeParams.get("status") || ""}
+        initialValidity={activeParams.get("validity") || ""}
+        initialCreate={activeParams.get("create") === "1"}
+      />
+    ),
+    promotions: (
+      <PromotionManagement
+        initialStatus={activeParams.get("status") || ""}
+        initialCreate={activeParams.get("create") === "1"}
+      />
+    ),
+    "discount-activity": (
+      <DiscountActivity initialKind={activeParams.get("kind") || ""} />
+    ),
   }[section];
 
+  const activeModule = navigation.find((module) =>
+    module.sections.some((item) => item[0] === section),
+  );
+  const activeLabel =
+    items.find((item) => item[0] === section)?.[1] || "Overview";
+  const displayName = account?.name || role || "Account";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  const matches = navigation
+    .flatMap((module) =>
+      module.sections.map((item) => ({ module: module.label, item })),
+    )
+    .filter(({ module, item }) =>
+      `${module} ${item[0]} ${item[1]}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    );
+  const leaveWorkspace = () => {
+    if (mayLeave("pos")) onBack?.();
+  };
   const sidebar = (
-    <aside className="admin-sidebar h-full w-64 overflow-y-auto bg-[#121212] p-4 text-white">
-      <div className="flex justify-between">
+    <aside aria-label="Admin navigation" className="admin-sidebar">
+      <button
+        type="button"
+        className="admin-brand"
+        onClick={() => navigate(first)}
+      >
+        <span className="admin-brand-icon">
+          <UtensilsCrossed size={19} />
+        </span>
+        <span>
+          <strong>RestoAdmin</strong>
+          <small title={businessLabel}>{businessLabel}</small>
+        </span>
+      </button>
+      <p className="admin-workspace-label">RESTAURANT WORKSPACE</p>
+      <nav className="admin-primary-nav" aria-label="Primary modules">
+        {navigation.map((module) => {
+          const Icon = icons[module.id];
+          return (
+            <button
+              type="button"
+              key={module.id}
+              aria-current={activeModule?.id === module.id ? "page" : undefined}
+              className={`admin-nav-item ${activeModule?.id === module.id ? "is-active" : ""}`}
+              onClick={() => navigate(module.sections[0][0])}
+            >
+              <Icon size={19} aria-hidden="true" />
+              <span>{module.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+      <div className="admin-sidebar-bottom">
         <button
-          onClick={() => {
-            globalThis.history?.replaceState(
-              null,
-              "",
-              globalThis.location?.pathname || "/",
-            );
-            onBack();
-          }}
-          className="mb-6 flex items-center gap-2 text-sm font-bold text-gray-300"
+          type="button"
+          className="admin-profile-trigger"
+          onClick={() => navigate("profile")}
         >
-          <ArrowLeft size={17} />
+          <span className="admin-avatar">{initials}</span>
+          <span>
+            <strong>{displayName}</strong>
+            <small>{role === "ADMIN" ? "Administrator" : role}</small>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="admin-exit-button"
+          onClick={leaveWorkspace}
+        >
+          <ArrowLeft size={15} />
           {tr("posDashboard")}
         </button>
-        <button
-          onClick={() => setSidebarOpen(false)}
-          className="mb-6 lg:hidden"
-          aria-label={tr("closeNavigation")}
-        >
-          <X size={20} />
-        </button>
       </div>
-      <div className="mb-6 flex items-center gap-2 text-lg font-black text-[#C59A2A]">
-        <ChartNoAxesCombined />
-        <span className="truncate" title={businessLabel}>{businessLabel}</span>
-      </div>
-      {groups.map(([label, groupItems]) => {
-        const visible = groupItems.filter((item) => allowed.has(item[2]));
-        return visible.length ? (
-          <div key={label} className="mb-5">
-            {label && (
-              <p className="mb-2 px-3 text-[10px] font-black tracking-widest text-gray-500">
-                {label}
-              </p>
-            )}
-            {visible.map(([id, text, , Icon]) => (
-              <React.Fragment key={id}>
-                <button
-                  onClick={() => navigate(id)}
-                    className={`admin-nav-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold ${section === id ? "is-active" : "text-gray-300 hover:bg-white/10"}`}
-                >
-                  <Icon size={17} />
-                  {text}
-                </button>
-                {id === "promotions" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["All",{}],["Active",{status:"ACTIVE"}],["Scheduled",{status:"SCHEDULED"}],["Expired",{status:"EXPIRED"}],["Disabled",{status:"DISABLED"}],["+ Create Promotion",{create:"1"}]].map(([label, filters]) => <button key={label} onClick={() => navigate("promotions", filters)} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
-                {id === "vouchers" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["All",{}],["Active",{status:"ACTIVE"}],["Scheduled",{validity:"UPCOMING"}],["Fully Redeemed",{status:"REDEEMED"}],["Expired",{status:"EXPIRED"}],["Disabled",{status:"DISABLED"}],["+ Create Voucher",{create:"1"}]].map(([label, filters]) => <button key={label} onClick={() => navigate("vouchers", filters)} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
-                {id === "discount-activity" && <div className="mb-2 ml-8 space-y-1 border-l border-white/10 pl-3 text-xs">{[["Promotion Usage","PROMOTION"],["Voucher Redemption","VOUCHER"],["Manual Discounts","MANUAL"],["Manager Overrides","OVERRIDE"]].map(([label, kind]) => <button key={kind} onClick={() => navigate("discount-activity", {kind})} className="block w-full rounded px-2 py-1.5 text-left text-gray-400 hover:bg-white/10 hover:text-white">{label}</button>)}</div>}
-              </React.Fragment>
-            ))}
-          </div>
-        ) : null;
-      })}
     </aside>
   );
-
   return (
-    <div className="admin-shell flex h-full bg-[#F5F6F8] text-[#121212]">
-      <div className="hidden shrink-0 lg:block">{sidebar}</div>
+    <div className="admin-shell admin-workspace">
+      <a
+        className="admin-skip-link"
+        href="#admin-main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("admin-main-content")?.focus();
+        }}
+      >
+        Skip to content
+      </a>
+      <div className="admin-sidebar-desktop">{sidebar}</div>
       {sidebarOpen && (
-        <div className="fixed inset-0 z-[80] lg:hidden">
+        <AccessibleDialog
+          title="Admin navigation"
+          onClose={() => setSidebarOpen(false)}
+          className="admin-mobile-navigation"
+          panelClassName="admin-navigation-panel"
+        >
           <button
-            className="absolute inset-0 bg-black/60"
+            type="button"
+            className="admin-icon-button admin-close-navigation"
+            aria-label="Close navigation"
             onClick={() => setSidebarOpen(false)}
-            aria-label={tr("closeNavigation")}
-          />
-          <div className="relative h-full">{sidebar}</div>
-        </div>
+          >
+            <X size={19} />
+          </button>
+          {sidebar}
+        </AccessibleDialog>
       )}
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <div className="admin-main-shell">
         {networkState !== "ONLINE" && (
           <div
             role="status"
             aria-live="assertive"
-            className={`sticky top-0 z-40 px-4 py-2 text-center text-sm font-bold ${networkState === "OFFLINE" ? "bg-red-700 text-white" : "bg-amber-300 text-black"}`}
+            className={`admin-network-banner ${networkState === "OFFLINE" ? "is-offline" : ""}`}
           >
             {tr(
               networkState === "OFFLINE" ? "adminOffline" : "adminReconnecting",
             )}
           </div>
         )}
-        <div className="admin-topbar sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+        <header className="admin-topbar">
           <button
+            type="button"
+            aria-label={tr("adminMenu")}
+            aria-expanded={sidebarOpen}
+            aria-haspopup="dialog"
+            className="admin-icon-button admin-mobile-menu"
             onClick={() => setSidebarOpen(true)}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold lg:hidden"
           >
-            <Menu size={18} />
-            {tr("adminMenu")}
+            <Menu size={19} />
           </button>
-          <span className="hidden lg:block" />
-          <div className="flex items-center gap-2">
+          <div className="admin-breadcrumb">
+            <strong>{activeModule?.label || "Administration"}</strong>
+            {activeModule?.sections.length > 1 && <span> / {activeLabel}</span>}
+          </div>
+          <div className="admin-topbar-actions">
+            {section === "dashboard" &&
+            dashboardState.data?.filterOptions?.branches?.length ? (
+              <label className="admin-header-branch">
+                <Building2 size={14} aria-hidden="true" />
+                <select
+                  aria-label="Dashboard branch"
+                  value={dashboardState.filters.branchId}
+                  onChange={(event) =>
+                    dashboardState.setFilter("branchId", event.target.value)
+                  }
+                >
+                  <option value="">All branches</option>
+                  {dashboardState.data.filterOptions.branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <span className="admin-company-context">
+                <Building2 size={14} />
+                {businessLabel}
+              </span>
+            )}
             {allowed.has("system.health.view") && (
               <OperationalIndicator
                 health={healthState.data}
                 onClick={() => navigate("system-health")}
               />
             )}
-            {onSwitchStaff && <button type="button" onClick={onSwitchStaff} className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 transition hover:bg-amber-100" title="Return to staff PIN selection">
-              <Users size={15} /> Switch Staff
-            </button>}
+            <button
+              type="button"
+              className="admin-icon-button"
+              aria-label="Find a module"
+              title="Find a module (Ctrl/⌘ K)"
+              onClick={() => {
+                setQuery("");
+                setSearchOpen(true);
+              }}
+            >
+              <Search size={18} />
+            </button>
+            <button
+              type="button"
+              className="admin-avatar admin-avatar-button"
+              aria-label="My profile"
+              onClick={() => navigate("profile")}
+            >
+              {initials}
+            </button>
+            {onSwitchStaff && role !== "ADMIN" && (
+              <button
+                type="button"
+                className="admin-button admin-button-secondary admin-switch-staff"
+                onClick={() => {
+                  if (mayLeave("pos")) onSwitchStaff();
+                }}
+              >
+                <Users size={15} />
+                Switch staff
+              </button>
+            )}
           </div>
+        </header>
+        {activeModule?.sections.length > 1 && (
+          <nav
+            aria-label={`${activeModule.label} sections`}
+            className="admin-section-nav"
+          >
+            {activeModule.sections.map(([id, label]) => (
+              <button
+                type="button"
+                key={id}
+                className={section === id ? "is-active" : ""}
+                aria-current={section === id ? "page" : undefined}
+                onClick={() => navigate(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        <main id="admin-main-content" tabIndex={-1} className="admin-content">
+          <div key={routeKey}>{content}</div>
+        </main>
+      </div>
+      {toast && (
+        <div
+          className={`admin-toast ${toast.tone === "error" ? "is-error" : ""}`}
+          role={toast.tone === "error" ? "alert" : "status"}
+        >
+          <ShieldCheck size={18} />
+          <p>{toast.message}</p>
+          <button
+            type="button"
+            className="admin-icon-button"
+            aria-label="Dismiss notification"
+            onClick={() => setToast(null)}
+          >
+            <X size={16} />
+          </button>
         </div>
-        <div key={routeKey} className="admin-content p-4 sm:p-6 lg:p-8">
-          {content}
-        </div>
-      </main>
+      )}
+      {searchOpen && (
+        <AccessibleDialog
+          title="Find a module"
+          onClose={() => setSearchOpen(false)}
+          className="admin-command-dialog"
+          panelClassName="admin-command-panel"
+        >
+          <header className="admin-dialog-heading">
+            <div>
+              <h2>Find a module</h2>
+              <p>Search the pages available to your account.</p>
+            </div>
+            <button
+              type="button"
+              className="admin-icon-button"
+              aria-label="Close module search"
+              onClick={() => setSearchOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          </header>
+          <label className="admin-command-search">
+            <Search size={17} />
+            <input
+              autoFocus
+              aria-label="Find module by name"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search menu, orders, staff, settings…"
+            />
+          </label>
+          <div className="admin-command-results">
+            {matches.length ? (
+              matches.map(({ module, item }) => (
+                <button
+                  type="button"
+                  key={item[0]}
+                  data-admin-section={item[0]}
+                  onClick={() => navigate(item[0])}
+                >
+                  <span>{item[1]}</span>
+                  <small>{module}</small>
+                </button>
+              ))
+            ) : (
+              <p role="status">No matching modules.</p>
+            )}
+          </div>
+        </AccessibleDialog>
+      )}
     </div>
   );
 }

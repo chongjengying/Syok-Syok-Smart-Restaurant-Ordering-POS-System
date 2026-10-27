@@ -1,4 +1,4 @@
-import { fetchMyPermissions, fetchRolesAndPermissions, insertAdminRole, persistRolePermissions } from '../repositories/admin.repository';
+import { fetchMyPermissions, fetchRolesAndPermissions, insertAdminRole, persistRolePermissions, setAdminRoleStatus } from '../repositories/admin.repository';
 
 export async function getMyPermissions() {
   const result = await fetchMyPermissions();
@@ -10,7 +10,12 @@ export async function getRolePermissionMatrix() {
   if (error) return { data: null, error };
   return { data: { roles: roles.data || [], permissions: permissions.data || [], assignments: assignments.data || [] }, error: null };
 }
+export async function getAssignableRoles() {
+  const result = await getRolePermissionMatrix();
+  return { data: (result.data?.roles || []).filter((role: { name?: string; is_active?: boolean }) => role.name !== 'ADMIN' && role.is_active !== false), error: result.error };
+}
 export const saveRolePermissions = (roleId: string, codes: string[]) => persistRolePermissions(roleId, codes);
+export const setRoleActive = (roleId: string, active: boolean) => setAdminRoleStatus(roleId, active);
 export function createRole(name: string, description: string) {
   const normalizedName = name.trim().toUpperCase();
   const normalizedDescription = description.trim();

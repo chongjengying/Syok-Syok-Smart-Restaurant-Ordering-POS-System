@@ -14,6 +14,7 @@ export default function TableSelectionScreen({
   tablesError,
   onBack,
   onContinue,
+  isOpeningOrder = false,
   onRefreshTables,
   contextError,
   grandTotal,
@@ -57,7 +58,7 @@ export default function TableSelectionScreen({
         </button>
 
         <h1 className="font-extrabold text-lg tracking-wider text-white uppercase">
-          {tr('selectOrderTable')}
+          {diningMode === 'takeaway' ? tr('startTakeaway') : tr('selectOrderTable')}
         </h1>
 
         <div className="text-right text-xs">
@@ -317,7 +318,7 @@ export default function TableSelectionScreen({
             <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
               <p>{contextError}</p>
               <button type="button" onClick={() => void onRefreshTables?.()} className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-black text-red-700 hover:bg-red-50">
-                Refresh tables and try again
+                {diningMode === 'takeaway' ? tr('retry') : 'Refresh tables and try again'}
               </button>
             </div>
           )}
@@ -344,7 +345,7 @@ export default function TableSelectionScreen({
             </button>
           ))}
           <button
-            disabled={diningMode === 'dine-in' && !selectedTable}
+            disabled={isOpeningOrder || (diningMode === 'dine-in' && !selectedTable)}
             onClick={() => {
               soundFx.playTap();
               onContinue();
@@ -352,7 +353,9 @@ export default function TableSelectionScreen({
             className="w-full h-[64px] rounded-[16px] bg-[#D4AF37] hover:bg-[#B8952B] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold text-lg tracking-wider flex items-center justify-center gap-3 btn-gold-shadow active:scale-95 transition-all cursor-pointer"
           >
             <span>
-              {diningMode === 'takeaway'
+              {isOpeningOrder
+                ? tr('processing')
+                : diningMode === 'takeaway'
                 ? tr('startTakeawayOrder')
                 : selectedTableRecord?.activeOrder
                   ? selectedTableRecord.activeOrder.paymentStatus === 'PAID'

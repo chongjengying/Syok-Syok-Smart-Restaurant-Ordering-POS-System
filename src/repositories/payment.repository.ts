@@ -54,11 +54,11 @@ export function submitSplitPayment(input: SplitPaymentInput) {
   }>>;
 }
 
-export function submitRefund(orderId: string, reason: string, idempotencyKey: string) {
+export function submitRefund(orderId: string, reason: string, idempotencyKey: string, amount?: number | null, items: Array<{ orderItemId: string; quantity: number }> = []) {
   return apiRequest('payments', {
     path: 'refund',
     method: 'POST',
-    body: { orderId, reason, idempotencyKey },
+    body: { orderId, reason, idempotencyKey, amount, items },
   }) as Promise<ApiResult<Record<string, unknown>>>;
 }
 

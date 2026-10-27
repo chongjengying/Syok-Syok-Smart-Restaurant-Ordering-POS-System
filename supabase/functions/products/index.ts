@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
+import { callerHeaders, buildCorsHeaders, jsonResponse as createJsonResponse } from '../_shared/http.ts';
 
 const corsHeaders = buildCorsHeaders('GET, OPTIONS');
 const jsonResponse = (status: number, body: Record<string, unknown>) =>
@@ -28,13 +28,14 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !anonKey) return jsonResponse(500, { error: 'Server configuration is incomplete.' });
 
   const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authorization } },
+    global: { headers: callerHeaders(request, authorization) },
     auth: { persistSession: false },
   });
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) return jsonResponse(401, { error: 'The session is invalid or expired.' });
-  const { data: profile } = await supabase.from('profiles').select('status').eq('id', userData.user.id).single();
-  if (!profile || profile.status !== 'ACTIVE') return jsonResponse(403, { error: 'An active staff profile is required.' });
+  const { data: profile } = await supabase.from('profiles').select('status').eq('id', userData.user.id).maybeSingle();
+  const { data: terminalSession } = profile ? { data: null } : await supabase.rpc('current_terminal_staff_session');
+  if ((!profile || profile.status !== 'ACTIVE') && !terminalSession?.id) return jsonResponse(403, { error: 'An active staff profile or terminal staff session is required.' });
 
   const url = new URL(request.url);
   if (url.searchParams.get('health') === 'probe') return jsonResponse(200, { data: { status: 'ok' } });

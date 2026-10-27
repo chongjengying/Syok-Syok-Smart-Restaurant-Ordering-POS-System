@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   completeTableCleaning,
   moveOrderToTable,
@@ -16,11 +16,13 @@ export function useTableManagement(enabled, { includeInactive = false, branchId 
   const tableState = useTables(enabled, { includeInactive, branchId });
   const { refresh } = tableState;
   const [updatingId, setUpdatingId] = useState(null);
+  const pending = useRef(false);
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
 
   const execute = useCallback(async (key, operation, successMessage) => {
-    if (updatingId) return { data: null, error: new Error('Another table operation is in progress.') };
+    if (pending.current) return { data: null, error: new Error('Another table operation is in progress.') };
+    pending.current = true;
     setUpdatingId(key);
     setActionError('');
     setActionMessage('');
@@ -36,9 +38,10 @@ export function useTableManagement(enabled, { includeInactive = false, branchId 
       setActionError(getUserErrorMessage(error, 'The table operation could not be completed.'));
       return { data: null, error };
     } finally {
+      pending.current = false;
       setUpdatingId(null);
     }
-  }, [refresh, updatingId]);
+  }, [refresh]);
 
   return {
     ...tableState,

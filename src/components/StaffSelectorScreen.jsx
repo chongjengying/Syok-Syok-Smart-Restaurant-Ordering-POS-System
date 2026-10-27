@@ -1,39 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Banknote, Check, ChefHat, ChevronUp, ClipboardList, Delete, Layers, Lock, LogIn, LogOut, ReceiptText, Search, Settings, ShieldCheck, Table2, UserRound, UsersRound, UtensilsCrossed } from 'lucide-react';
-import { env } from '../config/env';
-
-const ROLE_FEATURES = {
-  ADMIN: [
-    ['Dashboard', ClipboardList],
-    ['Reports', ReceiptText],
-    ['Staff', UsersRound],
-    ['Settings', Settings],
-  ],
-  MANAGER: [
-    ['Dashboard', ClipboardList],
-    ['Orders', ReceiptText],
-    ['Tables', Table2],
-    ['Reports', ReceiptText],
-  ],
-  WAITER: [
-    ['Tables', Table2],
-    ['New Orders', UtensilsCrossed],
-    ['Takeaway', ReceiptText],
-    ['History', ClipboardList],
-  ],
-  KITCHEN: [
-    ['Kitchen Display', ChefHat],
-    ['Order Queue', ClipboardList],
-    ['Prepare', UtensilsCrossed],
-    ['Ready', Check],
-  ],
-  CASHIER: [
-    ['Orders', ReceiptText],
-    ['Payments', Banknote],
-    ['Refunds', ReceiptText],
-    ['Cash Drawer', Banknote],
-  ],
-};
+import { ArrowLeft, Check, ChevronUp, Delete, Info, Lock, LogIn, LogOut, Search, ShieldCheck, UserRound, UsersRound, UtensilsCrossed, X } from 'lucide-react';
 
 const requiresPinSetup = (staff) => Boolean(
   staff && (staff.pin_setup_required || !staff.pin_status || staff.pin_status === 'SETUP_REQUIRED' || staff.pin_status === 'NOT_CONFIGURED')
@@ -66,6 +32,7 @@ export default function StaffSelectorScreen({
   const [resetStep, setResetStep] = useState('new');
   const [confirmError, setConfirmError] = useState('');
   const [showAllStaff, setShowAllStaff] = useState(false);
+  const [showTerminalInfo, setShowTerminalInfo] = useState(false);
   const [staffSearch, setStaffSearch] = useState('');
   const submitLock = useRef(false);
   useEffect(() => { const timer = window.setInterval(() => setTime(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
@@ -134,14 +101,12 @@ export default function StaffSelectorScreen({
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   });
-  const environment = (env.appEnv || 'staging').toUpperCase();
   const normalizedStaffSearch = staffSearch.trim().toLowerCase();
   const matchingStaff = normalizedStaffSearch
-    ? staff.filter(person => `${person.name || ''} ${person.role || ''}`.toLowerCase().includes(normalizedStaffSearch))
+    ? staff.filter(person => `${person.staff_code || ''} ${person.id || ''} ${person.username || ''} ${person.email || ''} ${person.name || ''} ${person.role || ''}`.toLowerCase().includes(normalizedStaffSearch))
     : staff;
-  const visibleStaff = showAllStaff ? matchingStaff : staff.slice(0, 4);
+  const visibleStaff = normalizedStaffSearch ? matchingStaff : showAllStaff ? matchingStaff : staff.slice(0, 4);
   const keys = ['1','2','3','4','5','6','7','8','9','back','0','clear'];
-  const features = ROLE_FEATURES[selectedStaff?.role] || [];
   const hasPinError = Boolean(error && selectedStaff);
   const setupRequired = requiresPinSetup(selectedStaff);
   const temporaryPinRequired = Boolean(selectedStaff?.temporary_pin_required || selectedStaff?.pin_status === 'TEMPORARY_RESET');
@@ -160,15 +125,16 @@ export default function StaffSelectorScreen({
   const keypadDisabled = isSubmitting || !selectedStaff || (setupRequired && !canSetupSelectedPin && !pinResetRequired);
   return <div className="flex h-full w-full items-center justify-center bg-[#101014] p-4 text-white lg:p-6">
     <section className="flex h-full max-h-[720px] w-full max-w-[1040px] flex-col overflow-hidden rounded-[26px] border border-white/10 bg-gradient-to-br from-[#1A1A1E] via-[#121217] to-[#0A0A0C] shadow-[0_28px_90px_rgba(0,0,0,0.62),inset_0_1px_0_rgba(255,255,255,0.08)]">
-      <header className="px-8 pb-5 pt-7 lg:px-10">
-        <div className="flex items-center justify-center gap-5 text-left">
+      <header className="border-b border-white/10 px-8 pb-5 pt-7 lg:px-10">
+        <div className="mb-5 flex items-center justify-end text-xs font-black uppercase tracking-[0.18em] text-slate-400"><button type="button" onClick={() => setShowTerminalInfo(true)} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-black normal-case tracking-normal text-slate-300 transition hover:border-[#D4AF37]/60 hover:text-[#D4AF37]"><Info size={14}/>Terminal info</button></div>
+        <div className="flex items-center justify-between gap-5 text-left">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[#D4AF37]/70 bg-[#D4AF37]/10 text-[#D4AF37] shadow-[0_0_36px_rgba(212,175,55,0.18)]">
             <UtensilsCrossed size={31} strokeWidth={1.8} />
           </div>
           <div>
-            <h1 className="text-4xl font-black tracking-[0.08em] text-white drop-shadow">SYOK SYOK POS</h1>
-            <p className="mt-1 text-xl font-bold text-slate-400">Staff Sign In</p>
-            {terminalContext && <p className="mt-2 text-sm font-bold text-[#D4AF37]">{terminalContext.branchCode} · {terminalContext.terminalCode} — {terminalContext.terminalName}</p>}
+            <h1 className="text-3xl font-black tracking-tight text-white drop-shadow sm:text-4xl">{terminalContext?.companyName || 'POS Terminal'}</h1>
+            <p className="mt-1 text-xl font-bold text-slate-400">Staff sign in</p>
+            {terminalContext && <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-bold"><span className="text-slate-300">{terminalContext.branchName || terminalContext.branchCode || 'Branch'}</span><span className="text-slate-600">·</span><span className="text-[#D4AF37]">{terminalContext.terminalName || terminalContext.terminalCode || 'Terminal'}</span></div>}
           </div>
         </div>
         <time className="sr-only">{time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
@@ -179,34 +145,26 @@ export default function StaffSelectorScreen({
             <UsersRound className="h-7 w-7 text-[#D4AF37]" />
             <h2 className="text-xl font-black lg:text-2xl">Select Staff</h2>
           </div>
-          {showAllStaff&&<div className="relative mb-3"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-500"/><input autoFocus value={staffSearch} onChange={event=>setStaffSearch(event.target.value)} placeholder="Search staff by name or role" className="w-full rounded-xl border border-white/10 bg-black/25 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[#D4AF37]"/></div>}
+          <div className="relative mb-3"><label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Staff</label><Search className="absolute left-3 top-11 h-4 w-4 text-slate-500"/><input aria-label="Employee ID or staff name" autoFocus value={staffSearch} onChange={event=>{const value=event.target.value;setStaffSearch(value);const exact=staff.find(person=>String(person.staff_code||'').toLowerCase()===value.trim().toLowerCase());if(exact) onSelect(exact);}} placeholder="Enter employee ID or search staff" className="w-full rounded-xl border border-white/10 bg-black/25 py-3 pl-10 pr-3 text-sm text-white outline-none focus:border-[#D4AF37]"/></div>
           {isLoading ? <p className="rounded-2xl border border-slate-700/70 bg-white/[0.03] py-8 text-center text-slate-400">Loading staff...</p> : error && !staff.length ? <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-5 text-center">
             <p className="text-sm font-bold text-red-300">{error}</p>
             <button type="button" onClick={onRetry} className="mt-4 rounded-xl bg-[#D4AF37] px-5 py-2 text-sm font-black text-black shadow-[0_10px_24px_rgba(212,175,55,0.2)]">Retry</button>
-          </div> : visibleStaff.length ? <div className="grid max-h-[460px] gap-4 overflow-y-auto pr-1">
-            {visibleStaff.map(person => <button key={person.id} type="button" disabled={isSubmitting} onClick={() => onSelect(person)} className={`group flex min-h-[112px] items-center gap-5 rounded-2xl border p-5 text-left transition disabled:opacity-50 ${selectedStaff?.id === person.id ? 'border-[#D4AF37] bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.35),0_18px_40px_rgba(212,175,55,0.12)]' : 'border-white/10 bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-[#D4AF37]/60 hover:bg-white/[0.07]'}`}>
-              <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border ${selectedStaff?.id === person.id ? 'border-[#D4AF37]/60 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-slate-500/50 bg-slate-600/30 text-white'}`}>
-                <UserRound size={33} strokeWidth={2.2}/>
+          </div> : visibleStaff.length ? <div className="grid max-h-[460px] gap-2 overflow-y-auto pr-1">
+            {visibleStaff.map(person => <button key={person.id} type="button" disabled={isSubmitting} onClick={() => onSelect(person)} className={`group flex min-h-[76px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition disabled:opacity-50 ${selectedStaff?.id === person.id ? 'border-[#D4AF37] bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]' : 'border-white/10 bg-white/[0.045] hover:border-[#D4AF37]/60 hover:bg-white/[0.07]'}`}>
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${selectedStaff?.id === person.id ? 'border-[#D4AF37]/60 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-slate-500/50 bg-slate-600/30 text-white'}`}>
+                <UserRound size={22} strokeWidth={2.2}/>
               </span>
               <span className="min-w-0 flex-1">
-                <strong className="block truncate text-2xl font-black text-white">{person.name}</strong>
-                <span className={`${selectedStaff?.id === person.id ? 'text-[#D4AF37]' : 'text-slate-400'} mt-1 block text-lg font-bold capitalize`}>{person.role?.toLowerCase() || 'staff'}</span>
+                <strong className="block truncate text-base font-black text-white">{person.name}</strong>
+                <span className={`${selectedStaff?.id === person.id ? 'text-[#D4AF37]' : 'text-slate-400'} mt-1 block text-xs font-bold capitalize`}>{person.role?.toLowerCase() || 'staff'} · {person.staff_code || person.id}</span>
               </span>
-              {selectedStaff?.id === person.id && <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-black shadow-[0_8px_22px_rgba(212,175,55,0.34)]"><Check size={24} strokeWidth={3}/></span>}
+              {selectedStaff?.id === person.id && <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-black"><Check size={17} strokeWidth={3}/></span>}
             </button>)}
           </div> : <div className="rounded-2xl border border-slate-700/70 bg-white/[0.03] p-7 text-center"><p className="text-slate-400">{showAllStaff&&staff.length?'No staff match your search.':'No active staff PINs are configured.'}</p>{canConfigurePins&&!staff.length&&<button onClick={onConfigurePins} className="mt-5 rounded-xl bg-[#D4AF37] px-5 py-3 font-black text-black">Configure staff PINs</button>}</div>}
           {staff.length>4&&<button type="button" onClick={()=>{setShowAllStaff(current=>!current);setStaffSearch('');}} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] text-sm font-black text-slate-200 transition hover:border-[#D4AF37]/50 hover:text-[#D4AF37]">
             {showAllStaff?<ChevronUp size={17}/>:<UserRound size={17}/>}
             {showAllStaff?'Show Quick Staff':`Other Staff (${staff.length-4})`}
           </button>}
-          {features.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/15 p-4">
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-slate-500">Role entry points</p>
-              <div className="grid grid-cols-2 gap-2">
-                {features.map(([label, Icon]) => <span key={label} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-300"><Icon size={14} className="text-[#D4AF37]"/>{label}</span>)}
-              </div>
-            </div>
-          )}
         </div>
         <div className={`${selectedStaff ? 'opacity-100' : 'opacity-45'} flex min-h-fit flex-col transition`}>
           <div className="mb-4 flex min-h-11 items-center gap-3">
@@ -217,11 +175,11 @@ export default function StaffSelectorScreen({
               Back to staff
             </button>}
           </div>
-          {selectedStaff&&temporaryPinRequired&&<div role="status" className="mb-5 flex gap-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 text-left text-amber-100">
+          {selectedStaff&&temporaryPinRequired&&<div role="status" className="mb-4 flex gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-left text-amber-100">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
             <div>
-              <strong className="block text-sm font-black">PIN reset requested</strong>
-              <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/80">{pinResetRequired ? 'Temporary PIN accepted. Create and confirm a new permanent six-digit PIN.' : 'An administrator reset this PIN. Enter the temporary six-digit PIN you received to continue.'}</p>
+              <strong className="block text-sm font-black">{pinResetRequired ? 'Temporary PIN accepted' : 'PIN reset requested'}</strong>
+              <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/80">{pinResetRequired ? 'Temporary PIN accepted. Create and confirm a new permanent six-digit PIN.' : 'An administrator reset this PIN. Enter the temporary 6-digit PIN provided by your administrator.'}</p>
             </div>
           </div>}
           {selectedStaff ? <p className="mb-3 text-center text-sm font-bold text-slate-400">{pinHelp} <span className="text-white">{selectedStaff.name}</span></p> : <p className="mb-3 text-center text-sm font-bold text-slate-500">{pinHelp}</p>}
@@ -264,10 +222,7 @@ export default function StaffSelectorScreen({
               <small className="text-xs font-medium text-slate-400">{isOnline ? (terminalContext ? `${terminalContext.companyName} · registered terminal` : 'Registered terminal required') : 'Connection unavailable'}</small>
             </span>
           </span>
-          <span className="flex items-center gap-3 rounded-2xl border border-[#D4AF37]/35 bg-[#D4AF37]/10 px-5 py-2.5 text-lg font-black text-[#D4AF37] shadow-[0_0_24px_rgba(212,175,55,0.1)]">
-            <Layers size={22}/>
-            {environment}
-          </span>
+          <span className="text-xs font-bold text-slate-500">{isOnline ? 'Connected terminal' : 'Local mode'}</span>
         </div>
         <div className="relative flex min-h-14 items-center justify-center gap-3 border-t border-slate-700/40 px-8 py-3 text-sm font-bold text-slate-500 lg:px-10">
           <span className="flex items-center gap-3">
@@ -276,10 +231,12 @@ export default function StaffSelectorScreen({
           </span>
           <button type="button" onClick={onLogout} disabled={isSubmitting} className="absolute right-8 flex min-h-10 items-center gap-2 rounded-xl border border-white/15 px-4 text-sm font-black text-slate-300 transition hover:border-red-400/60 hover:text-red-300 disabled:opacity-40 lg:right-10">
             <LogOut size={17}/>
-            Sign out email
+            Sign out setup account
           </button>
         </div>
       </footer>
+      <footer className="border-t border-white/10 px-8 py-4 text-xs font-bold text-slate-500">Terminal {terminalContext?.terminalCode || '—'} · {terminalContext?.terminalName || 'Not identified'}</footer>
+      {showTerminalInfo && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="terminal-info-title" className="w-full max-w-md rounded-3xl border border-slate-700 bg-[#1A1A1E] p-6 text-white shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#D4AF37]">Bound device</p><h2 id="terminal-info-title" className="mt-2 text-2xl font-black">Terminal Info</h2></div><button type="button" onClick={() => setShowTerminalInfo(false)} aria-label="Close terminal information" className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white"><X size={20}/></button></div><div className="mt-6 space-y-4">{[['Company', terminalContext?.companyName], ['Branch', terminalContext?.branchName || terminalContext?.branchCode], ['Terminal', terminalContext?.terminalName], ['Terminal code', terminalContext?.terminalCode], ['Terminal type', terminalContext?.terminalType || 'STANDARD_POS']].map(([label, value]) => <div key={label} className="flex items-start justify-between gap-5 border-b border-white/10 pb-3"><span className="text-sm text-slate-400">{label}</span><strong className="text-right text-sm text-white">{value || '—'}</strong></div>)}<div className="flex items-center justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-4"><span className="text-sm font-bold text-emerald-100">Device activation status</span><span className="rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-black text-emerald-300">ACTIVE · BOUND</span></div></div></section></div>}
     </section>
   </div>;
 }

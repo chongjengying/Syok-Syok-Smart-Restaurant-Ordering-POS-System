@@ -10,22 +10,25 @@ async function request(path,{body,method=body?'POST':'GET',service=false,ok=true
 }
 const rpc=(name,body={},extra={})=>request(`/rest/v1/rpc/${name}`,{body,...extra});
 const suffix=crypto.randomUUID().slice(0,8);
-const [main]=await request('/rest/v1/branches?code=eq.MAIN&select=id,company_id',{service:true});
+const [main]=await request('/rest/v1/branches?status=eq.ACTIVE&select=id,company_id&order=created_at.asc&limit=1',{service:true});
+assert.ok(main?.id,'Expected an active local branch');
 async function user(role,branchId) {
  const data=await request('/auth/v1/signup',{body:{email:`foundation-${role}-${suffix}@example.com`,password:`Foundation-${suffix}!`}});
- await request(`/rest/v1/profiles?id=eq.${data.user.id}`,{method:'PATCH',service:true,body:{role_name:role,status:'ACTIVE',branch_id:branchId}});
+ const [roleRecord]=await request(`/rest/v1/roles?name=eq.${role}&select=id`,{service:true});
+ await request('/rest/v1/profiles',{method:'POST',service:true,body:{id:data.user.id,company_id:main.company_id,role_id:roleRecord.id,role_name:role,name:`${role} foundation test`,email:data.user.email,status:'ACTIVE',branch_id:branchId}});
  return data;
 }
 const admin=await user('ADMIN',main.id);token=admin.access_token;
-const branch=await rpc('save_branch',{p_id:null,p_payload:{code:`B-${suffix.toUpperCase()}`,name:'Foundation test branch',status:'ACTIVE'},p_expected_revision:null});
-await rpc('save_branch',{p_id:null,p_payload:{code:branch.code,name:'Duplicate',status:'ACTIVE'},p_expected_revision:null},{ok:false});
-const terminal=await rpc('save_pos_terminal',{p_id:null,p_branch_id:branch.id,p_code:`${branch.code}-T01`,p_name:'Foundation test POS',p_type:'POS'});
+const branchPayload={code:`B-${suffix.toUpperCase()}`,name:'Foundation test branch',address:'Local test address',phone:'+60123456789',timezone:'Asia/Kuala_Lumpur',status:'ACTIVE'};
+const branch=await rpc('save_branch',{p_id:null,p_payload:branchPayload,p_expected_revision:null});
+await rpc('save_branch',{p_id:null,p_payload:{...branchPayload,name:'Duplicate'},p_expected_revision:null},{ok:false});
+const terminal=await rpc('save_pos_terminal',{p_id:null,p_branch_id:branch.id,p_code:`${branch.code}-T01`,p_name:'Foundation test POS',p_type:'CASHIER'});
 assert.equal(terminal.registration_status,'UNREGISTERED');
 await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'ACTIVATE'},{ok:false});
 const device=crypto.randomUUID()+crypto.randomUUID();
 await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'REGISTER',p_device_identifier:device});
 await rpc('transition_pos_terminal',{p_terminal_id:terminal.id,p_action:'ACTIVATE'});
-await rpc('save_pos_terminal',{p_id:terminal.id,p_branch_id:main.id,p_code:terminal.terminal_code,p_name:'Move terminal',p_type:'POS'},{ok:false});
+await rpc('save_pos_terminal',{p_id:terminal.id,p_branch_id:main.id,p_code:terminal.terminal_code,p_name:'Move terminal',p_type:'CASHIER'},{ok:false});
 const saved=await rpc('save_branch_configuration',{p_branch_id:branch.id,p_patch:{tax_rate:8,service_charge_rate:5,receipt_config:{receiptFooter:'Foundation receipt'}},p_expected_revision:branch.revision});
 assert.equal(saved.settings.tax_rate,8);
 assert.equal(saved.settings.receipt_config.receiptFooter,'Foundation receipt');

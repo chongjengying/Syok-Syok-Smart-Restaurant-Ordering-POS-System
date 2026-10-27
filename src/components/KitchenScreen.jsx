@@ -53,21 +53,21 @@ export default function KitchenScreen({ role, onBack, lang = 'en' }) {
 
   return (
     <div className="w-full h-full bg-[#F5F6F8] text-[#121212] flex flex-col overflow-hidden">
-      <header className="h-16 shrink-0 bg-[#121212] text-white px-6 flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
+      <header className="min-h-16 shrink-0 bg-[#121212] text-white px-4 py-2 flex flex-wrap gap-3 items-center justify-between">
+        <button onClick={onBack} className="min-h-11 flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-[#D4AF37]">
           <ArrowLeft className="w-5 h-5" /> {tr('dashboard')}
         </button>
         <div className="flex items-center gap-2 font-black tracking-wider uppercase">
           <ChefHat className="w-5 h-5 text-[#D4AF37]" /> {tr('kitchenQueue')}
         </div>
-        <button onClick={() => refresh()} className="flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
+        <button onClick={() => refresh()} className="min-h-11 flex items-center gap-2 text-xs font-bold text-[#D4AF37]">
           <RefreshCw className="w-4 h-4" /> {tr('refresh')}
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto p-4 lg:p-6">
         {(error || actionError) && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {actionError || error}
           </div>
         )}
@@ -115,7 +115,7 @@ export default function KitchenScreen({ role, onBack, lang = 'en' }) {
                   <div className="py-4 space-y-3">
                     {ticket.items.map((item) => (
                       <div key={item.id}>
-                        <p className="font-bold flex items-center gap-2">
+                        <p className="font-bold flex flex-wrap items-center gap-2">
                           <span>{item.quantity}× {item.name}</span>
                           {item.serviceMode === 'TAKEAWAY' && (
                             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-black text-sky-800">{tr('takeawayBadge')}</span>
@@ -148,7 +148,7 @@ export default function KitchenScreen({ role, onBack, lang = 'en' }) {
                       <button
                         disabled={updatingId === ticket.id}
                         onClick={() => advanceTicket(ticket, action)}
-                        className={`min-w-24 rounded-xl px-5 py-2.5 text-xs font-black disabled:opacity-50 ${
+                        className={`min-h-12 min-w-24 rounded-xl px-5 py-2.5 text-xs font-black disabled:opacity-50 ${
                           action.label === 'START'
                             ? 'bg-[#121212] text-[#D4AF37]'
                             : action.label === 'READY'

@@ -1,6 +1,7 @@
 import {
   createAuthAccount,
   createAuthSession,
+  createAnonymousSession,
   destroyAuthSession,
   fetchAuthSession,
   fetchAuthUser,
@@ -22,12 +23,14 @@ import {
   subscribeToAuthState,
   verifyStaffPinToken,
 } from './authRepository';
+import { setOperatorMode } from '../../infrastructure/supabase/client';
 
 export const AUTH_ERROR_CODES = Object.freeze({
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   EMAIL_NOT_CONFIRMED: 'EMAIL_NOT_CONFIRMED',
   ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCOUNT_EXISTS: 'ACCOUNT_EXISTS',
   PROFILE_REQUIRED: 'PROFILE_REQUIRED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   RATE_LIMITED: 'RATE_LIMITED',
@@ -43,12 +46,16 @@ function authError(code, message) {
 
 export function mapAuthenticationError(error) {
   const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
   const status = Number(error?.status || 0);
   if (!navigator.onLine || message.includes('fetch') || message.includes('network')) {
     return authError(AUTH_ERROR_CODES.CONNECTION_FAILED, 'Unable to reach the POS service. Check the connection and try again.');
   }
   if (status === 429 || message.includes('rate limit') || message.includes('too many')) {
     return authError(AUTH_ERROR_CODES.RATE_LIMITED, 'Too many sign-in attempts. Wait a moment and try again.');
+  }
+  if (code === 'user_already_exists' || message.includes('user already registered') || message.includes('already registered')) {
+    return authError(AUTH_ERROR_CODES.ACCOUNT_EXISTS, 'An account with this email already exists. Sign in or use Forgot password.');
   }
   if (message.includes('email not confirmed')) {
     return authError(AUTH_ERROR_CODES.EMAIL_NOT_CONFIRMED, 'Confirm your email address before signing in.');
@@ -69,10 +76,13 @@ function validationError(message) {
 function mapProfile(profile, authUser) {
   return {
     id: profile.id,
+    company_id: profile.company_id || profile.companyId || '',
     name: profile.name,
     username: profile.username || '',
     email: profile.email || authUser.email || '',
-    role: profile.roles?.name || profile.role_name || '',
+    role: profile.role || profile.roles?.name || profile.role_name || '',
+    branchId: profile.branchId || profile.branch_id || '',
+    permissions: Array.isArray(profile.permissions) ? profile.permissions : [],
     phone: authUser.user_metadata?.phone || '',
     avatar_url: authUser.user_metadata?.avatar_url || '',
     status: profile.status,
@@ -86,6 +96,14 @@ async function currentUser() {
     return { data: null, error: error || new Error('No active user session.') };
   }
   return { data: data.user, error: null };
+}
+
+async function getAdminContext(authUser) {
+  const result = await fetchProfile(authUser.id);
+  if (result.error || !result.data) return null;
+  const role = result.data.role_name || result.data.roles?.name || result.data.role;
+  if (role !== 'ADMIN') return null;
+  return mapProfile(result.data, authUser);
 }
 
 export async function signUp(email, password, fullName) {
@@ -104,6 +122,19 @@ export async function signIn(email, password) {
   const result = await createAuthSession(normalizedEmail, password);
   if (result.error) return { data: null, error: mapAuthenticationError(result.error) };
 
+  // Resolve an email-authenticated administrator before attempting the
+  // terminal fallback. Admin sessions must never be classified as devices.
+  const admin = await getAdminContext(result.data.user);
+  if (admin) {
+    if (admin.status !== 'ACTIVE') {
+      await destroyAuthSession();
+      return { data: null, error: authError(AUTH_ERROR_CODES.ACCOUNT_INACTIVE, 'This administrator account is inactive. Contact a system administrator.') };
+    }
+    const audit = await recordSuccessfulLogin();
+    if (audit.error) console.warn('Login audit could not be recorded.');
+    return { data: { ...result.data, staff: admin }, error: null };
+  }
+
   const staffResult = await fetchMyStaffSession();
   const staff = staffResult.data;
   if (staffResult.error) {
@@ -113,6 +144,7 @@ export async function signIn(email, password) {
   if (!staff) {
     const terminal = await fetchTerminalContext();
     if (terminal.data?.ok) return { data: { ...result.data, staff: { id: result.data.user.id, name: terminal.data.terminalCode, status: 'ACTIVE', role: 'TERMINAL', terminal: terminal.data } }, error: null };
+    if (terminal.data?.code === 'TERMINAL_AUTH_NOT_BOUND') return { data: { ...result.data, staff: { id: result.data.user.id, name: result.data.user.email, status: 'ACTIVE', role: 'TERMINAL_SETUP' } }, error: null };
     await destroyAuthSession();
     return { data: null, error: authError(AUTH_ERROR_CODES.PROFILE_REQUIRED, 'An Administrator account or a registered terminal is required.') };
   }
@@ -128,6 +160,11 @@ export async function signIn(email, password) {
   const audit = await recordSuccessfulLogin();
   if (audit.error) console.warn('Login audit could not be recorded.');
   return { data: { ...result.data, staff }, error: null };
+}
+
+export async function signInAnonymously() {
+  const result = await createAnonymousSession();
+  return result.error ? { data: null, error: mapAuthenticationError(result.error) } : result;
 }
 
 export async function resendConfirmation(email) {
@@ -170,13 +207,23 @@ export async function getValidatedSession() {
     await destroyAuthSession();
     return { data: { session: null }, error: mapAuthenticationError(userResult.error) };
   }
+  const admin = await getAdminContext(userResult.data.user);
+  if (admin) {
+    if (admin.status !== 'ACTIVE') {
+      await destroyAuthSession();
+      return { data: { session: null }, error: authError(AUTH_ERROR_CODES.ACCOUNT_INACTIVE, 'This administrator account is inactive. Contact a system administrator.') };
+    }
+    return { data: { session: sessionResult.data.session, staff: admin }, error: null };
+  }
   const staffResult = await fetchMyStaffSession();
   if (staffResult.error) {
     return { data: { session: null }, error: mapAuthenticationError(staffResult.error) };
   }
   if (!staffResult.data) {
+    setOperatorMode(false);
     const terminal = await fetchTerminalContext();
     if (terminal.data?.ok) return { data: { session: sessionResult.data.session, staff: { id: userResult.data.user.id, name: terminal.data.terminalCode, status: 'ACTIVE', role: 'TERMINAL', terminal: terminal.data } }, error: null };
+    if (terminal.data?.ok === false) return { data: { session: sessionResult.data.session, staff: { id: userResult.data.user.id, name: 'Terminal setup', status: 'ACTIVE', role: 'TERMINAL_SETUP', terminal: terminal.data } }, error: null };
   }
   if (!staffResult.data || staffResult.data.status !== 'ACTIVE') {
     await destroyAuthSession();
@@ -211,10 +258,13 @@ export async function getUserProfile() {
 export async function getProfile() {
   const userResult = await currentUser();
   if (userResult.error) return userResult;
+  const admin = await getAdminContext(userResult.data);
+  if (admin) return { data: admin, error: null };
   const staff = await fetchMyStaffSession();
   if (staff.data) return { data: mapProfile(staff.data, userResult.data), error: null };
   const terminal = await fetchTerminalContext();
   if (terminal.data?.ok) return { data: { id: userResult.data.id, name: terminal.data.terminalCode, username: '', email: userResult.data.email || '', role: 'TERMINAL', status: 'ACTIVE', created_at: userResult.data.created_at, terminal: terminal.data }, error: null };
+  if (terminal.data?.ok === false) return { data: { id: userResult.data.id, name: 'Terminal setup', role: 'TERMINAL_SETUP', status: 'ACTIVE', terminal: terminal.data }, error: null };
   return { data: null, error: staff.error || new Error('No authorised identity context was found.') };
 }
 
@@ -238,7 +288,7 @@ export async function startStaffPinSession(userId, pin) {
     const context = exchange.error?.context;
     let body;
     try { body = context ? await context.json() : null; } catch { body = null; }
-    const code = body?.code;
+    const code = body?.code || exchange.error?.code;
     const message = code === 'PIN_LOCKED'
       ? 'This PIN is temporarily locked. Try again in five minutes.'
       : code === 'PIN_SETUP_REQUIRED'
@@ -247,9 +297,17 @@ export async function startStaffPinSession(userId, pin) {
         ? 'Unable to sign in. Please verify your PIN or contact a manager.'
       : code === 'TERMINAL_UNAVAILABLE'
         ? 'This terminal is currently unavailable. Please contact an administrator.'
+      : code === 'STAFF_OUTLET_ACCESS_DENIED'
+        ? 'This staff member is not assigned to the terminal outlet.'
+      : code === 'STAFF_TERMINAL_ACCESS_DENIED'
+        ? 'This staff member is not allowed to use this terminal.'
+      : code === 'TERMINAL_SESSION_REJECTED'
+        ? 'The staff PIN was accepted, but the terminal session could not be created. Check terminal access and try again.'
+      : code === 'SERVER_ERROR'
+        ? 'PIN verification service is unavailable. Check the connection and try again.'
       : code === 'STAFF_AUTH_UNAVAILABLE'
         ? 'This staff profile is not linked to a Supabase Auth account. Recreate or invite this staff account from Admin.'
-        : 'Unable to verify the PIN. Check the connection and try again.';
+        : body?.error || 'Unable to verify the PIN. Check the connection and try again.';
     return { data: null, error: authError(code || 'PIN_EXCHANGE_FAILED', message) };
   }
   const verified = await verifyStaffPinToken();

@@ -67,7 +67,7 @@ for (const file of functions) {
   assert.match(source, /Authorization/i, `${path.basename(path.dirname(file))} must require authorization.`);
   assert.match(source, /auth\.getUser\s*\(/, `${path.basename(path.dirname(file))} must validate the caller token.`);
   if (path.basename(path.dirname(file)) === 'staff-pin-session') {
-    assert.match(source, /verify_authenticated_terminal_staff_pin/, 'Staff PIN boundary must delegate terminal and staff state checks to the database.');
+    assert.match(source, /login_terminal_staff/, 'Staff PIN boundary must atomically validate PIN and create the terminal staff session in the database.');
     assert.doesNotMatch(source, /generateLink|verifyOtp|access_token|refresh_token/, 'Staff PIN boundary must not issue staff Auth credentials.');
   } else {
     assert.match(source, /status\s*!==\s*'ACTIVE'/, `${path.basename(path.dirname(file))} must reject inactive profiles.`);

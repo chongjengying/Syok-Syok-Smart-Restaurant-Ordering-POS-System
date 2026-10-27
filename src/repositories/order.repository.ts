@@ -116,6 +116,10 @@ export function approveOrderVoid(orderId: string, input: { managerId: string; pi
   return apiRequest('orders', { method: 'PATCH', path: `${orderId}/void`, body: input }) as Promise<ApiResult<OrderRecord>>;
 }
 
+export function fetchOrderVoidApprovers(orderId: string) {
+  return supabase.rpc('list_order_void_approvers', { p_order_id: orderId }) as unknown as Promise<ApiResult<Array<{ id: string; name: string; role: string }>>>;
+}
+
 export function startPersistedKitchenOrder(orderId: string) {
   return apiRequest('orders', { method: 'POST', path: `${orderId}/start`, body: {} }) as Promise<ApiResult<OrderRecord>>;
 }

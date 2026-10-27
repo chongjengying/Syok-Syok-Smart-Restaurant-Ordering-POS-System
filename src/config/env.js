@@ -1,3 +1,5 @@
+import { validateBrowserEnvironment } from './environment.js';
+
 function requiredEnvironmentValue(name, value) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -26,6 +28,8 @@ try {
 } catch {
   throw new Error('VITE_SUPABASE_URL must be a valid URL.');
 }
+
+validateBrowserEnvironment({ appEnv, supabaseUrl, supabaseKey });
 
 export const env = Object.freeze({
   appEnv,
